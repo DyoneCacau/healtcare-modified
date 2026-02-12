@@ -1,0 +1,65 @@
+-- ============================================================================
+-- INSTRUÇÕES PARA EXECUTAR A MIGRATION
+-- ============================================================================
+
+-- PASSO 1: Copie TODO o conteúdo do arquivo abaixo:
+--   supabase/migrations/20260212_vendas_diretas.sql
+
+-- PASSO 2: Acesse seu Supabase Dashboard:
+--   https://supabase.com/dashboard
+
+-- PASSO 3: Vá em SQL Editor (menu lateral esquerdo)
+
+-- PASSO 4: Clique em "+ New Query"
+
+-- PASSO 5: Cole o conteúdo copiado
+
+-- PASSO 6: Clique em RUN ou pressione Ctrl+Enter
+
+-- PASSO 7: Aguarde a execução (10-30 segundos)
+
+-- PASSO 8: Verifique as mensagens de sucesso ao final:
+--   NOTICE: Colunas adicionadas em subscriptions: ...
+--   NOTICE: Tabela payment_history criada com sucesso!
+--   NOTICE: Função get_superadmin_stats criada com sucesso!
+--   NOTICE: Função register_payment criada com sucesso!
+--   NOTICE: MIGRAÇÃO CONCLUÍDA COM SUCESSO!
+
+-- ============================================================================
+-- TESTAR A MIGRATION
+-- ============================================================================
+
+-- Execute estes comandos para verificar se tudo funcionou:
+
+-- 1. Testar estatísticas
+SELECT * FROM get_superadmin_stats();
+
+-- 2. Verificar view
+SELECT * FROM vw_clients_status LIMIT 5;
+
+-- 3. Verificar novos campos
+SELECT 
+  id, 
+  billing_status, 
+  monthly_fee, 
+  setup_fee, 
+  admin_notes 
+FROM subscriptions 
+LIMIT 5;
+
+-- 4. Verificar tabela de pagamentos
+SELECT * FROM payment_history LIMIT 5;
+
+-- ============================================================================
+-- SE HOUVER ERRO
+-- ============================================================================
+
+-- Caso veja algum erro, verifique:
+-- 1. Você está usando o projeto correto no Supabase?
+-- 2. Você copiou TODO o conteúdo do arquivo de migration?
+-- 3. Há alguma migration pendente anterior?
+
+-- Se o erro persistir, execute novamente - o script está preparado
+-- para ser executado múltiplas vezes sem problemas (usa IF NOT EXISTS)
+
+-- ============================================================================

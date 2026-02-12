@@ -1,0 +1,37 @@
+====================================================================
+INSTRUÇÕES PARA APLICAR A MIGRATION NO SUPABASE
+====================================================================
+
+1. Acesse o Supabase Dashboard:
+   https://app.supabase.com/project/jahjwuydesfytlmjwucx/sql/new
+
+2. Copie TODO o conteúdo do arquivo:
+   supabase/migrations/20260212_correcoes_sistema.sql
+
+3. Cole no SQL Editor do Supabase
+
+4. Clique em "RUN" (ou pressione Ctrl+Enter)
+
+5. Aguarde a execução (pode levar alguns segundos)
+
+6. Verifique se apareceu a mensagem:
+   "MIGRAÇÃO CONCLUÍDA COM SUCESSO!"
+
+7. Se houver erros, leia as mensagens e corrija conforme necessário
+
+====================================================================
+PÓS-MIGRATION
+====================================================================
+
+Após aplicar a migration com sucesso:
+
+1. Substitua os arquivos:
+   mv src/pages/Login.tsx src/pages/Login_OLD.tsx
+   mv src/pages/Login_updated.tsx src/pages/Login.tsx
+   
+   mv src/pages/SuperAdmin.tsx src/pages/SuperAdmin_OLD.tsx
+   mv src/pages/SuperAdmin_updated.tsx src/pages/SuperAdmin.tsx
+
+2. Teste as funcionalidades conforme GUIA_RAPIDO.md
+
+====================================================================
