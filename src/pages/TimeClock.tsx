@@ -15,6 +15,13 @@ import {
   Timer,
   Edit,
 } from 'lucide-react';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 import { TimeClockCorrectionDialog } from '@/components/timeclock/TimeClockCorrectionDialog';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
@@ -32,11 +39,26 @@ interface TimeClockEntry {
   correction_reason: string | null;
 }
 
+type PeriodFilter = '7' | '15' | '30';
+
+interface DaySummary {
+  date: string;
+  dateFormatted: string;
+  clockIn: string | null;
+  lunchStart: string | null;
+  lunchEnd: string | null;
+  clockOut: string | null;
+  hasPending: boolean;
+  hasRejected: boolean;
+  isComplete: boolean;
+}
+
 export default function TimeClock() {
   const { user, profile } = useAuth();
   const [entries, setEntries] = useState<TimeClockEntry[]>([]);
   const [correctionDialogOpen, setCorrectionDialogOpen] = useState(false);
   const [currentTime, setCurrentTime] = useState(new Date());
+  const [periodFilter, setPeriodFilter] = useState<PeriodFilter>('15');
 
   useEffect(() => {
     const timer = setInterval(() => setCurrentTime(new Date()), 1000);
@@ -85,6 +107,53 @@ export default function TimeClock() {
   }, [hasClockIn, hasClockOut, hasLunchStart, hasLunchEnd]);
 
   const pendingCorrections = entries.filter((e) => e.correction_status === 'pending');
+
+  const entriesByDay = useMemo(() => {
+    const days = periodFilter === '7' ? 7 : periodFilter === '15' ? 15 : 30;
+    const cutoff = new Date();
+    cutoff.setDate(cutoff.getDate() - days);
+    cutoff.setHours(0, 0, 0, 0);
+
+    const filtered = entries.filter(
+      (e) => new Date(e.timestamp) >= cutoff
+    );
+
+    const byDate = new Map<string, TimeClockEntry[]>();
+    for (const e of filtered) {
+      const d = e.timestamp.slice(0, 10);
+      if (!byDate.has(d)) byDate.set(d, []);
+      byDate.get(d)!.push(e);
+    }
+
+    const summaries: DaySummary[] = [];
+    byDate.forEach((dayEntries, date) => {
+      const approved = dayEntries.filter((e) => e.correction_status === 'approved');
+      const getTime = (type: string) => {
+        const ent = approved.find((e) => e.entry_type === type);
+        return ent ? format(new Date(ent.timestamp), 'HH:mm') : null;
+      };
+      const clockIn = getTime('clock_in');
+      const lunchStart = getTime('lunch_start');
+      const lunchEnd = getTime('lunch_end');
+      const clockOut = getTime('clock_out');
+      const hasPending = dayEntries.some((e) => e.correction_status === 'pending');
+      const hasRejected = dayEntries.some((e) => e.correction_status === 'rejected');
+      summaries.push({
+        date,
+        dateFormatted: format(new Date(date + 'T12:00:00'), 'dd/MM/yyyy', { locale: ptBR }),
+        clockIn,
+        lunchStart,
+        lunchEnd,
+        clockOut,
+        hasPending,
+        hasRejected,
+        isComplete: !!(clockIn && clockOut),
+      });
+    });
+
+    summaries.sort((a, b) => b.date.localeCompare(a.date));
+    return summaries;
+  }, [entries, periodFilter]);
 
   const weekStats = useMemo(() => {
     const weekAgo = new Date();
@@ -174,7 +243,7 @@ export default function TimeClock() {
 
   return (
     <MainLayout>
-      <div className="space-y-6 p-6">
+      <div className="space-y-6">
         {/* Header */}
         <div>
           <h1 className="text-2xl font-bold flex items-center gap-2">
@@ -216,16 +285,20 @@ export default function TimeClock() {
               </div>
 
               {hasClockIn && (
-                <div className="text-muted-foreground text-sm">
-                  Entrada: {format(new Date(todayEntries.find((e) => e.entry_type === 'clock_in')!.timestamp), 'HH:mm')}
+                <div className="flex flex-wrap items-center justify-center gap-x-4 gap-y-1 text-sm">
+                  <span className="font-medium text-blue-600">
+                    Entrada: {format(new Date(todayEntries.find((e) => e.entry_type === 'clock_in')!.timestamp), 'HH:mm')}
+                  </span>
                   {hasLunchStart && (
-                    <> | Intervalo: {format(new Date(todayEntries.find((e) => e.entry_type === 'lunch_start')!.timestamp), 'HH:mm')}</>
-                  )}
-                  {hasLunchEnd && (
-                    <> - {format(new Date(todayEntries.find((e) => e.entry_type === 'lunch_end')!.timestamp), 'HH:mm')}</>
+                    <span className="font-medium text-amber-600">
+                      Intervalo: {format(new Date(todayEntries.find((e) => e.entry_type === 'lunch_start')!.timestamp), 'HH:mm')}
+                      {hasLunchEnd && ` - ${format(new Date(todayEntries.find((e) => e.entry_type === 'lunch_end')!.timestamp), 'HH:mm')}`}
+                    </span>
                   )}
                   {hasClockOut && (
-                    <> | Saída: {format(new Date(todayEntries.find((e) => e.entry_type === 'clock_out')!.timestamp), 'HH:mm')}</>
+                    <span className="font-medium text-red-600">
+                      Saída: {format(new Date(todayEntries.find((e) => e.entry_type === 'clock_out')!.timestamp), 'HH:mm')}
+                    </span>
                   )}
                 </div>
               )}
@@ -335,60 +408,72 @@ export default function TimeClock() {
           </Card>
         </div>
 
-        {/* Recent Entries */}
+        {/* Registros por dia */}
         <Card>
-          <CardHeader>
-            <CardTitle>Meus Registros Recentes</CardTitle>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle>Meus Registros</CardTitle>
+            <Select value={periodFilter} onValueChange={(v) => setPeriodFilter(v as PeriodFilter)}>
+              <SelectTrigger className="w-[180px]">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="7">Últimos 7 dias</SelectItem>
+                <SelectItem value="15">Últimos 15 dias</SelectItem>
+                <SelectItem value="30">Últimos 30 dias</SelectItem>
+              </SelectContent>
+            </Select>
           </CardHeader>
           <CardContent>
-            <div className="space-y-3">
-              {entries.slice(0, 10).map((entry) => (
-                <div
-                  key={entry.id}
-                  className="flex items-center justify-between p-3 rounded-lg border bg-card"
-                >
-                  <div className="flex items-center gap-3">
-                    <div className="text-center">
-                      <p className="text-xs text-muted-foreground">
-                        {format(new Date(entry.timestamp), 'EEE', { locale: ptBR })}
-                      </p>
-                      <p className="font-bold">
-                        {format(new Date(entry.timestamp), 'dd/MM')}
-                      </p>
-                    </div>
-                    <Separator orientation="vertical" className="h-10" />
-                    <div>
-                      <Badge variant="outline" className="mr-2">
-                        {entry.entry_type === 'clock_in' && 'Entrada'}
-                        {entry.entry_type === 'clock_out' && 'Saída'}
-                        {entry.entry_type === 'lunch_start' && 'Início Intervalo'}
-                        {entry.entry_type === 'lunch_end' && 'Fim Intervalo'}
-                      </Badge>
-                      <span className="text-sm text-muted-foreground">
-                        {format(new Date(entry.timestamp), 'HH:mm')}
-                      </span>
-                      {entry.is_correction && (
-                        <Badge variant="secondary" className="ml-2">
-                          Correção
-                        </Badge>
-                      )}
-                    </div>
-                  </div>
-                  <Badge
-                    variant={
-                      entry.correction_status === 'approved'
-                        ? 'default'
-                        : entry.correction_status === 'pending'
-                        ? 'secondary'
-                        : 'destructive'
-                    }
-                  >
-                    {entry.correction_status === 'approved' && 'Aprovado'}
-                    {entry.correction_status === 'pending' && 'Pendente'}
-                    {entry.correction_status === 'rejected' && 'Rejeitado'}
-                  </Badge>
-                </div>
-              ))}
+            <div className="rounded-md border">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b bg-muted/50">
+                    <th className="text-left p-3 font-medium">Data</th>
+                    <th className="text-left p-3 font-medium">Entrada</th>
+                    <th className="text-left p-3 font-medium">Intervalo</th>
+                    <th className="text-left p-3 font-medium">Retorno</th>
+                    <th className="text-left p-3 font-medium">Saída</th>
+                    <th className="text-center p-3 font-medium">Status</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {entriesByDay.length === 0 ? (
+                    <tr>
+                      <td colSpan={6} className="p-6 text-center text-muted-foreground">
+                        Nenhum registro no período
+                      </td>
+                    </tr>
+                  ) : (
+                    entriesByDay.map((day) => (
+                      <tr key={day.date} className="border-b last:border-0 hover:bg-muted/30">
+                        <td className="p-3">
+                          <span className="font-medium">{day.dateFormatted}</span>
+                          <p className="text-xs text-muted-foreground">
+                            {format(new Date(day.date + 'T12:00:00'), 'EEEE', { locale: ptBR })}
+                          </p>
+                        </td>
+                        <td className="p-3">{day.clockIn ?? '—'}</td>
+                        <td className="p-3">{day.lunchStart ?? '—'}</td>
+                        <td className="p-3">{day.lunchEnd ?? '—'}</td>
+                        <td className="p-3">{day.clockOut ?? '—'}</td>
+                        <td className="p-3 text-center">
+                          {day.hasPending && (
+                            <Badge variant="secondary">Pendente</Badge>
+                          )}
+                          {day.hasRejected && !day.hasPending && (
+                            <Badge variant="destructive">Rejeitado</Badge>
+                          )}
+                          {!day.hasPending && !day.hasRejected && (
+                            <Badge variant={day.isComplete ? 'default' : 'outline'}>
+                              {day.isComplete ? 'Jornada concluída' : 'Parcial'}
+                            </Badge>
+                          )}
+                        </td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
             </div>
           </CardContent>
         </Card>

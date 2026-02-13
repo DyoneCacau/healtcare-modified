@@ -1,11 +1,21 @@
 import { useState, useEffect } from "react";
 import { useNavigate, Link } from "react-router-dom";
-import { Eye, EyeOff, Mail, Lock } from "lucide-react";
+import { Eye, EyeOff, Mail, Lock, MessageSquare, User, Phone } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
+import { Textarea } from "@/components/ui/textarea";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog";
 import { useAuth } from "@/hooks/useAuth";
+import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 
 export default function Login() {
@@ -13,6 +23,14 @@ export default function Login() {
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
+  const [contactDialogOpen, setContactDialogOpen] = useState(false);
+  const [contactForm, setContactForm] = useState({
+    name: "",
+    email: "",
+    phone: "",
+    message: "",
+  });
+  const [isSubmittingContact, setIsSubmittingContact] = useState(false);
   const navigate = useNavigate();
   const { signIn, user, isLoading: authLoading } = useAuth();
 
@@ -33,6 +51,28 @@ export default function Login() {
     } else {
       toast.success("Login realizado com sucesso!");
       navigate("/");
+    }
+  };
+
+  const handleContactSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setIsSubmittingContact(true);
+    try {
+      const { error } = await supabase.from("contact_requests").insert({
+        name: contactForm.name,
+        email: contactForm.email,
+        phone: contactForm.phone,
+        message: contactForm.message || null,
+        status: "pending",
+      });
+      if (error) throw error;
+      toast.success("Solicitação enviada! Entraremos em contato em breve.");
+      setContactDialogOpen(false);
+      setContactForm({ name: "", email: "", phone: "", message: "" });
+    } catch (err: any) {
+      toast.error(err?.message || "Erro ao enviar solicitação");
+    } finally {
+      setIsSubmittingContact(false);
     }
   };
 
@@ -180,12 +220,91 @@ export default function Login() {
             </Button>
           </form>
 
-          <p className="mt-8 text-center text-sm text-muted-foreground">
-            Novo cliente?{" "}
-            <span className="font-medium text-muted-foreground">
-              Entre em contato para criar sua conta
-            </span>
-          </p>
+          <div className="mt-8 space-y-3">
+            <p className="text-center text-sm text-muted-foreground">
+              Novo cliente? Entre em contato para criar sua conta.
+            </p>
+            <Dialog open={contactDialogOpen} onOpenChange={setContactDialogOpen}>
+              <DialogTrigger asChild>
+                <Button type="button" variant="outline" className="w-full gap-2">
+                  <MessageSquare className="h-4 w-4" />
+                  Solicitar acesso
+                </Button>
+              </DialogTrigger>
+              <DialogContent className="sm:max-w-[425px]">
+                <DialogHeader>
+                  <DialogTitle>Solicitar acesso</DialogTitle>
+                  <DialogDescription>
+                    Preencha o formulário. Entraremos em contato para criar sua conta.
+                  </DialogDescription>
+                </DialogHeader>
+                <form onSubmit={handleContactSubmit} className="space-y-4 mt-2">
+                  <div className="space-y-2">
+                    <Label htmlFor="contact-name">Nome completo *</Label>
+                    <div className="relative">
+                      <User className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                      <Input
+                        id="contact-name"
+                        placeholder="Seu nome"
+                        className="pl-10"
+                        value={contactForm.name}
+                        onChange={(e) => setContactForm({ ...contactForm, name: e.target.value })}
+                        required
+                      />
+                    </div>
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="contact-email">E-mail *</Label>
+                    <div className="relative">
+                      <Mail className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                      <Input
+                        id="contact-email"
+                        type="email"
+                        placeholder="seu@email.com"
+                        className="pl-10"
+                        value={contactForm.email}
+                        onChange={(e) => setContactForm({ ...contactForm, email: e.target.value })}
+                        required
+                      />
+                    </div>
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="contact-phone">Telefone *</Label>
+                    <div className="relative">
+                      <Phone className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                      <Input
+                        id="contact-phone"
+                        type="tel"
+                        placeholder="(11) 99999-9999"
+                        className="pl-10"
+                        value={contactForm.phone}
+                        onChange={(e) => setContactForm({ ...contactForm, phone: e.target.value })}
+                        required
+                      />
+                    </div>
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="contact-message">Mensagem (opcional)</Label>
+                    <Textarea
+                      id="contact-message"
+                      placeholder="Conte-nos sobre sua clínica..."
+                      rows={3}
+                      value={contactForm.message}
+                      onChange={(e) => setContactForm({ ...contactForm, message: e.target.value })}
+                    />
+                  </div>
+                  <div className="flex gap-2 pt-2">
+                    <Button type="button" variant="outline" onClick={() => setContactDialogOpen(false)} className="flex-1">
+                      Cancelar
+                    </Button>
+                    <Button type="submit" disabled={isSubmittingContact} className="flex-1">
+                      {isSubmittingContact ? "Enviando..." : "Enviar"}
+                    </Button>
+                  </div>
+                </form>
+              </DialogContent>
+            </Dialog>
+          </div>
         </div>
       </div>
     </div>

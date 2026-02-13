@@ -122,16 +122,21 @@ export function UserManagement({ users, onRefresh }: UserManagementProps) {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    const nameTrimmed = formData.name?.trim();
+    if (!nameTrimmed || nameTrimmed.length < 2) {
+      toast.error('Nome completo é obrigatório (mínimo 2 caracteres).');
+      return;
+    }
     setIsLoading(true);
 
     try {
       if (editingUser) {
-        // Update existing user profile
+        // Update existing user profile (nome obrigatório)
         const { error: profileError } = await supabase
           .from('profiles')
           .update({
-            name: formData.name,
-            phone: formData.phone,
+            name: nameTrimmed,
+            phone: formData.phone?.trim() || null,
           })
           .eq('user_id', editingUser.id);
 
@@ -187,12 +192,17 @@ export function UserManagement({ users, onRefresh }: UserManagementProps) {
             }
           }
 
-          // Update profile with phone
-          if (formData.phone) {
-            await supabase
-              .from('profiles')
-              .update({ phone: formData.phone })
-              .eq('user_id', authData.user.id);
+          // Garantir nome e telefone no perfil (nome obrigatório no cadastro)
+          const { error: profileUpdateError } = await supabase
+            .from('profiles')
+            .update({
+              name: nameTrimmed,
+              phone: formData.phone?.trim() || null,
+            })
+            .eq('user_id', authData.user.id);
+
+          if (profileUpdateError) {
+            console.error('Erro ao atualizar perfil:', profileUpdateError);
           }
         }
 
@@ -406,8 +416,9 @@ export function UserManagement({ users, onRefresh }: UserManagementProps) {
                 id="name"
                 value={formData.name}
                 onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                placeholder="Nome do usuário"
+                placeholder="Nome completo (obrigatório)"
                 required
+                minLength={2}
               />
             </div>
 

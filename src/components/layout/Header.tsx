@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
-import { Bell, Search } from "lucide-react";
+import { useNavigate } from "react-router-dom";
+import { Bell, Search, UserPlus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -30,7 +31,9 @@ interface AdminNotification {
 
 export function Header({ title, subtitle }: HeaderProps) {
   const { isSuperAdmin } = useAuth();
+  const navigate = useNavigate();
   const [notifications, setNotifications] = useState<AdminNotification[]>([]);
+  const [pendingContacts, setPendingContacts] = useState(0);
   const [isOpen, setIsOpen] = useState(false);
 
   const fetchNotifications = async () => {
@@ -45,12 +48,32 @@ export function Header({ title, subtitle }: HeaderProps) {
     return parsed;
   };
 
+  const fetchPendingContacts = async () => {
+    if (!isSuperAdmin) return 0;
+    const { count } = await supabase
+      .from("contact_requests")
+      .select("*", { count: "exact", head: true })
+      .eq("status", "pending");
+    setPendingContacts(count ?? 0);
+    return count ?? 0;
+  };
+
   useEffect(() => {
     if (!isSuperAdmin) {
       setNotifications([]);
+      setPendingContacts(0);
       return;
     }
     fetchNotifications();
+    fetchPendingContacts();
+
+    const channel = supabase
+      .channel("header-contact-requests")
+      .on("postgres_changes", { event: "*", schema: "public", table: "contact_requests" }, fetchPendingContacts)
+      .subscribe();
+    return () => {
+      supabase.removeChannel(channel);
+    };
   }, [isSuperAdmin]);
 
   const unreadCount = useMemo(
@@ -62,6 +85,7 @@ export function Header({ title, subtitle }: HeaderProps) {
     () => notifications.filter((n) => !n.is_read).map((n) => n.id),
     [notifications]
   );
+  const badgeCount = unreadCount + pendingContacts;
 
   return (
     <header className="flex h-16 items-center justify-between border-b border-border bg-card px-6">
@@ -84,6 +108,7 @@ export function Header({ title, subtitle }: HeaderProps) {
             setIsOpen(open);
             if (!open || !isSuperAdmin) return;
             const current = await fetchNotifications();
+            await fetchPendingContacts();
             const currentUnread = current.filter((n) => !n.is_read).map((n) => n.id);
             if (currentUnread.length > 0) {
               await supabase
@@ -97,26 +122,43 @@ export function Header({ title, subtitle }: HeaderProps) {
           <DropdownMenuTrigger asChild>
             <Button variant="ghost" size="icon" className="relative">
               <Bell className="h-5 w-5" />
-              {unreadCount > 0 && (
+              {badgeCount > 0 && (
                 <Badge className="absolute -right-1 -top-1 h-5 w-5 rounded-full p-0 text-[10px] bg-destructive text-destructive-foreground">
-                  {unreadCount}
+                  {badgeCount > 99 ? "99+" : badgeCount}
                 </Badge>
               )}
             </Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end" className="w-80">
             <DropdownMenuLabel>
-              Notificacoes
+              Notificações
               {isSuperAdmin && (
                 <span className="ml-2 text-xs text-muted-foreground">
-                  {unreadCount}/{totalCount}
+                  {badgeCount > 0 ? `${unreadCount + pendingContacts} pendente(s)` : "Nenhuma"}
                 </span>
               )}
             </DropdownMenuLabel>
             <DropdownMenuSeparator />
-            {notifications.length === 0 ? (
+            {isSuperAdmin && pendingContacts > 0 && (
+              <>
+                <DropdownMenuItem
+                  className="flex items-center gap-2 p-3 cursor-pointer"
+                  onSelect={() => {
+                    setIsOpen(false);
+                    navigate("/superadmin?tab=solicitacoes");
+                  }}
+                >
+                  <UserPlus className="h-4 w-4 text-amber-500" />
+                  <span className="font-medium">
+                    {pendingContacts} solicitaç{pendingContacts === 1 ? "ão" : "ões"} de acesso pendente{pendingContacts === 1 ? "" : "s"}
+                  </span>
+                </DropdownMenuItem>
+                <DropdownMenuSeparator />
+              </>
+            )}
+            {notifications.length === 0 && pendingContacts === 0 ? (
               <DropdownMenuItem className="flex flex-col items-start gap-1 p-3">
-                <span className="text-sm text-muted-foreground">Sem notificacoes</span>
+                <span className="text-sm text-muted-foreground">Sem notificações</span>
               </DropdownMenuItem>
             ) : (
               notifications.map((n) => (

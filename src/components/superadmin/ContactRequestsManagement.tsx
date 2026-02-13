@@ -281,8 +281,8 @@ export function ContactRequestsManagement() {
 
       {/* Dialog de Detalhes */}
       <Dialog open={isDetailDialogOpen} onOpenChange={setIsDetailDialogOpen}>
-        <DialogContent className="sm:max-w-[600px]">
-          <DialogHeader>
+        <DialogContent className="sm:max-w-[600px] max-h-[90vh] flex flex-col p-6 gap-4">
+          <DialogHeader className="shrink-0">
             <DialogTitle>Detalhes da Solicitação</DialogTitle>
             <DialogDescription>
               Visualize e gerencie a solicitação de contato
@@ -290,7 +290,7 @@ export function ContactRequestsManagement() {
           </DialogHeader>
 
           {selectedRequest && (
-            <div className="space-y-4">
+            <div className="space-y-4 overflow-y-auto flex-1 min-h-0 pr-1">
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
                   <Label className="text-xs text-muted-foreground">Nome</Label>
@@ -388,7 +388,7 @@ export function ContactRequestsManagement() {
             </div>
           )}
 
-          <DialogFooter>
+          <DialogFooter className="shrink-0 border-t pt-4 mt-2">
             <Button
               variant="outline"
               onClick={() => setIsDetailDialogOpen(false)}

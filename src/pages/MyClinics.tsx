@@ -15,7 +15,7 @@ export default function MyClinics() {
   if (isLoading) {
     return (
       <MainLayout>
-        <div className="space-y-6 p-6">
+        <div className="space-y-6">
           <div>
             <h1 className="text-2xl font-bold flex items-center gap-2">
               <Building2 className="h-7 w-7 text-primary" />
@@ -35,7 +35,7 @@ export default function MyClinics() {
 
   return (
     <MainLayout>
-      <div className="space-y-6 p-6">
+      <div className="space-y-6">
         {/* Header */}
         <div>
           <h1 className="text-2xl font-bold flex items-center gap-2">

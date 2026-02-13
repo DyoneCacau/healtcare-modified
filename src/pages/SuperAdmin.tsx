@@ -1,5 +1,5 @@
 import { useAuth } from "@/hooks/useAuth";
-import { Navigate } from "react-router-dom";
+import { Navigate, useSearchParams } from "react-router-dom";
 import { MainLayout } from "@/components/layout/MainLayout";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ClinicsManagement } from "@/components/superadmin/ClinicsManagement";
@@ -9,24 +9,42 @@ import { PaymentsManagement } from "@/components/superadmin/PaymentsManagement";
 import { SuperAdminStats } from "@/components/superadmin/SuperAdminStats";
 import { NotificationsManagement } from "@/components/superadmin/NotificationsManagement";
 import { SupportManagement } from "@/components/superadmin/SupportManagement";
+import { ContactRequestsManagement } from "@/components/superadmin/ContactRequestsManagement";
 import { ClientsStatusDashboard } from "@/components/superadmin/ClientsStatusDashboard";
 import { CreateCompleteClient } from "@/components/superadmin/CreateCompleteClient";
-import { Building2, CreditCard, Package, Receipt, LayoutDashboard, Bell, MessageSquare } from "lucide-react";
+import { Building2, CreditCard, Package, Receipt, LayoutDashboard, Bell, MessageSquare, UserPlus } from "lucide-react";
 import { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Badge } from "@/components/ui/badge";
 
+const VALID_TABS = ["dashboard", "solicitacoes", "clinics", "plans", "subscriptions", "payments", "support", "notifications"] as const;
+
 export default function SuperAdmin() {
   const { isSuperAdmin, isLoading } = useAuth();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const tabFromUrl = searchParams.get("tab");
+  const currentTab = VALID_TABS.includes(tabFromUrl as any) ? tabFromUrl : "dashboard";
   const [openTickets, setOpenTickets] = useState(0);
+  const [pendingContacts, setPendingContacts] = useState(0);
+
+  const setTab = (value: string) => {
+    setSearchParams((p) => {
+      const next = new URLSearchParams(p);
+      if (value === "dashboard") next.delete("tab");
+      else next.set("tab", value);
+      return next;
+    });
+  };
 
   useEffect(() => {
     if (isSuperAdmin) {
       fetchOpenTickets();
+      fetchPendingContacts();
 
       const channel = supabase
         .channel('superadmin-badges')
         .on('postgres_changes', { event: '*', schema: 'public', table: 'support_tickets' }, fetchOpenTickets)
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'contact_requests' }, fetchPendingContacts)
         .subscribe();
 
       return () => { supabase.removeChannel(channel); };
@@ -39,6 +57,14 @@ export default function SuperAdmin() {
       .select('*', { count: 'exact', head: true })
       .eq('status', 'open');
     setOpenTickets(count || 0);
+  }
+
+  async function fetchPendingContacts() {
+    const { count } = await supabase
+      .from('contact_requests')
+      .select('*', { count: 'exact', head: true })
+      .eq('status', 'pending');
+    setPendingContacts(count || 0);
   }
 
   if (isLoading) {
@@ -63,11 +89,20 @@ export default function SuperAdmin() {
           </p>
         </div>
 
-        <Tabs defaultValue="dashboard" className="space-y-6">
-          <TabsList className="grid w-full grid-cols-7 lg:w-auto lg:inline-grid">
+        <Tabs value={currentTab} onValueChange={setTab} className="space-y-6">
+          <TabsList className="grid w-full grid-cols-8 lg:w-auto lg:inline-grid">
             <TabsTrigger value="dashboard" className="flex items-center gap-2">
               <LayoutDashboard className="h-4 w-4" />
               <span className="hidden sm:inline">Dashboard</span>
+            </TabsTrigger>
+            <TabsTrigger value="solicitacoes" className="flex items-center gap-2 relative">
+              <UserPlus className="h-4 w-4" />
+              <span className="hidden sm:inline">Solicitações</span>
+              {pendingContacts > 0 && (
+                <Badge variant="secondary" className="h-5 w-5 p-0 flex items-center justify-center text-xs absolute -top-1 -right-1">
+                  {pendingContacts > 9 ? '9+' : pendingContacts}
+                </Badge>
+              )}
             </TabsTrigger>
             <TabsTrigger value="clinics" className="flex items-center gap-2">
               <Building2 className="h-4 w-4" />
@@ -108,6 +143,10 @@ export default function SuperAdmin() {
               </div>
               <ClientsStatusDashboard />
             </div>
+          </TabsContent>
+
+          <TabsContent value="solicitacoes">
+            <ContactRequestsManagement />
           </TabsContent>
 
           <TabsContent value="clinics">

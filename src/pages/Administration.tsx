@@ -92,7 +92,7 @@ interface PendingCorrection {
 }
 
 export default function Administration() {
-  const { isAdmin, isSuperAdmin, user } = useAuth();
+  const { isAdmin, isSuperAdmin, user, profile } = useAuth();
   const { clinicId } = useClinic();
   const [entries, setEntries] = useState<TimeClockEntry[]>([]);
   const [users, setUsers] = useState<SystemUser[]>([]);
@@ -434,7 +434,7 @@ export default function Administration() {
 
   return (
     <MainLayout>
-      <div className="space-y-6 p-6">
+      <div className="space-y-6">
         {/* Header */}
         <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <div>
@@ -786,13 +786,24 @@ export default function Administration() {
                         {(auditEvents as AuditEvent[]).map((entry) => {
                           const entryAny = entry as any;
                           const createdAt = entryAny.created_at || entryAny.createdAt;
-                          const userLabel =
+                          const userFromList = users.find((u) => u.id === entry.user_id);
+                          const entryUserId = entry.user_id ?? entryAny.userId ?? '';
+                          const isCurrentUser = !!user?.id && String(entryUserId) === String(user.id);
+                          const currentUserLabel = isCurrentUser
+                            ? (profile?.name || user?.email || (isSuperAdmin ? 'Superadmin' : 'Você'))
+                            : null;
+                          let userLabel =
+                            currentUserLabel ||
                             entryAny.user_name ||
                             entryAny.userName ||
+                            userFromList?.name ||
                             entryAny.user_email ||
                             entryAny.userEmail ||
                             entryAny.user_id ||
                             entryAny.userId;
+                          if (typeof userLabel === 'string' && user?.id && String(userLabel) === String(user.id)) {
+                            userLabel = profile?.name || user?.email || (isSuperAdmin ? 'Superadmin' : 'Você');
+                          }
                           const { label, beforeText, afterText } = formatAudit(entry);
                           return (
                             <TableRow key={entry.id}>

@@ -46,7 +46,7 @@ function getCaixaStorageKey(clinicId: string): string {
 }
 
 export default function Financial() {
-  const [isCashOpen, setIsCashOpen] = useState(true);
+  const [isCashOpen, setIsCashOpen] = useState(false);
   const [initialBalance, setInitialBalance] = useState(0);
   const [openedAt, setOpenedAt] = useState(new Date().toISOString());
   const [incomeDialogOpen, setIncomeDialogOpen] = useState(false);
@@ -70,8 +70,14 @@ export default function Financial() {
     const key = getCaixaStorageKey(clinicId);
     try {
       const saved = localStorage.getItem(key);
-      if (saved === 'closed') setIsCashOpen(false);
-    } catch (_) {}
+      if (saved === 'open') {
+        setIsCashOpen(true);
+      } else {
+        setIsCashOpen(false);
+      }
+    } catch (_) {
+      setIsCashOpen(false);
+    }
   }, [clinicId]);
 
   const rawById = useMemo(() => {

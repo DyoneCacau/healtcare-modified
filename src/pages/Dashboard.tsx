@@ -23,7 +23,7 @@ export default function Dashboard() {
           title="Dashboard"
           subtitle={`Bem-vindo ao HealthCare • ${today}`}
         />
-        <div className="p-6">
+        <div>
           <div className="mb-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
             {[1, 2, 3, 4].map((i) => (
               <Skeleton key={i} className="h-32" />
@@ -49,7 +49,7 @@ export default function Dashboard() {
         subtitle={`Bem-vindo ao HealthCare • ${today}`}
       />
 
-      <div className="p-6">
+      <div>
         {/* Stats Grid */}
         <div className="mb-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
           <StatCard
