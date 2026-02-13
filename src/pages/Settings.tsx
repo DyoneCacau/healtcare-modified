@@ -7,7 +7,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
-import { Building2, CreditCard, Calendar, Check, Loader2, AlertTriangle, Crown, Sparkles, Zap, MessageSquare } from 'lucide-react';
+import { Building2, CreditCard, Calendar, Check, Loader2, AlertTriangle, Crown, Sparkles, Zap, MessageSquare, KeyRound } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
 import { useSubscription } from '@/hooks/useSubscription';
@@ -116,6 +116,9 @@ export default function Settings() {
     state: '',
     zip_code: '',
   });
+  const [newPassword, setNewPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [isChangingPassword, setIsChangingPassword] = useState(false);
 
   useEffect(() => {
     fetchData();
@@ -475,7 +478,7 @@ export default function Settings() {
         </div>
 
         <Tabs defaultValue="subscription" className="space-y-6">
-          <TabsList className="grid w-full grid-cols-3 lg:w-auto lg:inline-grid">
+          <TabsList className="grid w-full grid-cols-4 lg:w-auto lg:inline-grid">
             <TabsTrigger value="subscription" className="flex items-center gap-2">
               <CreditCard className="h-4 w-4" />
               <span>Meu Plano</span>
@@ -483,6 +486,10 @@ export default function Settings() {
             <TabsTrigger value="clinic" className="flex items-center gap-2">
               <Building2 className="h-4 w-4" />
               <span>Dados da Clínica</span>
+            </TabsTrigger>
+            <TabsTrigger value="security" className="flex items-center gap-2">
+              <KeyRound className="h-4 w-4" />
+              <span>Alterar senha</span>
             </TabsTrigger>
             <TabsTrigger value="support" className="flex items-center gap-2">
               <MessageSquare className="h-4 w-4" />
@@ -785,6 +792,80 @@ export default function Settings() {
                     )}
                   </Button>
                 </div>
+              </CardContent>
+            </Card>
+          </TabsContent>
+
+          {/* Alterar senha */}
+          <TabsContent value="security" className="space-y-6">
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <KeyRound className="h-5 w-5" />
+                  Alterar senha
+                </CardTitle>
+                <CardDescription>
+                  Defina uma nova senha para acessar o sistema. Use após primeiro acesso com senha temporária ou quando quiser trocar.
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4 max-w-md">
+                <div className="space-y-2">
+                  <Label htmlFor="new-password">Nova senha *</Label>
+                  <Input
+                    id="new-password"
+                    type="password"
+                    value={newPassword}
+                    onChange={(e) => setNewPassword(e.target.value)}
+                    placeholder="Mínimo 6 caracteres"
+                    minLength={6}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="confirm-password">Confirmar nova senha *</Label>
+                  <Input
+                    id="confirm-password"
+                    type="password"
+                    value={confirmPassword}
+                    onChange={(e) => setConfirmPassword(e.target.value)}
+                    placeholder="Repita a nova senha"
+                    minLength={6}
+                  />
+                </div>
+                <Button
+                  onClick={async () => {
+                    if (newPassword.length < 6) {
+                      toast.error('A senha deve ter no mínimo 6 caracteres.');
+                      return;
+                    }
+                    if (newPassword !== confirmPassword) {
+                      toast.error('As senhas não coincidem.');
+                      return;
+                    }
+                    setIsChangingPassword(true);
+                    try {
+                      const { error } = await supabase.auth.updateUser({ password: newPassword });
+                      if (error) throw error;
+                      toast.success('Senha alterada com sucesso.');
+                      setNewPassword('');
+                      setConfirmPassword('');
+                    } catch (err: any) {
+                      toast.error(err?.message || 'Erro ao alterar senha.');
+                    } finally {
+                      setIsChangingPassword(false);
+                    }
+                  }}
+                  disabled={isChangingPassword || !newPassword || !confirmPassword}
+                  className="gap-2"
+                >
+                  {isChangingPassword ? (
+                    <>
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                      Alterando...
+                    </>
+                  ) : (
+                    'Alterar senha'
+                  )}
+                </Button>
               </CardContent>
             </Card>
           </TabsContent>

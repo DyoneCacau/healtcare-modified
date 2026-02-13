@@ -496,7 +496,7 @@ export default function Administration() {
 
           {/* Users Tab */}
           <TabsContent value="users">
-            <UserManagement users={users} onRefresh={fetchData} />
+            <UserManagement users={users} onRefresh={fetchData} isSuperAdmin={isSuperAdmin} />
           </TabsContent>
 
           {/* Timesheet Tab */}

@@ -45,17 +45,31 @@ export function useClinic() {
         };
       }
 
-      const { data: clinicUser, error: clinicUserError } = await supabase
+      // Buscar todas as clínicas do usuário (para respeitar selectedClinicId quando houver mais de uma)
+      const { data: clinicUserRows, error: clinicUserError } = await supabase
         .from('clinic_users')
         .select('clinic_id, is_owner, clinics(*)')
         .eq('user_id', user.id)
-        .maybeSingle();
+        .order('is_owner', { ascending: false })
+        .order('created_at', { ascending: true });
 
       if (clinicUserError) throw clinicUserError;
-      if (!clinicUser) return null;
+      if (!clinicUserRows?.length) return null;
 
+      // Se o usuário escolheu uma clínica no seletor e ela está na lista, usar essa
+      if (selectedClinicId) {
+        const selected = clinicUserRows.find((r: any) => r.clinic_id === selectedClinicId);
+        if (selected?.clinics) {
+          const clinicData = Array.isArray(selected.clinics) ? selected.clinics[0] : selected.clinics;
+          return { ...clinicData, isOwner: selected.is_owner };
+        }
+      }
+
+      // Senão, usar a primeira (dono primeiro, depois por criação)
+      const clinicUser = clinicUserRows[0];
+      const clinicData = Array.isArray(clinicUser.clinics) ? clinicUser.clinics[0] : clinicUser.clinics;
       return {
-        ...clinicUser.clinics,
+        ...clinicData,
         isOwner: clinicUser.is_owner,
       };
     },
@@ -90,19 +104,39 @@ export function useClinics() {
 
       if (!user?.id) return [];
 
-      const { data, error } = await supabase
+      // Apenas clínicas onde o usuário é DONO (evita mostrar 2 clínicas; "Minhas Clínicas" = só as que ele administra como dono)
+      const { data: cuData, error } = await supabase
         .from('clinic_users')
-        .select('clinics(*)')
-        .eq('user_id', user.id);
+        .select('clinic_id, is_owner, clinics(*)')
+        .eq('user_id', user.id)
+        .eq('is_owner', true);
 
       if (error) throw error;
 
-      const clinicsFromUser = (data || [])
+      const clinicsFromUser = (cuData || [])
         .map((row: any) => row.clinics)
         .filter(Boolean)
         .filter((c: any) => c.is_active !== false);
 
-      return clinicsFromUser;
+      if (clinicsFromUser.length === 0) return [];
+
+      // Contagem de usuários por clínica (para exibir em Minhas Clínicas)
+      const clinicIds = clinicsFromUser.map((c: any) => c.id);
+      const { data: countRows } = await supabase
+        .from('clinic_users')
+        .select('clinic_id')
+        .in('clinic_id', clinicIds);
+
+      const countByClinic: Record<string, number> = {};
+      clinicIds.forEach((id: string) => { countByClinic[id] = 0; });
+      (countRows || []).forEach((r: any) => {
+        if (r.clinic_id && countByClinic[r.clinic_id] !== undefined) countByClinic[r.clinic_id]++;
+      });
+
+      return clinicsFromUser.map((c: any) => ({
+        ...c,
+        user_count: countByClinic[c.id] ?? 0,
+      }));
     },
     enabled: !!user?.id || isSuperAdmin,
   });

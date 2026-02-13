@@ -11,7 +11,6 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
-  DialogTrigger,
 } from "@/components/ui/dialog";
 import {
   Table,
@@ -29,7 +28,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
-import { Plus, MoreHorizontal, Search, Building2, Mail, Phone, Key, Power, PowerOff, Eye, EyeOff } from "lucide-react";
+import { MoreHorizontal, Search, Building2, Mail, Phone, Key, Power, PowerOff, Eye, EyeOff } from "lucide-react";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
 
@@ -58,20 +57,11 @@ export function ClinicsManagement() {
   const [clinics, setClinics] = useState<ClinicWithSubscription[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
-  const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
   const [isResetPasswordDialogOpen, setIsResetPasswordDialogOpen] = useState(false);
   const [selectedClinic, setSelectedClinic] = useState<ClinicWithSubscription | null>(null);
   const [newPassword, setNewPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [isResetting, setIsResetting] = useState(false);
-  const [newClinic, setNewClinic] = useState({
-    name: "",
-    email: "",
-    phone: "",
-    cnpj: "",
-    city: "",
-    state: "",
-  });
 
   useEffect(() => {
     fetchClinics();
@@ -112,61 +102,6 @@ export function ClinicsManagement() {
       toast.error('Erro ao carregar clínicas');
     } finally {
       setIsLoading(false);
-    }
-  }
-
-  async function handleCreateClinic() {
-    try {
-      // 1. Create the clinic
-      const { data: clinicData, error: clinicError } = await supabase.from('clinics').insert({
-        name: newClinic.name,
-        email: newClinic.email,
-        phone: newClinic.phone || null,
-        cnpj: newClinic.cnpj || null,
-        city: newClinic.city || null,
-        state: newClinic.state || null,
-      }).select().single();
-
-      if (clinicError) throw clinicError;
-
-      // 2. Plano padrão para vendas diretas (qualquer plano ativo exceto trial)
-      const { data: defaultPlan } = await supabase
-        .from('plans')
-        .select('id')
-        .eq('is_active', true)
-        .neq('slug', 'trial')
-        .order('price_monthly', { ascending: true })
-        .limit(1)
-        .maybeSingle();
-
-      // 3. Assinatura ativa (vendas fechadas: adesão + mensalidade)
-      if (clinicData) {
-        const now = new Date();
-        const periodEnd = new Date(now);
-        periodEnd.setMonth(periodEnd.getMonth() + 1);
-
-        const { error: subError } = await supabase.from('subscriptions').insert({
-          clinic_id: clinicData.id,
-          plan_id: defaultPlan?.id || null,
-          status: 'active',
-          payment_status: 'pending',
-          current_period_start: now.toISOString(),
-          current_period_end: periodEnd.toISOString(),
-        });
-
-        if (subError) {
-          console.error('Error creating subscription:', subError);
-          toast.error('Clínica criada, mas erro ao criar assinatura');
-        }
-      }
-
-      toast.success('Clínica criada com sucesso! Assinatura ativa (vendas diretas).');
-      setIsCreateDialogOpen(false);
-      setNewClinic({ name: "", email: "", phone: "", cnpj: "", city: "", state: "" });
-      fetchClinics();
-    } catch (error: any) {
-      console.error('Error creating clinic:', error);
-      toast.error(error.message || 'Erro ao criar clínica');
     }
   }
 
@@ -218,97 +153,14 @@ export function ClinicsManagement() {
 
   return (
     <Card>
-      <CardHeader className="flex flex-row items-center justify-between">
+      <CardHeader>
         <CardTitle className="flex items-center gap-2">
           <Building2 className="h-5 w-5" />
           Gestão de Clínicas
         </CardTitle>
-        <Dialog open={isCreateDialogOpen} onOpenChange={setIsCreateDialogOpen}>
-          <DialogTrigger asChild>
-            <Button>
-              <Plus className="h-4 w-4 mr-2" />
-              Nova Clínica
-            </Button>
-          </DialogTrigger>
-          <DialogContent>
-            <DialogHeader>
-              <DialogTitle>Criar Nova Clínica</DialogTitle>
-              <DialogDescription>
-                Adicione uma nova clínica (vendas fechadas). O cliente deve ser cadastrado como usuário admin depois; use o menu da clínica para definir/resetar senha do proprietário.
-              </DialogDescription>
-            </DialogHeader>
-            <div className="space-y-4 py-4">
-              <div className="space-y-2">
-                <Label htmlFor="name">Nome da Clínica *</Label>
-                <Input
-                  id="name"
-                  value={newClinic.name}
-                  onChange={(e) => setNewClinic({ ...newClinic, name: e.target.value })}
-                  placeholder="Ex: Clínica Odonto Sorriso"
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="email">E-mail *</Label>
-                <Input
-                  id="email"
-                  type="email"
-                  value={newClinic.email}
-                  onChange={(e) => setNewClinic({ ...newClinic, email: e.target.value })}
-                  placeholder="contato@clinica.com"
-                />
-              </div>
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label htmlFor="phone">Telefone</Label>
-                  <Input
-                    id="phone"
-                    value={newClinic.phone}
-                    onChange={(e) => setNewClinic({ ...newClinic, phone: e.target.value })}
-                    placeholder="(11) 99999-9999"
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="cnpj">CNPJ</Label>
-                  <Input
-                    id="cnpj"
-                    value={newClinic.cnpj}
-                    onChange={(e) => setNewClinic({ ...newClinic, cnpj: e.target.value })}
-                    placeholder="00.000.000/0001-00"
-                  />
-                </div>
-              </div>
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label htmlFor="city">Cidade</Label>
-                  <Input
-                    id="city"
-                    value={newClinic.city}
-                    onChange={(e) => setNewClinic({ ...newClinic, city: e.target.value })}
-                    placeholder="São Paulo"
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="state">Estado</Label>
-                  <Input
-                    id="state"
-                    value={newClinic.state}
-                    onChange={(e) => setNewClinic({ ...newClinic, state: e.target.value })}
-                    placeholder="SP"
-                    maxLength={2}
-                  />
-                </div>
-              </div>
-            </div>
-            <DialogFooter>
-              <Button variant="outline" onClick={() => setIsCreateDialogOpen(false)}>
-                Cancelar
-              </Button>
-              <Button onClick={handleCreateClinic} disabled={!newClinic.name || !newClinic.email}>
-                Criar Clínica
-              </Button>
-            </DialogFooter>
-          </DialogContent>
-        </Dialog>
+        <p className="text-sm text-muted-foreground mt-1">
+          Para cadastrar novo cliente (clínica + usuário + plano), use o botão <strong>Criar Cliente Completo</strong> na aba <strong>Dashboard</strong>.
+        </p>
       </CardHeader>
       <CardContent>
         <div className="flex items-center gap-4 mb-6">

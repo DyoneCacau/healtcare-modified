@@ -30,6 +30,7 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { Label } from '@/components/ui/label';
+import { Separator } from '@/components/ui/separator';
 import {
   Select,
   SelectContent,
@@ -48,6 +49,10 @@ import {
   Mail,
   Phone,
   Trash2,
+  KeyRound,
+  Send,
+  Eye,
+  EyeOff,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
@@ -73,9 +78,10 @@ const ROLE_LABELS = {
 interface UserManagementProps {
   users: SystemUser[];
   onRefresh: () => void;
+  isSuperAdmin?: boolean;
 }
 
-export function UserManagement({ users, onRefresh }: UserManagementProps) {
+export function UserManagement({ users, onRefresh, isSuperAdmin }: UserManagementProps) {
   const { clinicId } = useClinic();
   const [searchTerm, setSearchTerm] = useState('');
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -90,6 +96,12 @@ export function UserManagement({ users, onRefresh }: UserManagementProps) {
   const [isLoading, setIsLoading] = useState(false);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [userToDelete, setUserToDelete] = useState<SystemUser | null>(null);
+  const [resetPasswordDialogOpen, setResetPasswordDialogOpen] = useState(false);
+  const [userToResetPassword, setUserToResetPassword] = useState<SystemUser | null>(null);
+  const [tempPassword, setTempPassword] = useState('');
+  const [showTempPassword, setShowTempPassword] = useState(false);
+  const [isSendingLink, setIsSendingLink] = useState(false);
+  const [isSettingTemp, setIsSettingTemp] = useState(false);
 
   const filteredUsers = users.filter(
     (u) =>
@@ -159,38 +171,35 @@ export function UserManagement({ users, onRefresh }: UserManagementProps) {
           return;
         }
 
-        // Create new user
+        // Create new user (skip_auto_clinic: trigger não criará clínica nova; usuário entra na clínica atual)
         const { data: authData, error: authError } = await supabase.auth.signUp({
           email: formData.email,
           password: formData.password,
           options: {
             emailRedirectTo: window.location.origin,
-            data: { name: formData.name },
+            data: { name: formData.name, skip_auto_clinic: 'true' },
           },
         });
 
         if (authError) throw authError;
 
         if (authData.user) {
-          // Add role
-          const { error: roleError } = await supabase.from('user_roles').insert({
-            user_id: authData.user.id,
-            role: formData.role,
-          });
-
-          if (roleError) throw roleError;
-
-          // Link user to clinic
+          // 1) Vincular à clínica PRIMEIRO (RLS em user_roles exige que o user_id já esteja na clínica)
           if (clinicId) {
             const { error: clinicError } = await supabase.from('clinic_users').insert({
               clinic_id: clinicId,
               user_id: authData.user.id,
               is_owner: false,
             });
-            if (clinicError) {
-              console.error('Error linking user to clinic:', clinicError);
-            }
+            if (clinicError) throw clinicError;
           }
+
+          // 2) Depois adicionar a role (policy permite só para user_id já na mesma clínica)
+          const { error: roleError } = await supabase.from('user_roles').insert({
+            user_id: authData.user.id,
+            role: formData.role,
+          });
+          if (roleError) throw roleError;
 
           // Garantir nome e telefone no perfil (nome obrigatório no cadastro)
           const { error: profileUpdateError } = await supabase
@@ -233,6 +242,56 @@ export function UserManagement({ users, onRefresh }: UserManagementProps) {
       onRefresh();
     } catch (error: any) {
       toast.error(error.message || 'Erro ao atualizar status');
+    }
+  };
+
+  const handleOpenResetPassword = (user: SystemUser) => {
+    setUserToResetPassword(user);
+    setTempPassword('');
+    setResetPasswordDialogOpen(true);
+  };
+
+  const handleSendResetLink = async () => {
+    if (!userToResetPassword?.email) return;
+    setIsSendingLink(true);
+    try {
+      const { error } = await supabase.auth.resetPasswordForEmail(userToResetPassword.email, {
+        redirectTo: `${window.location.origin}/reset-password`,
+      });
+      if (error) throw error;
+      toast.success(`Link de redefinição enviado para ${userToResetPassword.email}. O usuário deve acessar o e-mail e definir a nova senha.`);
+      setResetPasswordDialogOpen(false);
+      setUserToResetPassword(null);
+    } catch (err: any) {
+      toast.error(err?.message || 'Erro ao enviar link');
+    } finally {
+      setIsSendingLink(false);
+    }
+  };
+
+  const handleSetTempPassword = async () => {
+    if (!userToResetPassword || !tempPassword || tempPassword.length < 6) {
+      toast.error('Informe uma senha temporária com no mínimo 6 caracteres.');
+      return;
+    }
+    setIsSettingTemp(true);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      const token = session?.access_token;
+      const { data, error } = await supabase.functions.invoke('reset-user-password', {
+        body: { user_id: userToResetPassword.id, new_password: tempPassword },
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+      });
+      if (error) throw error;
+      if (data?.error) throw new Error(data.error);
+      toast.success('Senha temporária definida. Oriente o usuário a trocar no primeiro acesso em Configurações > Alterar senha.');
+      setResetPasswordDialogOpen(false);
+      setUserToResetPassword(null);
+      setTempPassword('');
+    } catch (err: any) {
+      toast.error(err?.message || 'Erro ao definir senha temporária. Apenas Superadmin pode usar esta opção.');
+    } finally {
+      setIsSettingTemp(false);
     }
   };
 
@@ -351,18 +410,28 @@ export function UserManagement({ users, onRefresh }: UserManagementProps) {
                     )}
                   </TableCell>
                   <TableCell className="text-right">
-                    <div className="flex justify-end gap-2">
+                    <div className="flex justify-end gap-2 flex-wrap">
                       <Button
                         size="sm"
                         variant="outline"
                         onClick={() => handleOpenDialog(user)}
+                        title="Editar"
                       >
                         <Edit className="h-4 w-4" />
                       </Button>
                       <Button
                         size="sm"
+                        variant="outline"
+                        onClick={() => handleOpenResetPassword(user)}
+                        title="Resetar senha"
+                      >
+                        <KeyRound className="h-4 w-4" />
+                      </Button>
+                      <Button
+                        size="sm"
                         variant={user.is_active ? 'destructive' : 'default'}
                         onClick={() => handleToggleStatus(user)}
+                        title={user.is_active ? 'Desativar' : 'Ativar'}
                       >
                         {user.is_active ? (
                           <UserX className="h-4 w-4" />
@@ -377,6 +446,7 @@ export function UserManagement({ users, onRefresh }: UserManagementProps) {
                           setUserToDelete(user);
                           setDeleteDialogOpen(true);
                         }}
+                        title="Excluir"
                       >
                         <Trash2 className="h-4 w-4" />
                       </Button>
@@ -498,6 +568,82 @@ export function UserManagement({ users, onRefresh }: UserManagementProps) {
               </Button>
             </DialogFooter>
           </form>
+        </DialogContent>
+      </Dialog>
+
+      {/* Dialog Resetar Senha */}
+      <Dialog open={resetPasswordDialogOpen} onOpenChange={(open) => {
+        if (!open) {
+          setResetPasswordDialogOpen(false);
+          setUserToResetPassword(null);
+          setTempPassword('');
+        }
+      }}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Resetar senha</DialogTitle>
+            <DialogDescription>
+              {userToResetPassword && (
+                <>Usuário: <strong>{userToResetPassword.name}</strong> ({userToResetPassword.email})</>
+              )}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-2">
+            <p className="text-sm text-muted-foreground">
+              Enviar link por e-mail: o usuário receberá um e-mail e poderá definir uma nova senha pelo link.
+            </p>
+            <Button
+              type="button"
+              variant="outline"
+              className="w-full gap-2"
+              onClick={handleSendResetLink}
+              disabled={isSendingLink}
+            >
+              <Send className="h-4 w-4" />
+              {isSendingLink ? 'Enviando...' : 'Enviar link de redefinição por e-mail'}
+            </Button>
+
+            {isSuperAdmin && (
+              <>
+                <Separator />
+                <p className="text-sm text-muted-foreground">
+                  Ou defina uma senha temporária. O usuário deve trocar no primeiro acesso em Configurações &gt; Alterar senha.
+                </p>
+                <div className="space-y-2">
+                  <Label htmlFor="temp-password">Senha temporária (mín. 6 caracteres)</Label>
+                  <div className="flex gap-2">
+                    <Input
+                      id="temp-password"
+                      type={showTempPassword ? 'text' : 'password'}
+                      value={tempPassword}
+                      onChange={(e) => setTempPassword(e.target.value)}
+                      placeholder="Senha temporária"
+                      minLength={6}
+                      className="flex-1"
+                    />
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon"
+                      onClick={() => setShowTempPassword(!showTempPassword)}
+                      title={showTempPassword ? 'Ocultar' : 'Mostrar'}
+                    >
+                      {showTempPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                    </Button>
+                  </div>
+                </div>
+                <Button
+                  type="button"
+                  className="w-full gap-2"
+                  onClick={handleSetTempPassword}
+                  disabled={isSettingTemp || tempPassword.length < 6}
+                >
+                  <KeyRound className="h-4 w-4" />
+                  {isSettingTemp ? 'Definindo...' : 'Definir senha temporária'}
+                </Button>
+              </>
+            )}
+          </div>
         </DialogContent>
       </Dialog>
 

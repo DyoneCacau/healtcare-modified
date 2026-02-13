@@ -68,11 +68,16 @@ export function Sidebar() {
   const { selectedClinicId, setSelectedClinicId } = useSelectedClinicId();
   const { currentClinic, isLoading: isLoadingCurrentClinic } = useCurrentClinic();
 
+  // Mostrar seletor só se superadmin ou se tiver mais de uma clínica (como dono)
+  const showClinicSelector = isSuperAdmin || clinics.length > 1;
   useEffect(() => {
-    if (isSuperAdmin && !selectedClinicId && clinics.length > 0) {
-      setSelectedClinicId(clinics[0].id);
+    if (clinics.length === 0) return;
+    const firstId = clinics[0].id;
+    const selectionValid = selectedClinicId && clinics.some((c) => c.id === selectedClinicId);
+    if (!selectionValid || clinics.length === 1) {
+      setSelectedClinicId(firstId);
     }
-  }, [isSuperAdmin, selectedClinicId, clinics, setSelectedClinicId]);
+  }, [clinics, selectedClinicId, setSelectedClinicId]);
 
   const handleLogout = async () => {
     await signOut();
@@ -109,7 +114,7 @@ export function Sidebar() {
         )}
       </div>
 
-      {isSuperAdmin && !collapsed && (
+      {showClinicSelector && !collapsed && (
         <div className="border-b border-sidebar-border px-4 py-3">
           <div className="text-xs font-medium text-sidebar-muted mb-2">Clínica ativa</div>
           <Select
