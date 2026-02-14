@@ -19,7 +19,6 @@ import {
   FileText,
   Crown,
   Lock,
-  Building2,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -44,7 +43,6 @@ interface MenuItem {
 
 const menuItems: MenuItem[] = [
   { icon: LayoutDashboard, label: "Dashboard", path: "/", feature: "dashboard" },
-  { icon: Building2, label: "Minhas Clínicas", path: "/minhas-clinicas" }, // Sem feature = sempre disponível
   { icon: Calendar, label: "Agenda", path: "/agenda", feature: "agenda" },
   { icon: Users, label: "Pacientes", path: "/pacientes", feature: "pacientes" },
   { icon: Stethoscope, label: "Profissionais", path: "/profissionais", feature: "profissionais" },
