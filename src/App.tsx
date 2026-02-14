@@ -24,7 +24,6 @@ import Administration from "./pages/Administration";
 import SuperAdmin from "./pages/SuperAdmin";
 import Settings from "./pages/Settings";
 import Billing from "./pages/Billing";
-import MyClinics from "./pages/MyClinics";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -252,16 +251,10 @@ function AppRoutes() {
         }
       />
 
-      {/* Minhas Clínicas - sempre disponível para admins */}
+      {/* Minhas Clínicas: dentro de Administração (redireciona para a aba) */}
       <Route
         path="/minhas-clinicas"
-        element={
-          <ProtectedRoute>
-            <SubscriptionGate>
-              <MyClinics />
-            </SubscriptionGate>
-          </ProtectedRoute>
-        }
+        element={<Navigate to="/administracao?tab=clinics" replace />}
       />
 
       {/* Configurações - sempre disponível */}

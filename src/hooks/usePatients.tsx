@@ -1,4 +1,4 @@
-﻿import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useClinic } from './useClinic';
 import { toast } from 'sonner';
@@ -57,14 +57,16 @@ export function usePatientMutations() {
     mutationFn: async (data: Omit<PatientData, 'id' | 'clinic_id' | 'created_at' | 'updated_at'>) => {
       if (!clinicId) throw new Error('Clínica não encontrada');
 
-      const { data: patient, error } = await supabase
+      const patientId = crypto.randomUUID();
+      const patientPayload = {
+        id: patientId,
+        ...data,
+        clinic_id: clinicId,
+      };
+
+      const { error } = await supabase
         .from('patients')
-        .insert({
-          ...data,
-          clinic_id: clinicId,
-        })
-        .select()
-        .single();
+        .insert(patientPayload);
 
       if (error) throw error;
 
@@ -72,10 +74,10 @@ export function usePatientMutations() {
         const { error: eventError } = await supabase.from('audit_events').insert({
           clinic_id: clinicId,
           entity_type: 'patient',
-          entity_id: patient.id,
+          entity_id: patientId,
           action: 'create',
           before: null,
-          after: patient,
+          after: patientPayload,
           reason: null,
           user_id: user.id,
         });
@@ -84,15 +86,16 @@ export function usePatientMutations() {
         throw eventError;
       }
       }
-      return patient;
+      return patientPayload;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['patients'] });
       toast.success('Paciente cadastrado com sucesso!');
     },
-    onError: (error) => {
+    onError: (error: unknown) => {
       console.error('Error creating patient:', error);
-      toast.error('Erro ao cadastrar paciente');
+      const msg = error && typeof error === 'object' && 'message' in error ? String((error as { message: string }).message) : '';
+      toast.error(msg ? `Erro ao cadastrar paciente: ${msg}` : 'Erro ao cadastrar paciente');
     },
   });
 
