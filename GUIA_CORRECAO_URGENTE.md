@@ -25,7 +25,7 @@ Você compartilhou **credenciais sensíveis publicamente** neste chat. Isso é M
 
 3. **Access Token (token pessoal):**
    - Vá em: Settings > Access Tokens
-   - Revogue o token: `sbp_f363b4007a0aa009fd70e577a04234e13bf2e682`
+   - Revogue o token exposto (ex.: `sbp_<SEU_TOKEN_AQUI>`)
    - Crie um novo token
    - Copie e guarde em lugar seguro
 
@@ -44,7 +44,7 @@ Você compartilhou **credenciais sensíveis publicamente** neste chat. Isso é M
 1. **Copie o arquivo corrigido:**
    ```bash
    cd /caminho/do/seu/projeto
-   cp .env.corrigido .env
+   cp .env.example .env
    ```
 
 2. **Edite o arquivo .env** e atualize com as NOVAS credenciais:

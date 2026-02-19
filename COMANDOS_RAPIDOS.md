@@ -10,7 +10,7 @@
 
 **Supabase Access Token:**
 1. Abra: https://app.supabase.com/account/tokens
-2. Revogue o token: `sbp_f363b4007a0aa009fd70e577a04234e13bf2e682`
+2. Revogue o token exposto (ex.: `sbp_<SEU_TOKEN_AQUI>`)
 3. Clique em "Generate new token"
 4. Copie e salve em lugar seguro
 

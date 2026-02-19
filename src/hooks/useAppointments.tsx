@@ -1,4 +1,4 @@
-﻿import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useClinic } from './useClinic';
 import { toast } from 'sonner';
@@ -87,14 +87,18 @@ export function useAppointmentMutations() {
     mutationFn: async (data: Omit<AppointmentData, 'id' | 'clinic_id' | 'created_at' | 'updated_at' | 'patient' | 'professional'>) => {
       if (!clinicId) throw new Error('Clínica não encontrada');
 
-      const { data: appointment, error } = await supabase
+      // Evita depender de RLS de SELECT no retorno do INSERT.
+      // (Quando usa .select().single(), o PostgREST precisa "ler" a linha inserida.)
+      const appointmentId = crypto.randomUUID();
+      const appointmentPayload = {
+        id: appointmentId,
+        ...data,
+        clinic_id: clinicId,
+      };
+
+      const { error } = await supabase
         .from('appointments')
-        .insert({
-          ...data,
-          clinic_id: clinicId,
-        })
-        .select()
-        .single();
+        .insert(appointmentPayload);
 
       if (error) throw error;
 
@@ -102,19 +106,20 @@ export function useAppointmentMutations() {
         const { error: eventError } = await supabase.from('audit_events').insert({
           clinic_id: clinicId,
           entity_type: 'appointment',
-          entity_id: appointment.id,
+          entity_id: appointmentId,
           action: 'create',
           before: null,
-          after: appointment,
+          after: appointmentPayload,
           reason: null,
           user_id: user.id,
         });
 
         if (eventError && (eventError as { code?: string }).code !== '42P01') {
-          throw eventError;
+          // Log de auditoria e "best-effort": nao deve impedir o agendamento.
+          console.warn('Failed to insert audit event (appointment create):', eventError);
         }
       }
-      return appointment;
+      return appointmentPayload;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['appointments'] });
@@ -123,7 +128,15 @@ export function useAppointmentMutations() {
     },
     onError: (error) => {
       console.error('Error creating appointment:', error);
-      toast.error('Erro ao criar agendamento');
+      const e = (error || {}) as { message?: string; code?: string; details?: string; hint?: string };
+      const parts = [
+        e.message,
+        e.code ? `code=${e.code}` : '',
+        e.details ? `details=${e.details}` : '',
+        e.hint ? `hint=${e.hint}` : '',
+      ].filter(Boolean);
+
+      toast.error(parts.length ? `Erro ao criar agendamento: ${parts.join(' | ')}` : 'Erro ao criar agendamento');
     },
   });
 

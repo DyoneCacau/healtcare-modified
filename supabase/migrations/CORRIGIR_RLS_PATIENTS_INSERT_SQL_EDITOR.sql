@@ -8,6 +8,7 @@
 -- Remove políticas de INSERT antigas (pode haver um ou outro nome)
 DROP POLICY IF EXISTS "Users can insert clinic patients with feature" ON public.patients;
 DROP POLICY IF EXISTS "Users can insert clinic patients with feature or admin" ON public.patients;
+DROP POLICY IF EXISTS "Users can insert clinic patients" ON public.patients;
 
 -- Nova política: usuário só precisa estar na clínica (clinic_users)
 CREATE POLICY "Users can insert clinic patients"

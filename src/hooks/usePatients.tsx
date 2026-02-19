@@ -57,14 +57,16 @@ export function usePatientMutations() {
     mutationFn: async (data: Omit<PatientData, 'id' | 'clinic_id' | 'created_at' | 'updated_at'>) => {
       if (!clinicId) throw new Error('Clínica não encontrada');
 
-      const { data: patient, error } = await supabase
+      const patientId = crypto.randomUUID();
+      const patientPayload = {
+        id: patientId,
+        ...data,
+        clinic_id: clinicId,
+      };
+
+      const { error } = await supabase
         .from('patients')
-        .insert({
-          ...data,
-          clinic_id: clinicId,
-        })
-        .select()
-        .single();
+        .insert(patientPayload);
 
       if (error) throw error;
 
@@ -72,10 +74,10 @@ export function usePatientMutations() {
         const { error: eventError } = await supabase.from('audit_events').insert({
           clinic_id: clinicId,
           entity_type: 'patient',
-          entity_id: patient.id,
+          entity_id: patientId,
           action: 'create',
           before: null,
-          after: patient,
+          after: patientPayload,
           reason: null,
           user_id: user.id,
         });
@@ -84,7 +86,7 @@ export function usePatientMutations() {
         throw eventError;
       }
       }
-      return patient;
+      return patientPayload;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['patients'] });

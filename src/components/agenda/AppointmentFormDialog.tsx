@@ -40,7 +40,7 @@ interface AppointmentFormDialogProps {
   professionals: Professional[];
   clinics: Clinic[];
   existingAppointments: AgendaAppointment[];
-  onSave: (appointment: Partial<AgendaAppointment>) => void;
+  onSave: (appointment: Partial<AgendaAppointment>) => Promise<void>;
 }
 
 export function AppointmentFormDialog({
@@ -119,7 +119,7 @@ export function AppointmentFormDialog({
     return !!conflicting;
   };
 
-  const handleSave = () => {
+  const handleSave = async () => {
     if (!patientId || !professionalId || !clinicId || !procedure) {
       toast.error('Preencha todos os campos obrigatórios');
       return;
@@ -139,25 +139,30 @@ export function AppointmentFormDialog({
       return;
     }
 
-    onSave({
-      id: appointment?.id,
-      date: format(date, 'yyyy-MM-dd'),
-      startTime,
-      endTime,
-      patientId,
-      patientName: patient.name,
-      professional,
-      procedure,
-      status,
-      paymentStatus,
-      notes,
-      clinic,
-      sellerId: sellerId || undefined,
-      leadSource: leadSource || undefined,
-    });
+    try {
+      await onSave({
+        id: appointment?.id,
+        date: format(date, 'yyyy-MM-dd'),
+        startTime,
+        endTime,
+        patientId,
+        patientName: patient.name,
+        professional,
+        procedure,
+        status,
+        paymentStatus,
+        notes,
+        clinic,
+        sellerId: sellerId || undefined,
+        leadSource: leadSource || undefined,
+      });
 
-    onOpenChange(false);
-    toast.success(isEditing ? 'Agendamento atualizado!' : 'Agendamento criado!');
+      // Fecha apenas se salvou com sucesso (evita toast "criado" + erro logo depois).
+      onOpenChange(false);
+    } catch (err) {
+      // O caller (mutation) ja mostra toast de erro; mantemos o dialog aberto.
+      console.error('Error saving appointment:', err);
+    }
   };
 
   const timeOptions = [];
