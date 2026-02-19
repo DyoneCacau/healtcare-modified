@@ -9,6 +9,7 @@ import {
 } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { DateInput } from '@/components/ui/date-input';
 import { Label } from '@/components/ui/label';
 import {
   Select,
@@ -198,11 +199,10 @@ export function ProfessionalFormDialog({
 
             <div className="space-y-2">
               <Label htmlFor="hire_date">Data de Contratação</Label>
-              <Input
+              <DateInput
                 id="hire_date"
-                type="date"
                 value={formData.hire_date}
-                onChange={(e) => setFormData({ ...formData, hire_date: e.target.value })}
+                onChange={(v) => setFormData({ ...formData, hire_date: v })}
               />
             </div>
           </div>

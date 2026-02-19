@@ -27,40 +27,28 @@ import {
   Calendar as CalendarIcon,
   Download,
   Search,
-  TrendingUp,
   AlertTriangle,
   CheckCircle,
   Timer,
   Settings,
   ClipboardList,
+  Lock,
+  Building2,
 } from 'lucide-react';
 import { UserManagement } from '@/components/admin/UserManagement';
 import { PendingCorrections } from '@/components/admin/PendingCorrections';
+import { PermissionsManagement } from '@/components/admin/PermissionsManagement';
+import { ErrorBoundary } from '@/components/ErrorBoundary';
+import { MyClinicsContent } from '@/components/admin/MyClinicsContent';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
 import { useClinic } from '@/hooks/useClinic';
 import { useAuditEvents } from '@/hooks/useFinancial';
 import { AuditEvent } from '@/types/audit';
-import { Navigate } from 'react-router-dom';
+import { Navigate, useSearchParams } from 'react-router-dom';
 import { toast } from 'sonner';
 import { format, subDays } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
-import {
-  BarChart,
-  Bar,
-  XAxis,
-  YAxis,
-  CartesianGrid,
-  Tooltip,
-  ResponsiveContainer,
-  PieChart,
-  Pie,
-  Cell,
-  Legend,
-} from 'recharts';
-
-const COLORS = ['#10b981', '#3b82f6', '#f59e0b', '#ef4444', '#8b5cf6'];
-
 interface TimeClockEntry {
   id: string;
   user_id: string;
@@ -76,7 +64,8 @@ interface SystemUser {
   name: string;
   email: string;
   phone: string;
-  role: 'admin' | 'receptionist' | 'seller' | 'professional';
+  role: string;
+  roleId: string;
   is_active: boolean;
   created_at: string;
 }
@@ -91,9 +80,14 @@ interface PendingCorrection {
   created_at: string;
 }
 
+const ADMIN_TAB_VALUES = ['clinics', 'corrections', 'users', 'permissions', 'timesheet', 'settings', 'audit'] as const;
+
 export default function Administration() {
   const { isAdmin, isSuperAdmin, user, profile } = useAuth();
   const { clinicId } = useClinic();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const tabFromUrl = searchParams.get('tab');
+  const activeTab = ADMIN_TAB_VALUES.includes(tabFromUrl as any) ? tabFromUrl : 'corrections';
   const [entries, setEntries] = useState<TimeClockEntry[]>([]);
   const [users, setUsers] = useState<SystemUser[]>([]);
   const [pendingCorrections, setPendingCorrections] = useState<PendingCorrection[]>([]);
@@ -180,7 +174,49 @@ export default function Administration() {
 
     const { data: rolesData } = await rolesQuery;
 
-    if (profilesData && rolesData) {
+    if (profilesData && rolesData && clinicId) {
+      const userIds = rolesData.map((r: any) => r.user_id);
+      const { data: customRoleRows } = await supabase
+        .from('user_clinic_custom_roles')
+        .select('user_id, clinic_custom_role_id, clinic_custom_roles(name)')
+        .eq('clinic_id', clinicId)
+        .in('user_id', userIds);
+      const customByUser: Record<string, { name: string; id: string }> = {};
+      (customRoleRows || []).forEach((r: any) => {
+        const cr = r.clinic_custom_roles;
+        customByUser[r.user_id] = { name: cr?.name ?? 'Personalizada', id: r.clinic_custom_role_id };
+      });
+      const roleLabels: Record<string, string> = {
+        admin: 'Administrador',
+        receptionist: 'Recepcionista',
+        seller: 'Vendedor',
+        professional: 'Profissional',
+      };
+      const usersWithRoles: SystemUser[] = [];
+      for (const role of rolesData) {
+        const profile = profilesData.find((p) => p.user_id === role.user_id);
+        if (profile) {
+          const custom = customByUser[role.user_id];
+          usersWithRoles.push({
+            id: profile.user_id,
+            name: profile.name,
+            email: profile.email,
+            phone: profile.phone || '',
+            role: custom ? custom.name : (roleLabels[role.role] ?? role.role),
+            roleId: custom ? custom.id : role.role,
+            is_active: profile.is_active,
+            created_at: profile.created_at,
+          });
+        }
+      }
+      setUsers(usersWithRoles);
+    } else if (profilesData && rolesData) {
+      const roleLabels: Record<string, string> = {
+        admin: 'Administrador',
+        receptionist: 'Recepcionista',
+        seller: 'Vendedor',
+        professional: 'Profissional',
+      };
       const usersWithRoles: SystemUser[] = [];
       for (const role of rolesData) {
         const profile = profilesData.find((p) => p.user_id === role.user_id);
@@ -190,7 +226,8 @@ export default function Administration() {
             name: profile.name,
             email: profile.email,
             phone: profile.phone || '',
-            role: role.role as SystemUser['role'],
+            role: roleLabels[role.role] ?? role.role,
+            roleId: role.role,
             is_active: profile.is_active,
             created_at: profile.created_at,
           });
@@ -349,40 +386,6 @@ export default function Administration() {
     };
   }, [filteredEntries]);
 
-  // Chart data by user
-  const hoursChartData = useMemo(() => {
-    const userHours = new Map<string, { name: string; hours: number }>();
-
-    filteredEntries
-      .filter((e) => e.entry_type === 'clock_in')
-      .forEach((entry) => {
-        const userProfile = users.find((u) => u.id === entry.user_id);
-        const existing = userHours.get(entry.user_id) || {
-          name: userProfile?.name || 'Usuário',
-          hours: 0,
-        };
-        existing.hours += 8;
-        userHours.set(entry.user_id, existing);
-      });
-
-    return Array.from(userHours.values()).map((u) => ({
-      name: u.name.split(' ').slice(0, 2).join(' '),
-      horas: u.hours,
-    }));
-  }, [filteredEntries, users]);
-
-  const roleDistribution = useMemo(() => {
-    const roles = new Map<string, number>();
-    users.forEach((u) => {
-      const current = roles.get(u.role) || 0;
-      roles.set(u.role, current + 1);
-    });
-    return Array.from(roles.entries()).map(([role, count]) => ({
-      name: role === 'receptionist' ? 'Recepcionista' : 'Vendedor',
-      value: count,
-    }));
-  }, [users]);
-
   const handleExportTimesheet = () => {
     if (filteredEntries.length === 0) {
       toast.error('Nenhum registro para exportar');
@@ -452,8 +455,12 @@ export default function Administration() {
           </Button>
         </div>
 
-        <Tabs defaultValue="corrections" className="space-y-4">
+        <Tabs value={activeTab} onValueChange={(v) => setSearchParams({ tab: v })} className="space-y-4">
           <TabsList>
+            <TabsTrigger value="clinics" className="flex items-center gap-2">
+              <Building2 className="h-4 w-4" />
+              Minhas Clínicas
+            </TabsTrigger>
             <TabsTrigger value="corrections" className="flex items-center gap-2">
               <AlertTriangle className="h-4 w-4" />
               Correções
@@ -467,13 +474,13 @@ export default function Administration() {
               <Users className="h-4 w-4" />
               Usuários
             </TabsTrigger>
+            <TabsTrigger value="permissions" className="flex items-center gap-2">
+              <Lock className="h-4 w-4" />
+              Permissões
+            </TabsTrigger>
             <TabsTrigger value="timesheet" className="flex items-center gap-2">
               <Clock className="h-4 w-4" />
               Folha de Ponto
-            </TabsTrigger>
-            <TabsTrigger value="overview" className="flex items-center gap-2">
-              <TrendingUp className="h-4 w-4" />
-              Visão Geral
             </TabsTrigger>
             <TabsTrigger value="settings" className="flex items-center gap-2">
               <Settings className="h-4 w-4" />
@@ -484,6 +491,11 @@ export default function Administration() {
               Auditoria
             </TabsTrigger>
           </TabsList>
+
+          {/* Minhas Clínicas Tab */}
+          <TabsContent value="clinics">
+            <MyClinicsContent />
+          </TabsContent>
 
           {/* Corrections Tab */}
           <TabsContent value="corrections">
@@ -497,6 +509,13 @@ export default function Administration() {
           {/* Users Tab */}
           <TabsContent value="users">
             <UserManagement users={users} onRefresh={fetchData} isSuperAdmin={isSuperAdmin} />
+          </TabsContent>
+
+          {/* Permissions Tab */}
+          <TabsContent value="permissions">
+            <ErrorBoundary>
+              <PermissionsManagement />
+            </ErrorBoundary>
           </TabsContent>
 
           {/* Timesheet Tab */}
@@ -639,58 +658,6 @@ export default function Administration() {
                 </Table>
               </CardContent>
             </Card>
-          </TabsContent>
-
-          {/* Overview Tab */}
-          <TabsContent value="overview" className="space-y-4">
-            <div className="grid gap-4 lg:grid-cols-2">
-              <Card>
-                <CardHeader>
-                  <CardTitle>Horas por Funcionário</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <ResponsiveContainer width="100%" height={300}>
-                    <BarChart data={hoursChartData}>
-                      <CartesianGrid strokeDasharray="3 3" />
-                      <XAxis dataKey="name" tick={{ fontSize: 11 }} />
-                      <YAxis />
-                      <Tooltip />
-                      <Bar dataKey="horas" name="Horas" fill="#10b981" radius={[4, 4, 0, 0]} />
-                    </BarChart>
-                  </ResponsiveContainer>
-                </CardContent>
-              </Card>
-
-              <Card>
-                <CardHeader>
-                  <CardTitle>Distribuição por Função</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <ResponsiveContainer width="100%" height={300}>
-                    <PieChart>
-                      <Pie
-                        data={roleDistribution}
-                        cx="50%"
-                        cy="50%"
-                        labelLine={false}
-                        label={({ name, percent }) =>
-                          `${name}: ${(percent * 100).toFixed(0)}%`
-                        }
-                        outerRadius={100}
-                        fill="#8884d8"
-                        dataKey="value"
-                      >
-                        {roleDistribution.map((_, index) => (
-                          <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
-                        ))}
-                      </Pie>
-                      <Tooltip />
-                      <Legend />
-                    </PieChart>
-                  </ResponsiveContainer>
-                </CardContent>
-              </Card>
-            </div>
           </TabsContent>
 
           {/* Settings Tab */}

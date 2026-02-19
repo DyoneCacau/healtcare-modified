@@ -63,8 +63,11 @@ export function QuickActions() {
       description: transaction.description,
       category: transaction.category,
       payment_method: transaction.paymentMethod,
+      patient_id: transaction.patientId || null,
+      notes: transaction.notes || null,
+      voucher_discount: transaction.voucherDiscount || null,
+      payment_split: transaction.paymentSplit || null,
     });
-    setPaymentDialogOpen(false);
   };
 
   const handleGenerateReport = () => {

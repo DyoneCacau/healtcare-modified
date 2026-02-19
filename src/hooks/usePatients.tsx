@@ -1,4 +1,4 @@
-﻿import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useClinic } from './useClinic';
 import { toast } from 'sonner';
@@ -90,9 +90,10 @@ export function usePatientMutations() {
       queryClient.invalidateQueries({ queryKey: ['patients'] });
       toast.success('Paciente cadastrado com sucesso!');
     },
-    onError: (error) => {
+    onError: (error: unknown) => {
       console.error('Error creating patient:', error);
-      toast.error('Erro ao cadastrar paciente');
+      const msg = error && typeof error === 'object' && 'message' in error ? String((error as { message: string }).message) : '';
+      toast.error(msg ? `Erro ao cadastrar paciente: ${msg}` : 'Erro ao cadastrar paciente');
     },
   });
 

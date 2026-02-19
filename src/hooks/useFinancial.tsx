@@ -262,7 +262,11 @@ export function useTransactionMutations() {
       if (!clinicId) throw new Error('Clínica não encontrada');
       if (!user?.id) throw new Error('Usuário não autenticado');
 
+      // Evita depender de RLS de SELECT no retorno do INSERT (insert(...).select().single()).
+      const transactionId = crypto.randomUUID();
+
       const basePayload = {
+        id: transactionId,
         type: data.type,
         amount: data.amount,
         description: data.description || null,
@@ -270,6 +274,8 @@ export function useTransactionMutations() {
         payment_method: data.payment_method || null,
         clinic_id: clinicId,
         user_id: user.id,
+        reference_type: data.reference_type ?? null,
+        reference_id: data.reference_id ?? null,
       };
 
       const extendedPayload = {
@@ -280,22 +286,18 @@ export function useTransactionMutations() {
         payment_split: data.payment_split ?? null,
       };
 
-      let { data: transaction, error } = await supabase
+      let { error } = await supabase
         .from('financial_transactions')
-        .insert(extendedPayload)
-        .select()
-        .single();
+        .insert(extendedPayload);
 
       if (error && ['42703', 'PGRST204'].includes((error as { code?: string }).code || '')) {
-        ({ data: transaction, error } = await supabase
+        ({ error } = await supabase
           .from('financial_transactions')
-          .insert(basePayload)
-          .select()
-          .single());
+          .insert(basePayload));
       }
 
       if (error) throw error;
-      return transaction;
+      return extendedPayload;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['transactions'] });
@@ -305,7 +307,14 @@ export function useTransactionMutations() {
     },
     onError: (error) => {
       console.error('Error creating transaction:', error);
-      toast.error('Erro ao registrar transação');
+      const e = (error || {}) as { message?: string; code?: string; details?: string; hint?: string };
+      const parts = [
+        e.message,
+        e.code ? `code=${e.code}` : '',
+        e.details ? `details=${e.details}` : '',
+        e.hint ? `hint=${e.hint}` : '',
+      ].filter(Boolean);
+      toast.error(parts.length ? `Erro ao registrar transação: ${parts.join(' | ')}` : 'Erro ao registrar transação');
     },
   });
 

@@ -1,5 +1,5 @@
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
+import { DateInput } from '@/components/ui/date-input';
 import { Label } from '@/components/ui/label';
 import {
   Select,
@@ -51,11 +51,7 @@ export function ReportFilters({
             <Calendar className="h-4 w-4" />
             Data Inicial
           </Label>
-          <Input
-            type="date"
-            value={startDate}
-            onChange={(e) => onStartDateChange(e.target.value)}
-          />
+          <DateInput value={startDate} onChange={onStartDateChange} />
         </div>
 
         <div className="space-y-2">
@@ -63,11 +59,7 @@ export function ReportFilters({
             <Calendar className="h-4 w-4" />
             Data Final
           </Label>
-          <Input
-            type="date"
-            value={endDate}
-            onChange={(e) => onEndDateChange(e.target.value)}
-          />
+          <DateInput value={endDate} onChange={onEndDateChange} />
         </div>
 
         <div className="space-y-2">

@@ -3,6 +3,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
+import { DateInput } from "@/components/ui/date-input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import {
@@ -509,7 +510,7 @@ DELETE FROM payment_history WHERE status = 'rejected';`;
             </div>
             <div className="space-y-2">
               <Label>Data do pagamento *</Label>
-              <Input type="date" value={regDate} onChange={(e) => setRegDate(e.target.value)} required />
+              <DateInput value={regDate} onChange={setRegDate} required />
             </div>
             <div className="space-y-2">
               <Label>Método *</Label>

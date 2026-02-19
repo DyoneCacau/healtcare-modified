@@ -8,6 +8,7 @@ import {
 } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { DateInput } from '@/components/ui/date-input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import {
@@ -225,11 +226,10 @@ export const PatientFormDialog = ({
 
             <div>
               <Label htmlFor="birthDate">Data de Nascimento</Label>
-              <Input
+              <DateInput
                 id="birthDate"
-                type="date"
                 value={formData.birthDate}
-                onChange={(e) => setFormData({ ...formData, birthDate: e.target.value })}
+                onChange={(v) => setFormData({ ...formData, birthDate: v })}
               />
             </div>
 

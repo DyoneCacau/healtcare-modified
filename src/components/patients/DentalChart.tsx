@@ -1,4 +1,4 @@
-﻿import { useState } from 'react';
+import { useState } from 'react';
 import { format, parseISO } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { Plus, Check, Clock, Pencil, Trash2 } from 'lucide-react';
@@ -14,6 +14,7 @@ import {
   DialogFooter,
 } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
+import { DateInput } from '@/components/ui/date-input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import {
@@ -479,10 +480,9 @@ export function DentalChart({ chart, onUpdateChart, readOnly = false }: DentalCh
 
             <div className="space-y-2">
               <Label>Data</Label>
-              <Input
-                type="date"
+              <DateInput
                 value={newProcedure.date}
-                onChange={(e) => setNewProcedure({ ...newProcedure, date: e.target.value })}
+                onChange={(v) => setNewProcedure({ ...newProcedure, date: v })}
               />
             </div>
 

@@ -3,7 +3,7 @@ import * as React from "react";
 import { cn } from "@/lib/utils";
 
 const Input = React.forwardRef<HTMLInputElement, React.ComponentProps<"input">>(
-  ({ className, type, ...props }, ref) => {
+  ({ className, type, onWheel, ...props }, ref) => {
     return (
       <input
         type={type}
@@ -12,6 +12,14 @@ const Input = React.forwardRef<HTMLInputElement, React.ComponentProps<"input">>(
           className,
         )}
         ref={ref}
+        onWheel={(e) => {
+          // Evita que a roda do mouse altere valores em inputs number (comportamento bem chato).
+          // Ao perder o foco, o browser nao aplica o step via scroll.
+          if (type === "number" && document.activeElement === e.currentTarget) {
+            e.currentTarget.blur();
+          }
+          onWheel?.(e);
+        }}
         {...props}
       />
     );

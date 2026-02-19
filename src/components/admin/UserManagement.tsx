@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -63,12 +63,13 @@ interface SystemUser {
   name: string;
   email: string;
   phone: string;
-  role: 'admin' | 'receptionist' | 'seller' | 'professional';
+  role: string;
+  roleId: string;
   is_active: boolean;
   created_at: string;
 }
 
-const ROLE_LABELS = {
+const ROLE_LABELS: Record<string, string> = {
   admin: 'Administrador',
   receptionist: 'Recepcionista',
   seller: 'Vendedor',
@@ -91,8 +92,11 @@ export function UserManagement({ users, onRefresh, isSuperAdmin }: UserManagemen
     email: '',
     phone: '',
     password: '',
-    role: 'receptionist' as 'admin' | 'receptionist' | 'seller' | 'professional',
+    role: 'receptionist' as string,
   });
+  const [customRoles, setCustomRoles] = useState<{ id: string; name: string }[]>([]);
+  const [newRoleDialogOpen, setNewRoleDialogOpen] = useState(false);
+  const [newRoleName, setNewRoleName] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [userToDelete, setUserToDelete] = useState<SystemUser | null>(null);
@@ -102,6 +106,18 @@ export function UserManagement({ users, onRefresh, isSuperAdmin }: UserManagemen
   const [showTempPassword, setShowTempPassword] = useState(false);
   const [isSendingLink, setIsSendingLink] = useState(false);
   const [isSettingTemp, setIsSettingTemp] = useState(false);
+
+  useEffect(() => {
+    if (!clinicId) {
+      setCustomRoles([]);
+      return;
+    }
+    supabase
+      .from('clinic_custom_roles')
+      .select('id, name')
+      .eq('clinic_id', clinicId)
+      .then(({ data }) => setCustomRoles(data ?? []));
+  }, [clinicId]);
 
   const filteredUsers = users.filter(
     (u) =>
@@ -117,7 +133,7 @@ export function UserManagement({ users, onRefresh, isSuperAdmin }: UserManagemen
         email: user.email,
         phone: user.phone || '',
         password: '',
-        role: user.role,
+        role: user.roleId ?? user.role,
       });
     } else {
       setEditingUser(null);
@@ -132,6 +148,28 @@ export function UserManagement({ users, onRefresh, isSuperAdmin }: UserManagemen
     setDialogOpen(true);
   };
 
+  const isSystemRole = (v: string) => ['admin', 'receptionist', 'seller', 'professional'].includes(v);
+  const handleCreateNewRole = async () => {
+    if (!clinicId || !newRoleName.trim()) {
+      toast.error('Informe o nome da função');
+      return;
+    }
+    const { data, error } = await supabase
+      .from('clinic_custom_roles')
+      .insert({ clinic_id: clinicId, name: newRoleName.trim() })
+      .select('id, name')
+      .single();
+    if (error) {
+      toast.error(error.message);
+      return;
+    }
+    setCustomRoles((prev) => [...prev, { id: data.id, name: data.name }]);
+    setFormData((prev) => ({ ...prev, role: data.id }));
+    setNewRoleDialogOpen(false);
+    setNewRoleName('');
+    toast.success('Função criada. Defina as permissões em Administração > Permissões.');
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     const nameTrimmed = formData.name?.trim();
@@ -143,7 +181,6 @@ export function UserManagement({ users, onRefresh, isSuperAdmin }: UserManagemen
 
     try {
       if (editingUser) {
-        // Update existing user profile (nome obrigatório)
         const { error: profileError } = await supabase
           .from('profiles')
           .update({
@@ -151,9 +188,23 @@ export function UserManagement({ users, onRefresh, isSuperAdmin }: UserManagemen
             phone: formData.phone?.trim() || null,
           })
           .eq('user_id', editingUser.id);
-
         if (profileError) throw profileError;
 
+        if (clinicId) {
+          await supabase.from('user_clinic_custom_roles').delete().eq('user_id', editingUser.id).eq('clinic_id', clinicId);
+          if (isSystemRole(formData.role)) {
+            await supabase.from('user_roles').update({ role: formData.role }).eq('user_id', editingUser.id);
+          } else {
+            await supabase.from('user_roles').update({ role: 'receptionist' }).eq('user_id', editingUser.id);
+            await supabase.from('user_clinic_custom_roles').insert({
+              user_id: editingUser.id,
+              clinic_id: clinicId,
+              clinic_custom_role_id: formData.role,
+            });
+          }
+        } else if (isSystemRole(formData.role)) {
+          await supabase.from('user_roles').update({ role: formData.role }).eq('user_id', editingUser.id);
+        }
         toast.success('Usuário atualizado com sucesso!');
       } else {
         // Verificar se email já existe
@@ -194,12 +245,23 @@ export function UserManagement({ users, onRefresh, isSuperAdmin }: UserManagemen
             if (clinicError) throw clinicError;
           }
 
-          // 2) Depois adicionar a role (policy permite só para user_id já na mesma clínica)
-          const { error: roleError } = await supabase.from('user_roles').insert({
-            user_id: authData.user.id,
-            role: formData.role,
-          });
-          if (roleError) throw roleError;
+          // 2) Role: sistema ou função personalizada
+          const roleValue = formData.role;
+          if (isSystemRole(roleValue)) {
+            const { error: roleError } = await supabase.from('user_roles').insert({
+              user_id: authData.user.id,
+              role: roleValue,
+            });
+            if (roleError) throw roleError;
+          } else {
+            await supabase.from('user_roles').insert({ user_id: authData.user.id, role: 'receptionist' });
+            const { error: customErr } = await supabase.from('user_clinic_custom_roles').insert({
+              user_id: authData.user.id,
+              clinic_id: clinicId,
+              clinic_custom_role_id: roleValue,
+            });
+            if (customErr) throw customErr;
+          }
 
           // Garantir nome e telefone no perfil (nome obrigatório no cadastro)
           const { error: profileUpdateError } = await supabase
@@ -299,28 +361,17 @@ export function UserManagement({ users, onRefresh, isSuperAdmin }: UserManagemen
     if (!userToDelete) return;
 
     try {
-      // Deletar clinic_users
+      await supabase.from('user_clinic_custom_roles').delete().eq('user_id', userToDelete.id);
       const { error: clinicUserError } = await supabase
         .from('clinic_users')
         .delete()
         .eq('user_id', userToDelete.id);
-
       if (clinicUserError) throw clinicUserError;
 
-      // Deletar user_roles
-      const { error: roleError } = await supabase
-        .from('user_roles')
-        .delete()
-        .eq('user_id', userToDelete.id);
-
+      const { error: roleError } = await supabase.from('user_roles').delete().eq('user_id', userToDelete.id);
       if (roleError) throw roleError;
 
-      // Deletar profile
-      const { error: profileError } = await supabase
-        .from('profiles')
-        .delete()
-        .eq('user_id', userToDelete.id);
-
+      const { error: profileError } = await supabase.from('profiles').delete().eq('user_id', userToDelete.id);
       if (profileError) throw profileError;
 
       // Tentar deletar usuário do auth (pode falhar se não tiver permissão)
@@ -341,7 +392,7 @@ export function UserManagement({ users, onRefresh, isSuperAdmin }: UserManagemen
   };
 
   return (
-    <>
+    <div className="space-y-4">
       <Card>
         <CardHeader className="flex flex-row items-center justify-between">
           <CardTitle className="flex items-center gap-2">
@@ -394,7 +445,7 @@ export function UserManagement({ users, onRefresh, isSuperAdmin }: UserManagemen
                     )}
                   </TableCell>
                   <TableCell>
-                    <Badge variant="outline">{ROLE_LABELS[user.role]}</Badge>
+                    <Badge variant="outline">{user.role}</Badge>
                   </TableCell>
                   <TableCell className="text-center">
                     {user.is_active ? (
@@ -520,19 +571,26 @@ export function UserManagement({ users, onRefresh, isSuperAdmin }: UserManagemen
                 <Label htmlFor="role">Função *</Label>
                 <Select
                   value={formData.role}
-                  onValueChange={(v) =>
-                    setFormData({ ...formData, role: v as 'admin' | 'receptionist' | 'seller' | 'professional' })
-                  }
-                  disabled={!!editingUser}
+                  onValueChange={(v) => {
+                    if (v === '__new__') {
+                      setNewRoleDialogOpen(true);
+                      return;
+                    }
+                    setFormData({ ...formData, role: v });
+                  }}
                 >
                   <SelectTrigger>
-                    <SelectValue />
+                    <SelectValue placeholder="Selecione a função" />
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="admin">Administrador</SelectItem>
                     <SelectItem value="receptionist">Recepcionista</SelectItem>
                     <SelectItem value="seller">Vendedor</SelectItem>
                     <SelectItem value="professional">Profissional</SelectItem>
+                    {customRoles.map((r) => (
+                      <SelectItem key={r.id} value={r.id}>{r.name}</SelectItem>
+                    ))}
+                    {clinicId && <SelectItem value="__new__">Criar nova função</SelectItem>}
                   </SelectContent>
                 </Select>
               </div>
@@ -568,6 +626,30 @@ export function UserManagement({ users, onRefresh, isSuperAdmin }: UserManagemen
               </Button>
             </DialogFooter>
           </form>
+        </DialogContent>
+      </Dialog>
+
+      {/* Dialog Nova função (ao criar usuário) */}
+      <Dialog open={newRoleDialogOpen} onOpenChange={(open) => { setNewRoleDialogOpen(open); if (!open) setNewRoleName(''); }}>
+        <DialogContent className="sm:max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Nova função</DialogTitle>
+            <DialogDescription>Digite o nome da nova função. Depois defina o que ela pode fazer em Administração &gt; Permissões.</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-2">
+            <div className="space-y-2">
+              <Label>Nome da função</Label>
+              <Input
+                value={newRoleName}
+                onChange={(e) => setNewRoleName(e.target.value)}
+                placeholder="Ex: Gerente"
+              />
+            </div>
+            <div className="flex justify-end gap-2">
+              <Button variant="outline" onClick={() => { setNewRoleDialogOpen(false); setNewRoleName(''); }}>Cancelar</Button>
+              <Button onClick={handleCreateNewRole} disabled={!newRoleName.trim()}>Criar</Button>
+            </div>
+          </div>
         </DialogContent>
       </Dialog>
 
@@ -669,6 +751,6 @@ export function UserManagement({ users, onRefresh, isSuperAdmin }: UserManagemen
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
-    </>
+    </div>
   );
 }

@@ -1,5 +1,5 @@
 import { Label } from '@/components/ui/label';
-import { Input } from '@/components/ui/input';
+import { DateInput } from '@/components/ui/date-input';
 import {
   Select,
   SelectContent,
@@ -48,12 +48,7 @@ export function CommissionReportFilters({
         <Label className="text-xs">Data Inicial</Label>
         <div className="relative">
           <Calendar className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-          <Input
-            type="date"
-            value={startDate}
-            onChange={(e) => onStartDateChange(e.target.value)}
-            className="pl-9 w-[150px]"
-          />
+          <DateInput value={startDate} onChange={onStartDateChange} className="pl-9 w-[150px]" />
         </div>
       </div>
 
@@ -61,12 +56,7 @@ export function CommissionReportFilters({
         <Label className="text-xs">Data Final</Label>
         <div className="relative">
           <Calendar className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-          <Input
-            type="date"
-            value={endDate}
-            onChange={(e) => onEndDateChange(e.target.value)}
-            className="pl-9 w-[150px]"
-          />
+          <DateInput value={endDate} onChange={onEndDateChange} className="pl-9 w-[150px]" />
         </div>
       </div>
 

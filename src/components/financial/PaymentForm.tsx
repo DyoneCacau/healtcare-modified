@@ -26,7 +26,7 @@ import { toast } from 'sonner';
 interface PaymentFormProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  onSave: (transaction: Omit<Transaction, 'id'>, options?: { reason?: string }) => void;
+  onSave: (transaction: Omit<Transaction, 'id'>, options?: { reason?: string }) => Promise<void>;
   type: 'income' | 'expense';
   mode?: 'create' | 'edit';
   initialData?: Transaction | null;
@@ -125,7 +125,7 @@ export function PaymentForm({
     }
   }, [open, mode, initialData]);
 
-  const handleSave = () => {
+  const handleSave = async () => {
     if (!description || !amount || !category) {
       toast.error('Preencha todos os campos obrigatórios');
       return;
@@ -179,16 +179,15 @@ export function PaymentForm({
         : undefined,
     };
 
-    onSave(transaction, { reason: editReason || undefined });
-    resetForm();
-    onOpenChange(false);
-    toast.success(
-      mode === 'edit'
-        ? 'Transação atualizada!'
-        : type === 'income'
-          ? 'Recebimento registrado!'
-          : 'Despesa registrada!'
-    );
+    try {
+      await onSave(transaction, { reason: editReason || undefined });
+      resetForm();
+      onOpenChange(false);
+      // Toast de sucesso deve vir da mutation (evita "sucesso + erro" quando falha no backend).
+    } catch (err) {
+      // Mantem o dialog aberto para o usuario corrigir e tentar novamente.
+      console.error('Error saving transaction:', err);
+    }
   };
 
   const handleAmountChange = (value: string) => {
