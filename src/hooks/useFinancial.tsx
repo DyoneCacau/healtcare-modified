@@ -489,6 +489,135 @@ function toDateOnly(value: string | Date | null | undefined): string {
   return s.length >= 10 ? s.slice(0, 10) : s;
 }
 
+const CASH_REGISTER_STATUS_QUERY_KEY = 'cash-register-status';
+const CAIXA_STORAGE_PREFIX = 'healthcare-caixa';
+
+function getCaixaStorageKey(clinicId: string, date: string) {
+  return `${CAIXA_STORAGE_PREFIX}-${clinicId}-${date}`;
+}
+
+/** Status do caixa (aberto/fechado) - Supabase quando tabela existe, senão localStorage. */
+export function useCashRegisterStatus() {
+  const { clinicId } = useClinic();
+  const { user } = useAuth();
+  const queryClient = useQueryClient();
+  const today = new Date().toISOString().split('T')[0];
+
+  const { data: status, isLoading, isError } = useQuery({
+    queryKey: [CASH_REGISTER_STATUS_QUERY_KEY, clinicId, today],
+    queryFn: async () => {
+      if (!clinicId) return { isOpen: false, openedAt: null, openedBy: null };
+      try {
+        const { data, error } = await supabase
+          .from('cash_register_status')
+          .select('is_open, opened_at, opened_by')
+          .eq('clinic_id', clinicId)
+          .eq('status_date', today)
+          .maybeSingle();
+        if (error) throw error;
+        let isOpen = data?.is_open ?? false;
+        let openedAt = data?.opened_at ?? null;
+        if (!isOpen && user?.id) {
+          const key = getCaixaStorageKey(clinicId, today);
+          const saved = typeof window !== 'undefined' ? localStorage.getItem(key) : null;
+          if (saved === 'open') {
+            const now = new Date().toISOString();
+            await supabase.from('cash_register_status').upsert(
+              {
+                clinic_id: clinicId,
+                status_date: today,
+                is_open: true,
+                opened_by: user.id,
+                opened_at: now,
+                closed_at: null,
+              },
+              { onConflict: ['clinic_id', 'status_date'] }
+            );
+            if (typeof window !== 'undefined') localStorage.removeItem(key);
+            isOpen = true;
+            openedAt = now;
+          }
+        }
+        return { isOpen, openedAt, openedBy: data?.opened_by ?? null };
+      } catch {
+        const key = getCaixaStorageKey(clinicId, today);
+        const saved = typeof window !== 'undefined' ? localStorage.getItem(key) : null;
+        return {
+          isOpen: saved === 'open',
+          openedAt: saved === 'open' ? new Date().toISOString() : null,
+          openedBy: null,
+        };
+      }
+    },
+    enabled: !!clinicId,
+    retry: false,
+  });
+
+  const setOpen = useMutation({
+    mutationFn: async () => {
+      if (!clinicId || !user?.id) throw new Error('Clínica ou usuário não encontrado');
+      const now = new Date().toISOString();
+      try {
+        const { error } = await supabase.from('cash_register_status').upsert(
+          {
+            clinic_id: clinicId,
+            status_date: today,
+            is_open: true,
+            opened_by: user.id,
+            opened_at: now,
+            closed_at: null,
+          },
+          { onConflict: ['clinic_id', 'status_date'] }
+        );
+        if (error) throw error;
+      } catch {
+        if (typeof window !== 'undefined') {
+          localStorage.setItem(getCaixaStorageKey(clinicId, today), 'open');
+        }
+      }
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: [CASH_REGISTER_STATUS_QUERY_KEY, clinicId, today] });
+    },
+  });
+
+  const setClosed = useMutation({
+    mutationFn: async () => {
+      if (!clinicId) throw new Error('Clínica não encontrada');
+      const now = new Date().toISOString();
+      try {
+        const { error } = await supabase.from('cash_register_status').upsert(
+          {
+            clinic_id: clinicId,
+            status_date: today,
+            is_open: false,
+            opened_by: null,
+            opened_at: null,
+            closed_at: now,
+          },
+          { onConflict: ['clinic_id', 'status_date'] }
+        );
+        if (error) throw error;
+      } catch {
+        if (typeof window !== 'undefined') {
+          localStorage.setItem(getCaixaStorageKey(clinicId, today), 'closed');
+        }
+      }
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: [CASH_REGISTER_STATUS_QUERY_KEY, clinicId, today] });
+    },
+  });
+
+  return {
+    isOpen: status?.isOpen ?? false,
+    openedAt: status?.openedAt ?? null,
+    isLoading,
+    setOpen,
+    setClosed,
+  };
+}
+
 /** Registra fechamento de caixa no dia (e marca dias passados com movimentação como fechados para remover a notificação). */
 export function useRegisterCashClosing() {
   const queryClient = useQueryClient();

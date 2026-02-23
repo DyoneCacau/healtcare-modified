@@ -74,7 +74,7 @@ export function Sidebar() {
     if (clinics.length === 0) return;
     const firstId = clinics[0].id;
     const selectionValid = selectedClinicId && clinics.some((c) => c.id === selectedClinicId);
-    if (!selectionValid || clinics.length === 1) {
+    if (!selectionValid) {
       setSelectedClinicId(firstId);
     }
   }, [clinics, selectedClinicId, setSelectedClinicId]);

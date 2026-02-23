@@ -1,4 +1,4 @@
-import { useMemo, useState, useEffect } from 'react';
+import { useMemo, useState } from 'react';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import {
@@ -22,7 +22,7 @@ import { TransactionsList } from '@/components/financial/TransactionsList';
 import { CashClosingDialog } from '@/components/financial/CashClosingDialog';
 import { SangriaDialog, CATEGORY_SANGRIA } from '@/components/financial/SangriaDialog';
 import { CashRegister, CashSummary, Transaction } from '@/types/financial';
-import { useTodayTransactions, useFinancialSummary, useTransactionMutations, useRegisterCashClosing } from '@/hooks/useFinancial';
+import { useTodayTransactions, useFinancialSummary, useTransactionMutations, useRegisterCashClosing, useCashRegisterStatus } from '@/hooks/useFinancial';
 import { useAuth } from '@/hooks/useAuth';
 import { useClinic } from '@/hooks/useClinic';
 import { toast } from 'sonner';
@@ -38,17 +38,8 @@ import {
 } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 
-const CAIXA_STORAGE_KEY = 'healthcare-caixa';
-
-function getCaixaStorageKey(clinicId: string): string {
-  const today = new Date().toISOString().split('T')[0];
-  return `${CAIXA_STORAGE_KEY}-${clinicId}-${today}`;
-}
-
 export default function Financial() {
-  const [isCashOpen, setIsCashOpen] = useState(false);
   const [initialBalance, setInitialBalance] = useState(0);
-  const [openedAt, setOpenedAt] = useState(new Date().toISOString());
   const [incomeDialogOpen, setIncomeDialogOpen] = useState(false);
   const [expenseDialogOpen, setExpenseDialogOpen] = useState(false);
   const [closingDialogOpen, setClosingDialogOpen] = useState(false);
@@ -64,21 +55,7 @@ export default function Financial() {
   const { summary, isLoading: isSummaryLoading } = useFinancialSummary();
   const { createTransaction, updateTransaction, deleteTransaction } = useTransactionMutations();
   const registerCashClosing = useRegisterCashClosing();
-
-  useEffect(() => {
-    if (!clinicId) return;
-    const key = getCaixaStorageKey(clinicId);
-    try {
-      const saved = localStorage.getItem(key);
-      if (saved === 'open') {
-        setIsCashOpen(true);
-      } else {
-        setIsCashOpen(false);
-      }
-    } catch (_) {
-      setIsCashOpen(false);
-    }
-  }, [clinicId]);
+  const { isOpen: isCashOpen, openedAt: statusOpenedAt, setOpen, setClosed } = useCashRegisterStatus();
 
   const rawById = useMemo(() => {
     return new Map<string, any>(rawTransactions.map((t: any) => [t.id, t]));
@@ -103,6 +80,8 @@ export default function Financial() {
       paymentSplit: t.payment_split || undefined,
     }));
   }, [rawTransactions]);
+
+  const openedAt = statusOpenedAt ?? new Date().toISOString();
 
   const cashRegister: CashRegister = useMemo(
     () => ({
@@ -212,14 +191,10 @@ export default function Financial() {
   };
 
   const handleOpenCash = () => {
-    if (clinicId) {
-      try {
-        localStorage.setItem(getCaixaStorageKey(clinicId), 'open');
-      } catch (_) {}
-    }
-    setOpenedAt(new Date().toISOString());
-    setIsCashOpen(true);
-    toast.success('Caixa aberto com sucesso!');
+    setOpen.mutate(undefined, {
+      onSuccess: () => toast.success('Caixa aberto com sucesso!'),
+      onError: () => toast.error('Erro ao abrir caixa'),
+    });
   };
 
   const cashOnHand = initialBalance + cashSummary.totalCash;
@@ -246,14 +221,16 @@ export default function Financial() {
       console.error(e);
       toast.error('Erro ao registrar fechamento. Caixa foi fechado localmente.');
     }
-    if (clinicId) {
-      try {
-        localStorage.setItem(getCaixaStorageKey(clinicId), 'closed');
-      } catch (_) {}
-    }
-    setIsCashOpen(false);
-    setClosingDialogOpen(false);
-    toast.success('Caixa fechado com sucesso! A notificação de dias em aberto foi atualizada.');
+    setClosed.mutate(undefined, {
+      onSuccess: () => {
+        setClosingDialogOpen(false);
+        toast.success('Caixa fechado com sucesso! A notificação de dias em aberto foi atualizada.');
+      },
+      onError: () => {
+        setClosingDialogOpen(false);
+        toast.success('Caixa fechado localmente.');
+      },
+    });
   };
 
 
