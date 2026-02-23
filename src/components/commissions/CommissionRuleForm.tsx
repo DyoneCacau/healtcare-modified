@@ -43,6 +43,7 @@ import {
 } from '@/types/commission';
 import { useProfessionals } from '@/hooks/useProfessionals';
 import { useClinics } from '@/hooks/useClinic';
+import { PROCEDURE_OPTIONS } from '@/lib/procedures';
 
 const formSchema = z.object({
   clinicId: z.string().min(1, 'Selecione uma clínica'),
@@ -59,20 +60,6 @@ const formSchema = z.object({
 });
 
 type FormValues = z.infer<typeof formSchema>;
-
-// Common dental procedures
-const PROCEDURES = [
-  'Consulta',
-  'Limpeza',
-  'Clareamento',
-  'Restauração',
-  'Extração',
-  'Canal',
-  'Implante',
-  'Prótese',
-  'Ortodontia',
-  'Periodontia',
-];
 
 interface CommissionRuleFormProps {
   open: boolean;
@@ -315,7 +302,7 @@ export function CommissionRuleForm({
                     </FormControl>
                     <SelectContent>
                       <SelectItem value="all">Todos os Procedimentos</SelectItem>
-                      {PROCEDURES.map((proc) => (
+                      {PROCEDURE_OPTIONS.map((proc) => (
                         <SelectItem key={proc} value={proc}>
                           {proc}
                         </SelectItem>

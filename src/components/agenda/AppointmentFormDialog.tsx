@@ -31,6 +31,7 @@ import { cn } from '@/lib/utils';
 import { AgendaAppointment, Professional, LeadSource, leadSourceLabels } from '@/types/agenda';
 import { Clinic } from '@/types/clinic';
 import { usePatients } from '@/hooks/usePatients';
+import { PROCEDURE_OPTIONS, isKnownProcedure } from '@/lib/procedures';
 import { toast } from 'sonner';
 
 interface AppointmentFormDialogProps {
@@ -320,12 +321,24 @@ export function AppointmentFormDialog({
 
           <div className="grid gap-2">
             <Label htmlFor="procedure">Procedimento *</Label>
-            <Input
-              id="procedure"
-              value={procedure}
-              onChange={(e) => setProcedure(e.target.value)}
-              placeholder="Ex: Consulta geral, Limpeza dental..."
-            />
+            <Select value={procedure || ''} onValueChange={setProcedure}>
+              <SelectTrigger id="procedure">
+                <SelectValue placeholder="Selecione o procedimento" />
+              </SelectTrigger>
+              <SelectContent>
+                {PROCEDURE_OPTIONS.map((p) => (
+                  <SelectItem key={p} value={p}>
+                    {p}
+                  </SelectItem>
+                ))}
+                {procedure && !isKnownProcedure(procedure) && (
+                  <SelectItem value={procedure}>{procedure} (atual)</SelectItem>
+                )}
+              </SelectContent>
+            </Select>
+            <p className="text-xs text-muted-foreground">
+              Use a mesma lista das regras de comissão para o cálculo bater ao finalizar.
+            </p>
           </div>
 
           <div className="grid grid-cols-2 gap-4">
@@ -363,6 +376,9 @@ export function AppointmentFormDialog({
                   <SelectItem value="partial">Parcial</SelectItem>
                 </SelectContent>
               </Select>
+              <p className="text-xs text-muted-foreground">
+                &quot;Pago&quot; só marca o status. Para gerar comissões e lançamentos, use &quot;Finalizar Atendimento&quot; no evento.
+              </p>
             </div>
           </div>
 

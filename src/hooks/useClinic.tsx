@@ -104,12 +104,11 @@ export function useClinics() {
 
       if (!user?.id) return [];
 
-      // Apenas clínicas onde o usuário é DONO (evita mostrar 2 clínicas; "Minhas Clínicas" = só as que ele administra como dono)
+      // Todas as clínicas em que o usuário está cadastrado (inclui recepcionista, não só dono)
       const { data: cuData, error } = await supabase
         .from('clinic_users')
         .select('clinic_id, is_owner, clinics(*)')
-        .eq('user_id', user.id)
-        .eq('is_owner', true);
+        .eq('user_id', user.id);
 
       if (error) throw error;
 

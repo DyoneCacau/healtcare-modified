@@ -22,7 +22,7 @@ import { CommissionRuleForm } from '@/components/commissions/CommissionRuleForm'
 import { CommissionReport } from '@/components/commissions/CommissionReport';
 import { CommissionRule } from '@/types/commission';
 import { useClinic, useClinics } from '@/hooks/useClinic';
-import { useCommissions, generateCommissionSummary } from '@/hooks/useCommissions';
+import { useCommissions, useCommissionRules, generateCommissionSummary } from '@/hooks/useCommissions';
 import { toast } from 'sonner';
 import { FeatureButton } from '@/components/subscription/FeatureButton';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -31,8 +31,7 @@ export default function Commissions() {
   const { clinicId } = useClinic();
   const { clinics } = useClinics();
   const { commissions, isLoading } = useCommissions();
-  
-  const [rules, setRules] = useState<CommissionRule[]>([]);
+  const { rules, isLoading: isLoadingRules, addRule, updateRule, removeRule, toggleActive } = useCommissionRules();
   const [selectedClinic, setSelectedClinic] = useState<string>('all');
   const [formOpen, setFormOpen] = useState(false);
   const [editingRule, setEditingRule] = useState<CommissionRule | null>(null);
@@ -42,6 +41,11 @@ export default function Commissions() {
     if (selectedClinic === 'all') return rules;
     return rules.filter((r) => r.clinicId === selectedClinic);
   }, [rules, selectedClinic]);
+
+  const closeForm = () => {
+    setFormOpen(false);
+    setEditingRule(null);
+  };
 
   // Convert commissions from database to CommissionCalculation format
   const commissionCalculations = useMemo(() => {
@@ -70,31 +74,13 @@ export default function Commissions() {
 
   const handleSaveRule = (ruleData: Omit<CommissionRule, 'id' | 'createdAt' | 'updatedAt'>) => {
     if (editingRule) {
-      // Update existing rule
-      setRules((prev) =>
-        prev.map((r) =>
-          r.id === editingRule.id
-            ? {
-                ...r,
-                ...ruleData,
-                updatedAt: new Date().toISOString(),
-              }
-            : r
-        )
+      updateRule.mutate(
+        { id: editingRule.id, ...ruleData },
+        { onSettled: () => closeForm() }
       );
-      toast.success('Regra atualizada com sucesso!');
     } else {
-      // Create new rule
-      const newRule: CommissionRule = {
-        ...ruleData,
-        id: `cr${Date.now()}`,
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString(),
-      };
-      setRules((prev) => [...prev, newRule]);
-      toast.success('Regra criada com sucesso!');
+      addRule.mutate(ruleData, { onSettled: () => closeForm() });
     }
-    setEditingRule(null);
   };
 
   const handleEditRule = (rule: CommissionRule) => {
@@ -103,19 +89,12 @@ export default function Commissions() {
   };
 
   const handleDeleteRule = (ruleId: string) => {
-    setRules((prev) => prev.filter((r) => r.id !== ruleId));
-    toast.success('Regra excluída com sucesso!');
+    removeRule.mutate(ruleId);
   };
 
   const handleToggleActive = (ruleId: string) => {
-    setRules((prev) =>
-      prev.map((r) =>
-        r.id === ruleId
-          ? { ...r, isActive: !r.isActive, updatedAt: new Date().toISOString() }
-          : r
-      )
-    );
-    toast.success('Status da regra atualizado!');
+    const rule = rules.find((r) => r.id === ruleId);
+    if (rule) toggleActive.mutate({ ruleId, isActive: !rule.isActive });
   };
 
   const handleOpenNewRule = () => {
@@ -138,7 +117,7 @@ export default function Commissions() {
     };
   }, [filteredRules]);
 
-  if (isLoading) {
+  if (isLoading || isLoadingRules) {
     return (
       <MainLayout>
         <div className="space-y-6">

@@ -268,6 +268,71 @@ export type Database = {
           },
         ]
       }
+      commission_rules: {
+        Row: {
+          id: string
+          clinic_id: string
+          professional_id: string
+          beneficiary_type: string
+          beneficiary_id: string | null
+          beneficiary_name: string | null
+          procedure: string
+          day_of_week: string
+          calculation_type: string
+          calculation_unit: string
+          value: number
+          is_active: boolean
+          priority: number
+          notes: string | null
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          clinic_id: string
+          professional_id: string
+          beneficiary_type: string
+          beneficiary_id?: string | null
+          beneficiary_name?: string | null
+          procedure: string
+          day_of_week: string
+          calculation_type: string
+          calculation_unit: string
+          value: number
+          is_active?: boolean
+          priority?: number
+          notes?: string | null
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          clinic_id?: string
+          professional_id?: string
+          beneficiary_type?: string
+          beneficiary_id?: string | null
+          beneficiary_name?: string | null
+          procedure?: string
+          day_of_week?: string
+          calculation_type?: string
+          calculation_unit?: string
+          value?: number
+          is_active?: boolean
+          priority?: number
+          notes?: string | null
+          created_at?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "commission_rules_clinic_id_fkey"
+            columns: ["clinic_id"]
+            isOneToOne: false
+            referencedRelation: "clinics"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       dental_charts: {
         Row: {
           clinic_id: string

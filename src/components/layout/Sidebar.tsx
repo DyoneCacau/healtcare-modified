@@ -28,7 +28,8 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { useAuth } from "@/hooks/useAuth";
-import { useSubscription, ROUTE_FEATURE_MAP } from "@/hooks/useSubscription";
+import { useSubscription } from "@/hooks/useSubscription";
+import { usePermissions } from "@/hooks/usePermissions";
 import { useClinics } from "@/hooks/useClinic";
 import { useSelectedClinicId } from "@/hooks/useSelectedClinicId";
 import { useCurrentClinic } from "@/hooks/useCurrentClinic";
@@ -62,6 +63,7 @@ export function Sidebar() {
   const navigate = useNavigate();
   const { isSuperAdmin, isAdmin, profile, signOut } = useAuth();
   const { hasFeature } = useSubscription();
+  const { can: canPermission, permissions: permissionMatrix } = usePermissions();
   const { clinics, isLoading: isLoadingClinics } = useClinics();
   const { selectedClinicId, setSelectedClinicId } = useSelectedClinicId();
   const { currentClinic, isLoading: isLoadingCurrentClinic } = useCurrentClinic();
@@ -176,15 +178,19 @@ export function Sidebar() {
           )}
 
           {menuItems.map((item) => {
+            // Se existe matriz de permissões (aba Permissões configurada), esconder itens sem can_view
+            const usePermissionMatrix = typeof permissionMatrix === 'object' && permissionMatrix !== null;
+            if (usePermissionMatrix && item.feature && !canPermission(item.feature, 'can_view')) {
+              return null;
+            }
+
             const isActive = location.pathname === item.path;
             const Icon = item.icon;
-            const isLocked = item.feature && !hasFeature(item.feature);
-            
-            // Verificação especial para a página de Administração - apenas admins podem acessar
+            // Bloqueio por plano só quando não há matriz de permissões (comportamento antigo)
+            const isLocked = !usePermissionMatrix && item.feature && !hasFeature(item.feature);
             const isAdminPage = item.path === '/administracao';
             const isAdminLocked = isAdminPage && !isAdmin && !isSuperAdmin;
 
-            // Se está bloqueado e não é superadmin, mostra como desabilitado
             if ((isLocked && !isSuperAdmin) || isAdminLocked) {
               const lockedContent = (
                 <div

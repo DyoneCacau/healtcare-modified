@@ -15,6 +15,7 @@ import { PaymentMethod } from '@/types/financial';
 import { useAppointments, useAppointmentMutations } from '@/hooks/useAppointments';
 import { useProfessionals } from '@/hooks/useProfessionals';
 import { useClinic } from '@/hooks/useClinic';
+import { useCommissionRules } from '@/hooks/useCommissions';
 import { useTransactionMutations } from '@/hooks/useFinancial';
 import { toast } from 'sonner';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -35,6 +36,7 @@ export default function Agenda() {
   const { activeProfessionals, isLoading: isLoadingProfessionals } = useProfessionals();
   const { createAppointment, updateAppointment } = useAppointmentMutations();
   const { createTransaction } = useTransactionMutations();
+  const { rules: commissionRules } = useCommissionRules();
 
   // Transform DB appointments to UI format
   const appointments: AgendaAppointment[] = useMemo(() => {
@@ -323,6 +325,7 @@ export default function Agenda() {
         onOpenChange={setCompleteDialogOpen}
         appointment={completingAppointment}
         onComplete={handleCompleteConfirm}
+        commissionRules={commissionRules}
       />
     </MainLayout>
   );
