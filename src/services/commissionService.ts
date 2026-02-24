@@ -105,6 +105,10 @@ export function hasExistingCommission(
   );
 }
 
+function normalizeProcedure(p: string): string {
+  return (p || '').trim().toLowerCase();
+}
+
 /**
  * Finds all applicable commission rules for an appointment (professional + staff)
  */
@@ -120,6 +124,8 @@ export function findApplicableRules(
     date.getDay()
   ] as CommissionRule['dayOfWeek'];
 
+  const procNorm = normalizeProcedure(procedure);
+
   // Filter applicable rules and sort by priority (higher first)
   const applicableRules = rules
     .filter((rule) => {
@@ -131,8 +137,11 @@ export function findApplicableRules(
         if (rule.professionalId !== 'all' && rule.professionalId !== professionalId) return false;
       }
 
-      // Check procedure match
-      if (rule.procedure !== 'all' && rule.procedure !== procedure) return false;
+      // Check procedure match (normalizado: trim + case-insensitive)
+      if (rule.procedure !== 'all') {
+        const ruleProcNorm = normalizeProcedure(rule.procedure);
+        if (ruleProcNorm !== procNorm) return false;
+      }
 
       // Check day of week match
       if (rule.dayOfWeek !== 'all' && rule.dayOfWeek !== dayOfWeek) return false;

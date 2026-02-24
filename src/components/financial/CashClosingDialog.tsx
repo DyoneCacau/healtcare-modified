@@ -97,8 +97,20 @@ export function CashClosingDialog({
     }, 250);
   };
 
-  const incomeTransactions = cashRegister.transactions.filter((t) => t.type === 'income');
-  const expenseTransactions = cashRegister.transactions.filter((t) => t.type === 'expense');
+  const CATEGORY_ESTORNO = 'Estorno';
+  const incomeTransactions = cashRegister.transactions.filter(
+    (t) => t.type === 'income' && !t.refundedAt
+  );
+  const refundTransactions = cashRegister.transactions.filter(
+    (t) =>
+      (t.type === 'income' && t.refundedAt) ||
+      (t.type === 'expense' && (t.category || '').trim().toLowerCase() === CATEGORY_ESTORNO.toLowerCase())
+  );
+  const expenseTransactions = cashRegister.transactions.filter(
+    (t) =>
+      t.type === 'expense' &&
+      (t.category || '').trim().toLowerCase() !== CATEGORY_ESTORNO.toLowerCase()
+  );
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -236,6 +248,39 @@ export function CashClosingDialog({
                       <td className="py-2">{t.description}</td>
                       <td className="py-2">{t.category}</td>
                       <td className="py-2 text-right text-red-600 font-medium">
+                        R$ {t.amount.toFixed(2)}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
+          </div>
+
+          {/* Refund Transactions */}
+          <div className="section mb-4">
+            <h3 className="section-title font-semibold text-amber-600 border-b pb-2 mb-3">
+              Estorno (R$ {(summary.totalRefund ?? 0).toFixed(2)})
+            </h3>
+            {refundTransactions.length === 0 ? (
+              <p className="text-muted-foreground text-sm">Nenhum estorno registrado</p>
+            ) : (
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b">
+                    <th className="text-left py-2">Hora</th>
+                    <th className="text-left py-2">Descrição</th>
+                    <th className="text-left py-2">Paciente</th>
+                    <th className="text-right py-2">Valor</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {refundTransactions.map((t) => (
+                    <tr key={t.id} className="border-b border-dashed">
+                      <td className="py-2">{t.time}</td>
+                      <td className="py-2">{t.description}</td>
+                      <td className="py-2">{t.patientName || '-'}</td>
+                      <td className="py-2 text-right text-amber-600 font-medium">
                         R$ {t.amount.toFixed(2)}
                       </td>
                     </tr>

@@ -333,6 +333,68 @@ export type Database = {
           },
         ]
       }
+      cash_register_status: {
+        Row: {
+          id: string
+          clinic_id: string
+          status_date: string
+          is_open: boolean
+          opened_by: string | null
+          opened_at: string | null
+          closed_at: string | null
+        }
+        Insert: {
+          id?: string
+          clinic_id: string
+          status_date: string
+          is_open?: boolean
+          opened_by?: string | null
+          opened_at?: string | null
+          closed_at?: string | null
+        }
+        Update: {
+          id?: string
+          clinic_id?: string
+          status_date?: string
+          is_open?: boolean
+          opened_by?: string | null
+          opened_at?: string | null
+          closed_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "cash_register_status_clinic_id_fkey"
+            columns: ["clinic_id"]
+            isOneToOne: false
+            referencedRelation: "clinics"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      user_preferences: {
+        Row: {
+          id: string
+          user_id: string
+          preference_key: string
+          preference_value: string | null
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          user_id: string
+          preference_key: string
+          preference_value?: string | null
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          user_id?: string
+          preference_key?: string
+          preference_value?: string | null
+          updated_at?: string
+        }
+        Relationships: []
+      }
       dental_charts: {
         Row: {
           clinic_id: string

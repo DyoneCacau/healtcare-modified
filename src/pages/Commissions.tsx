@@ -23,6 +23,7 @@ import { CommissionReport } from '@/components/commissions/CommissionReport';
 import { CommissionRule } from '@/types/commission';
 import { useClinic, useClinics } from '@/hooks/useClinic';
 import { useCommissions, useCommissionRules, generateCommissionSummary } from '@/hooks/useCommissions';
+import { useProfessionals } from '@/hooks/useProfessionals';
 import { toast } from 'sonner';
 import { FeatureButton } from '@/components/subscription/FeatureButton';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -31,6 +32,7 @@ export default function Commissions() {
   const { clinicId } = useClinic();
   const { clinics } = useClinics();
   const { commissions, isLoading } = useCommissions();
+  const { professionals } = useProfessionals();
   const { rules, isLoading: isLoadingRules, addRule, updateRule, removeRule, toggleActive } = useCommissionRules();
   const [selectedClinic, setSelectedClinic] = useState<string>('all');
   const [formOpen, setFormOpen] = useState(false);
@@ -47,30 +49,40 @@ export default function Commissions() {
     setEditingRule(null);
   };
 
+  // Mapa profissional id -> nome (para exibir no relatório)
+  const professionalsByName = useMemo(() => {
+    const map = new Map<string, string>();
+    professionals.forEach((p: { id: string; name: string }) => map.set(p.id, p.name));
+    return map;
+  }, [professionals]);
+
   // Convert commissions from database to CommissionCalculation format
   const commissionCalculations = useMemo(() => {
-    return commissions.map(c => ({
-      id: c.id,
-      appointmentId: c.appointment_id || '',
-      professionalId: c.beneficiary_id,
-      professionalName: '',
-      beneficiaryType: c.beneficiary_type as 'professional' | 'seller' | 'reception',
-      beneficiaryId: c.beneficiary_id,
-      beneficiaryName: '',
-      clinicId: c.clinic_id,
-      clinicName: '',
-      procedure: '',
-      serviceValue: c.base_value || 0,
-      quantity: 1,
-      commissionRuleId: '',
-      calculationType: c.percentage ? 'percentage' as const : 'fixed' as const,
-      calculationUnit: 'appointment' as const,
-      ruleValue: c.percentage || c.amount,
-      commissionAmount: c.amount,
-      date: c.created_at.split('T')[0],
-      status: c.status as 'pending' | 'paid',
-    }));
-  }, [commissions]);
+    return commissions.map((c: { id: string; beneficiary_id: string; beneficiary_type: string; beneficiary_name?: string; appointment_id?: string; clinic_id: string; base_value?: number; percentage?: number; amount: number; created_at: string; status: string }) => {
+      const beneficiaryName = c.beneficiary_name || professionalsByName.get(c.beneficiary_id) || 'Profissional';
+      return {
+        id: c.id,
+        appointmentId: c.appointment_id || '',
+        professionalId: c.beneficiary_id,
+        professionalName: beneficiaryName,
+        beneficiaryType: c.beneficiary_type as 'professional' | 'seller' | 'reception',
+        beneficiaryId: c.beneficiary_id,
+        beneficiaryName,
+        clinicId: c.clinic_id,
+        clinicName: '',
+        procedure: '',
+        serviceValue: c.base_value || 0,
+        quantity: 1,
+        commissionRuleId: '',
+        calculationType: c.percentage ? 'percentage' as const : 'fixed' as const,
+        calculationUnit: 'appointment' as const,
+        ruleValue: c.percentage || c.amount,
+        commissionAmount: c.amount,
+        date: c.created_at.split('T')[0],
+        status: c.status as 'pending' | 'paid',
+      };
+    });
+  }, [commissions, professionalsByName]);
 
   const handleSaveRule = (ruleData: Omit<CommissionRule, 'id' | 'createdAt' | 'updatedAt'>) => {
     if (editingRule) {
@@ -279,7 +291,10 @@ export default function Commissions() {
           </TabsContent>
 
           <TabsContent value="report" className="mt-6">
-            <CommissionReport calculations={commissionCalculations} />
+            <CommissionReport
+              calculations={commissionCalculations}
+              professionals={professionals.map((p: { id: string; name: string }) => ({ id: p.id, name: p.name }))}
+            />
           </TabsContent>
         </Tabs>
       </div>

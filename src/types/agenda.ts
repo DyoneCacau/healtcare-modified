@@ -28,7 +28,7 @@ export interface AgendaAppointment {
   professional: Professional;
   procedure: string;
   status: 'confirmed' | 'pending' | 'return' | 'completed' | 'cancelled';
-  paymentStatus: 'paid' | 'pending' | 'partial';
+  paymentStatus: 'paid' | 'pending' | 'partial' | 'refunded';
   notes?: string;
   clinic: Clinic;
   // New fields for seller tracking

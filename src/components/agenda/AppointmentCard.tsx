@@ -58,10 +58,11 @@ const statusConfig = {
   },
 };
 
-const paymentConfig = {
+const paymentConfig: Record<string, { label: string; class: string }> = {
   paid: { label: 'Pago', class: 'bg-emerald-100 text-emerald-700' },
   pending: { label: 'A pagar', class: 'bg-amber-100 text-amber-700' },
   partial: { label: 'Parcial', class: 'bg-blue-100 text-blue-700' },
+  refunded: { label: 'Estornado', class: 'bg-red-100 text-red-700' },
 };
 
 export function AppointmentCard({
@@ -74,7 +75,7 @@ export function AppointmentCard({
   compact = false,
 }: AppointmentCardProps) {
   const status = statusConfig[appointment.status];
-  const payment = paymentConfig[appointment.paymentStatus];
+  const payment = paymentConfig[appointment.paymentStatus] || paymentConfig.pending;
 
   if (compact) {
     return (

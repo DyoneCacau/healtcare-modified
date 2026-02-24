@@ -1,4 +1,4 @@
-import { useMemo, useState, useEffect } from 'react';
+import { useMemo, useState } from 'react';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import {
@@ -13,6 +13,7 @@ import {
   Banknote,
   CreditCard,
   Smartphone,
+  Undo2,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -22,8 +23,11 @@ import { TransactionsList } from '@/components/financial/TransactionsList';
 import { CashClosingDialog } from '@/components/financial/CashClosingDialog';
 import { SangriaDialog, CATEGORY_SANGRIA } from '@/components/financial/SangriaDialog';
 import { CashRegister, CashSummary, Transaction } from '@/types/financial';
-import { useTodayTransactions, useFinancialSummary, useTransactionMutations, useRegisterCashClosing } from '@/hooks/useFinancial';
+import { useTodayTransactions, useFinancialSummary, useTransactionMutations, useRegisterCashClosing, useCashRegisterStatus } from '@/hooks/useFinancial';
+import { useAppointmentMutations } from '@/hooks/useAppointments';
 import { useAuth } from '@/hooks/useAuth';
+import { supabase } from '@/integrations/supabase/client';
+import { usePermissions } from '@/hooks/usePermissions';
 import { useClinic } from '@/hooks/useClinic';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
@@ -38,47 +42,30 @@ import {
 } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 
-const CAIXA_STORAGE_KEY = 'healthcare-caixa';
-
-function getCaixaStorageKey(clinicId: string): string {
-  const today = new Date().toISOString().split('T')[0];
-  return `${CAIXA_STORAGE_KEY}-${clinicId}-${today}`;
-}
-
 export default function Financial() {
-  const [isCashOpen, setIsCashOpen] = useState(false);
   const [initialBalance, setInitialBalance] = useState(0);
-  const [openedAt, setOpenedAt] = useState(new Date().toISOString());
   const [incomeDialogOpen, setIncomeDialogOpen] = useState(false);
   const [expenseDialogOpen, setExpenseDialogOpen] = useState(false);
   const [closingDialogOpen, setClosingDialogOpen] = useState(false);
   const [sangriaDialogOpen, setSangriaDialogOpen] = useState(false);
   const [editDialogOpen, setEditDialogOpen] = useState(false);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [refundDialogOpen, setRefundDialogOpen] = useState(false);
   const [editingTransaction, setEditingTransaction] = useState<Transaction | null>(null);
+  const [refundingTransaction, setRefundingTransaction] = useState<Transaction | null>(null);
   const [deleteReason, setDeleteReason] = useState('');
+  const [deletePassword, setDeletePassword] = useState('');
+  const [refundReason, setRefundReason] = useState('');
 
   const { user, isAdmin } = useAuth();
+  const { can } = usePermissions();
   const { clinicId } = useClinic();
   const { transactions: rawTransactions, isLoading } = useTodayTransactions();
   const { summary, isLoading: isSummaryLoading } = useFinancialSummary();
-  const { createTransaction, updateTransaction, deleteTransaction } = useTransactionMutations();
+  const { createTransaction, updateTransaction, deleteTransaction, refundTransaction } = useTransactionMutations();
+  const { updateAppointment } = useAppointmentMutations();
   const registerCashClosing = useRegisterCashClosing();
-
-  useEffect(() => {
-    if (!clinicId) return;
-    const key = getCaixaStorageKey(clinicId);
-    try {
-      const saved = localStorage.getItem(key);
-      if (saved === 'open') {
-        setIsCashOpen(true);
-      } else {
-        setIsCashOpen(false);
-      }
-    } catch (_) {
-      setIsCashOpen(false);
-    }
-  }, [clinicId]);
+  const { isOpen: isCashOpen, openedAt: statusOpenedAt, setOpen, setClosed } = useCashRegisterStatus();
 
   const rawById = useMemo(() => {
     return new Map<string, any>(rawTransactions.map((t: any) => [t.id, t]));
@@ -101,8 +88,14 @@ export default function Financial() {
       notes: t.notes || undefined,
       voucherDiscount: t.voucher_discount || undefined,
       paymentSplit: t.payment_split || undefined,
+      referenceType: t.reference_type || undefined,
+      referenceId: t.reference_id || undefined,
+      appointmentId: t.reference_type === 'appointment' ? t.reference_id : undefined,
+      refundedAt: t.refunded_at || undefined,
     }));
   }, [rawTransactions]);
+
+  const openedAt = statusOpenedAt ?? new Date().toISOString();
 
   const cashRegister: CashRegister = useMemo(
     () => ({
@@ -126,6 +119,7 @@ export default function Financial() {
       totalVoucher: 0,
       totalIncome: summary?.totalIncome || 0,
       totalExpense: summary?.totalExpense || 0,
+      totalRefund: summary?.totalRefund || 0,
       netBalance: summary?.netBalance || 0,
       transactionCount: summary?.transactionCount || 0,
     }),
@@ -185,7 +179,58 @@ export default function Financial() {
   const handleOpenDelete = (transaction: Transaction) => {
     setEditingTransaction(transaction);
     setDeleteReason('');
+    setDeletePassword('');
     setDeleteDialogOpen(true);
+  };
+
+  const handleOpenRefund = (transaction: Transaction) => {
+    setRefundingTransaction(transaction);
+    setRefundReason('');
+    setRefundDialogOpen(true);
+  };
+
+  const handleConfirmRefund = async () => {
+    const transaction = refundingTransaction;
+    if (!transaction || transaction.type !== 'income' || transaction.refundedAt) return;
+    if (!refundReason.trim()) {
+      toast.error('Informe a justificativa do estorno.');
+      return;
+    }
+    const previous = rawById.get(transaction.id);
+    try {
+      await refundTransaction.mutateAsync({ id: transaction.id, reason: refundReason.trim(), previous });
+    } catch (err: unknown) {
+      const e = err as { code?: string; message?: string };
+      const isColumnMissing = e?.code === '42703' || e?.message?.includes('refunded_at') || e?.message?.includes('refunded_by');
+      if (isColumnMissing) {
+        await createTransaction.mutateAsync({
+          type: 'expense',
+          amount: transaction.amount,
+          description: `Estorno: ${transaction.description}`,
+          category: 'Estorno',
+          payment_method: transaction.paymentMethod,
+          patient_id: transaction.patientId || null,
+          notes: transaction.notes ? `Estorno de: ${transaction.notes}. Justificativa: ${refundReason.trim()}` : `Estorno de receita. Justificativa: ${refundReason.trim()}`,
+          voucherDiscount: null,
+          paymentSplit: null,
+          reference_type: transaction.referenceType || null,
+          reference_id: transaction.referenceId || null,
+        });
+        toast.success('Estorno registrado com sucesso.');
+      } else {
+        toast.error('Erro ao estornar transação');
+        return;
+      }
+    }
+    if (transaction.referenceType === 'appointment' && transaction.referenceId) {
+      await updateAppointment.mutateAsync({
+        id: transaction.referenceId,
+        payment_status: 'refunded',
+      });
+    }
+    setRefundDialogOpen(false);
+    setRefundingTransaction(null);
+    setRefundReason('');
   };
 
   const handleConfirmDelete = async () => {
@@ -194,9 +239,28 @@ export default function Financial() {
       toast.error('Informe o motivo do cancelamento.');
       return;
     }
+    if (!deletePassword.trim()) {
+      toast.error('Informe sua senha para confirmar.');
+      return;
+    }
     const previous = rawById.get(editingTransaction.id);
     if (!previous) {
       toast.error('Não foi possível localizar o lançamento original.');
+      return;
+    }
+
+    const email = user?.email;
+    if (!email) {
+      toast.error('Sessão inválida. Faça login novamente.');
+      return;
+    }
+
+    const { error: authError } = await supabase.auth.signInWithPassword({
+      email,
+      password: deletePassword.trim(),
+    });
+    if (authError) {
+      toast.error('Senha incorreta. Tente novamente.');
       return;
     }
 
@@ -209,17 +273,14 @@ export default function Financial() {
     setDeleteDialogOpen(false);
     setEditingTransaction(null);
     setDeleteReason('');
+    setDeletePassword('');
   };
 
   const handleOpenCash = () => {
-    if (clinicId) {
-      try {
-        localStorage.setItem(getCaixaStorageKey(clinicId), 'open');
-      } catch (_) {}
-    }
-    setOpenedAt(new Date().toISOString());
-    setIsCashOpen(true);
-    toast.success('Caixa aberto com sucesso!');
+    setOpen.mutate(undefined, {
+      onSuccess: () => toast.success('Caixa aberto com sucesso!'),
+      onError: () => toast.error('Erro ao abrir caixa'),
+    });
   };
 
   const cashOnHand = initialBalance + cashSummary.totalCash;
@@ -246,14 +307,16 @@ export default function Financial() {
       console.error(e);
       toast.error('Erro ao registrar fechamento. Caixa foi fechado localmente.');
     }
-    if (clinicId) {
-      try {
-        localStorage.setItem(getCaixaStorageKey(clinicId), 'closed');
-      } catch (_) {}
-    }
-    setIsCashOpen(false);
-    setClosingDialogOpen(false);
-    toast.success('Caixa fechado com sucesso! A notificação de dias em aberto foi atualizada.');
+    setClosed.mutate(undefined, {
+      onSuccess: () => {
+        setClosingDialogOpen(false);
+        toast.success('Caixa fechado com sucesso! A notificação de dias em aberto foi atualizada.');
+      },
+      onError: () => {
+        setClosingDialogOpen(false);
+        toast.success('Caixa fechado localmente.');
+      },
+    });
   };
 
 
@@ -372,7 +435,7 @@ export default function Financial() {
 
         {isCashOpen && (
           <>
-            <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
+            <div className="grid grid-cols-2 gap-4 lg:grid-cols-5">
               <Card>
                 <CardContent className="p-4">
                   <div className="flex items-center gap-3">
@@ -399,6 +462,22 @@ export default function Financial() {
                       <p className="text-sm text-muted-foreground">Saídas</p>
                       <p className="text-xl font-bold text-red-600">
                         R$ {cashSummary.totalExpense.toFixed(2)}
+                      </p>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+
+              <Card>
+                <CardContent className="p-4">
+                  <div className="flex items-center gap-3">
+                    <div className="flex h-10 w-10 items-center justify-center rounded-full bg-amber-100">
+                      <Undo2 className="h-5 w-5 text-amber-600" />
+                    </div>
+                    <div>
+                      <p className="text-sm text-muted-foreground">Estorno</p>
+                      <p className="text-xl font-bold text-amber-600">
+                        R$ {cashSummary.totalRefund.toFixed(2)}
                       </p>
                     </div>
                   </div>
@@ -489,9 +568,10 @@ export default function Financial() {
               <CardContent>
                 <TransactionsList
                   transactions={transactions}
-                  canManage={isAdmin}
-                  onEdit={handleOpenEdit}
-                  onDelete={handleOpenDelete}
+                  canManage={isAdmin || can('financeiro', 'can_edit') || can('financeiro', 'can_delete')}
+                  onEdit={(isAdmin || can('financeiro', 'can_edit')) ? handleOpenEdit : undefined}
+                  onDelete={isAdmin ? handleOpenDelete : undefined}
+                  onRefund={(isAdmin || can('financeiro', 'can_edit')) ? handleOpenRefund : undefined}
                 />
               </CardContent>
             </Card>
@@ -537,7 +617,13 @@ export default function Financial() {
         maxCash={cashOnHand}
       />
 
-      <Dialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
+      <Dialog
+        open={deleteDialogOpen}
+        onOpenChange={(open) => {
+          setDeleteDialogOpen(open);
+          if (!open) setDeletePassword('');
+        }}
+      >
         <DialogContent className="max-w-md">
           <DialogHeader>
             <DialogTitle>Cancelar lançamento</DialogTitle>
@@ -551,6 +637,16 @@ export default function Financial() {
               onChange={(e) => setDeleteReason(e.target.value)}
               placeholder="Ex: lançamento duplicado, valor incorreto..."
             />
+            <p className="text-sm text-muted-foreground">
+              Digite sua senha para confirmar e evitar fraudes.
+            </p>
+            <Input
+              type="password"
+              value={deletePassword}
+              onChange={(e) => setDeletePassword(e.target.value)}
+              placeholder="Sua senha"
+              autoComplete="current-password"
+            />
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setDeleteDialogOpen(false)}>
@@ -558,6 +654,44 @@ export default function Financial() {
             </Button>
             <Button variant="destructive" onClick={handleConfirmDelete}>
               Cancelar lançamento
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={refundDialogOpen} onOpenChange={setRefundDialogOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Undo2 className="h-5 w-5 text-amber-600" />
+              Estornar transação
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3">
+            {refundingTransaction && (
+              <p className="text-sm text-muted-foreground">
+                Estornar <strong>R$ {refundingTransaction.amount.toFixed(2)}</strong> — {refundingTransaction.description}
+                {refundingTransaction.patientName && ` (${refundingTransaction.patientName})`}
+              </p>
+            )}
+            <p className="text-sm text-muted-foreground">
+              Informe a justificativa do estorno para registro de auditoria.
+            </p>
+            <Input
+              value={refundReason}
+              onChange={(e) => setRefundReason(e.target.value)}
+              placeholder="Ex: paciente desistiu, pagamento duplicado..."
+            />
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setRefundDialogOpen(false)}>
+              Voltar
+            </Button>
+            <Button
+              onClick={handleConfirmRefund}
+              className="bg-amber-600 hover:bg-amber-700"
+            >
+              Confirmar estorno
             </Button>
           </DialogFooter>
         </DialogContent>
