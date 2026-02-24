@@ -17,6 +17,8 @@ export interface Transaction {
   patientId?: string;
   patientName?: string;
   appointmentId?: string;
+  referenceType?: string;
+  referenceId?: string;
   category: string;
   date: string;
   time: string;
@@ -24,6 +26,7 @@ export interface Transaction {
   userName: string;
   voucherDiscount?: number;
   notes?: string;
+  refundedAt?: string | null;
 }
 
 export interface CashRegister {
@@ -50,6 +53,7 @@ export interface CashSummary {
   totalVoucher: number;
   totalIncome: number;
   totalExpense: number;
+  totalRefund: number;
   netBalance: number;
   transactionCount: number;
 }

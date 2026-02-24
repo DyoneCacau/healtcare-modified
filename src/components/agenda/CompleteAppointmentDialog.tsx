@@ -49,6 +49,11 @@ import {
 } from '@/services/commissionService';
 import { cn } from '@/lib/utils';
 
+export interface CommissionBreakdownItem {
+  rule: CommissionRule;
+  amount: number;
+}
+
 interface CompleteAppointmentDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -57,7 +62,8 @@ interface CompleteAppointmentDialogProps {
     appointment: AgendaAppointment,
     serviceValue: number,
     paymentMethod: PaymentMethod,
-    quantity: number
+    quantity: number,
+    commissionBreakdown: CommissionBreakdownItem[]
   ) => void;
   commissionRules?: CommissionRule[];
 }
@@ -149,7 +155,8 @@ export function CompleteAppointmentDialog({
       appointment,
       serviceValue,
       paymentMethod,
-      quantity
+      quantity,
+      commissionBreakdown
     );
     onOpenChange(false);
   };
@@ -378,15 +385,20 @@ export function CompleteAppointmentDialog({
                         "text-sm font-medium",
                         validation.errorCode === 'NO_RULE' && !proceedWithoutRule ? "text-destructive" : "text-amber-800"
                       )}>
-                        Nenhuma regra de comissão encontrada
+                        {commissionRules.length === 0
+                          ? 'Nenhuma regra de comissão cadastrada'
+                          : 'Nenhuma regra de comissão encontrada para este atendimento'
+                        }
                       </p>
                       <p className={cn(
                         "text-xs",
                         validation.errorCode === 'NO_RULE' && !proceedWithoutRule ? "text-destructive/80" : "text-amber-700"
                       )}>
-                        {validation.errorCode === 'NO_RULE' && !proceedWithoutRule
-                          ? 'Finalize somente se tiver certeza ou configure uma regra antes.'
-                          : 'O atendimento será registrado sem comissão.'
+                        {commissionRules.length === 0
+                          ? 'Cadastre regras em Comissões antes de finalizar.'
+                          : validation.errorCode === 'NO_RULE' && !proceedWithoutRule
+                            ? `Nenhuma regra para ${appointment.professional.name} + ${appointment.procedure}. Adicione em Comissões ou use "Todos" para profissionais/procedimentos.`
+                            : 'O atendimento será registrado sem comissão.'
                         }
                       </p>
                     </div>

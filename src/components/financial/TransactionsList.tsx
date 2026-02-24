@@ -10,6 +10,7 @@ import {
   Split,
   Pencil,
   Trash2,
+  Undo2,
 } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -23,6 +24,7 @@ interface TransactionsListProps {
   canManage?: boolean;
   onEdit?: (transaction: Transaction) => void;
   onDelete?: (transaction: Transaction) => void;
+  onRefund?: (transaction: Transaction) => void;
 }
 
 const paymentIcons = {
@@ -43,7 +45,9 @@ const paymentLabels = {
   split: 'Dividido',
 };
 
-export function TransactionsList({ transactions, canManage, onEdit, onDelete }: TransactionsListProps) {
+const CATEGORY_ESTORNO = 'Estorno';
+
+export function TransactionsList({ transactions, canManage, onEdit, onDelete, onRefund }: TransactionsListProps) {
   if (transactions.length === 0) {
     return (
       <div className="text-center py-12">
@@ -64,19 +68,33 @@ export function TransactionsList({ transactions, canManage, onEdit, onDelete }: 
           .map((transaction) => {
             const PaymentIcon = paymentIcons[transaction.paymentMethod];
             const isIncome = transaction.type === 'income';
+            const isRefunded =
+              (isIncome && transaction.refundedAt) ||
+              (transaction.type === 'expense' &&
+                (transaction.category || '').trim().toLowerCase() === CATEGORY_ESTORNO.toLowerCase());
 
             return (
-              <Card key={transaction.id} className="overflow-hidden">
+              <Card
+                key={transaction.id}
+                className={cn(
+                  'overflow-hidden',
+                  isRefunded && 'border-amber-300 bg-amber-50/50'
+                )}
+              >
                 <CardContent className="p-4">
                   <div className="flex items-start gap-3">
                     <div
                       className={cn(
                         'flex h-10 w-10 items-center justify-center rounded-full',
-                        isIncome ? 'bg-emerald-100' : 'bg-red-100'
+                        isIncome && !isRefunded && 'bg-emerald-100',
+                        !isIncome && !isRefunded && 'bg-red-100',
+                        isRefunded && 'bg-amber-100'
                       )}
                     >
-                      {isIncome ? (
+                      {isIncome && !isRefunded ? (
                         <ArrowUpCircle className="h-5 w-5 text-emerald-600" />
+                      ) : isRefunded ? (
+                        <Undo2 className="h-5 w-5 text-amber-600" />
                       ) : (
                         <ArrowDownCircle className="h-5 w-5 text-red-600" />
                       )}
@@ -87,8 +105,14 @@ export function TransactionsList({ transactions, canManage, onEdit, onDelete }: 
                         <span className="font-medium text-foreground">
                           {transaction.description}
                         </span>
-                        <Badge variant="outline" className="text-xs">
-                          {transaction.category}
+                        <Badge
+                          variant="outline"
+                          className={cn(
+                            'text-xs',
+                            isRefunded && 'bg-amber-100 text-amber-700 border-amber-300'
+                          )}
+                        >
+                          {isRefunded ? 'Estornado' : transaction.category}
                         </Badge>
                       </div>
 
@@ -130,7 +154,9 @@ export function TransactionsList({ transactions, canManage, onEdit, onDelete }: 
                       <p
                         className={cn(
                           'text-lg font-bold',
-                          isIncome ? 'text-emerald-600' : 'text-red-600'
+                          isIncome && !isRefunded && 'text-emerald-600',
+                          !isIncome && !isRefunded && 'text-red-600',
+                          isRefunded && 'text-amber-600'
                         )}
                       >
                         {isIncome ? '+' : '-'} R$ {transaction.amount.toFixed(2)}
@@ -140,11 +166,23 @@ export function TransactionsList({ transactions, canManage, onEdit, onDelete }: 
                       </p>
                       {canManage && (
                         <div className="mt-2 flex items-center justify-end gap-1">
+                          {isIncome && !transaction.refundedAt && onRefund && (
+                            <Button
+                              size="icon"
+                              variant="ghost"
+                              className="h-7 w-7"
+                              onClick={() => onRefund?.(transaction)}
+                              title="Estornar"
+                            >
+                              <Undo2 className="h-3.5 w-3.5" />
+                            </Button>
+                          )}
                           <Button
                             size="icon"
                             variant="ghost"
                             className="h-7 w-7"
                             onClick={() => onEdit?.(transaction)}
+                            title="Editar"
                           >
                             <Pencil className="h-3.5 w-3.5" />
                           </Button>
@@ -153,6 +191,7 @@ export function TransactionsList({ transactions, canManage, onEdit, onDelete }: 
                             variant="ghost"
                             className="h-7 w-7 text-destructive"
                             onClick={() => onDelete?.(transaction)}
+                            title="Excluir"
                           >
                             <Trash2 className="h-3.5 w-3.5" />
                           </Button>

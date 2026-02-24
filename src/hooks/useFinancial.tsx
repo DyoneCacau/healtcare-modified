@@ -60,7 +60,24 @@ export function useTransactions(dateFilter?: string) {
       }
 
       if (error) throw error;
-      return data || [];
+      const entries = data || [];
+
+      const userIds = Array.from(new Set(entries.map((e: { user_id: string }) => e.user_id).filter(Boolean)));
+      if (userIds.length === 0) return entries;
+
+      const { data: profilesData } = await supabase
+        .from('profiles')
+        .select('user_id, name, email')
+        .in('user_id', userIds);
+
+      const profileMap = new Map(
+        (profilesData || []).map((p: { user_id: string; name: string; email: string }) => [p.user_id, p])
+      );
+
+      return entries.map((entry: { user_id: string }) => ({
+        ...entry,
+        user_name: profileMap.get(entry.user_id)?.name || null,
+      }));
     },
     enabled: !!clinicId,
   });
@@ -93,7 +110,7 @@ export function useFinancialSummary() {
       const runSummaryQuery = async (withDeletedFilter: boolean) => {
         let query = supabase
           .from('financial_transactions')
-          .select('type, amount, payment_method')
+          .select('type, amount, payment_method, category, refunded_at')
           .eq('clinic_id', clinicId)
           .gte('created_at', startOfDay)
           .lte('created_at', endOfDay);
@@ -107,15 +124,25 @@ export function useFinancialSummary() {
 
       let { data, error } = await runSummaryQuery(true);
       if (error && (error as { code?: string }).code === '42703') {
-        ({ data, error } = await runSummaryQuery(false));
+        const fallbackQuery = supabase
+          .from('financial_transactions')
+          .select('type, amount, payment_method, category')
+          .eq('clinic_id', clinicId)
+          .gte('created_at', startOfDay)
+          .lte('created_at', endOfDay)
+          .is('deleted_at', null);
+        const res = await fallbackQuery;
+        data = res.data;
+        error = res.error;
       }
-
       if (error) throw error;
 
       const transactions = data || [];
-      
+      const CATEGORY_ESTORNO = 'Estorno';
+
       let totalIncome = 0;
       let totalExpense = 0;
+      let totalRefund = 0;
       let totalCash = 0;
       let totalCredit = 0;
       let totalDebit = 0;
@@ -123,16 +150,33 @@ export function useFinancialSummary() {
 
       transactions.forEach((t) => {
         const amount = Number(t.amount);
+        const isIncomeRefunded = t.type === 'income' && (t as { refunded_at?: string }).refunded_at;
+        const isLegacyRefundExpense = t.type === 'expense' && (t.category || '').trim().toLowerCase() === CATEGORY_ESTORNO.toLowerCase();
+
         if (t.type === 'income') {
-          totalIncome += amount;
-          switch (t.payment_method) {
-            case 'cash': totalCash += amount; break;
-            case 'credit': totalCredit += amount; break;
-            case 'debit': totalDebit += amount; break;
-            case 'pix': totalPix += amount; break;
+          if (isIncomeRefunded) {
+            totalRefund += amount;
+            switch (t.payment_method) {
+              case 'cash': totalCash -= amount; break;
+              case 'credit': totalCredit -= amount; break;
+              case 'debit': totalDebit -= amount; break;
+              case 'pix': totalPix -= amount; break;
+            }
+          } else {
+            totalIncome += amount;
+            switch (t.payment_method) {
+              case 'cash': totalCash += amount; break;
+              case 'credit': totalCredit += amount; break;
+              case 'debit': totalDebit += amount; break;
+              case 'pix': totalPix += amount; break;
+            }
           }
         } else {
-          totalExpense += amount;
+          if (isLegacyRefundExpense) {
+            totalRefund += amount;
+          } else {
+            totalExpense += amount;
+          }
           if (t.payment_method === 'cash') {
             totalCash -= amount;
           }
@@ -142,7 +186,8 @@ export function useFinancialSummary() {
       return {
         totalIncome,
         totalExpense,
-        netBalance: totalIncome - totalExpense,
+        totalRefund,
+        netBalance: totalIncome - totalExpense - totalRefund,
         totalCash,
         totalCredit,
         totalDebit,
@@ -278,17 +323,15 @@ export function useTransactionMutations() {
         reference_id: data.reference_id ?? null,
       };
 
-      const extendedPayload = {
-        ...basePayload,
-        patient_id: data.patient_id ?? null,
-        notes: data.notes ?? null,
-        voucher_discount: data.voucher_discount ?? null,
-        payment_split: data.payment_split ?? null,
-      };
+      // Usar basePayload quando nao ha campos opcionais (evita 400 se colunas nao existirem)
+      const hasOptionalFields = data.patient_id != null || data.notes != null || data.voucher_discount != null || data.payment_split != null;
+      const payload = hasOptionalFields
+        ? { ...basePayload, patient_id: data.patient_id ?? null, notes: data.notes ?? null, voucher_discount: data.voucher_discount ?? null, payment_split: data.payment_split ?? null }
+        : basePayload;
 
       let { error } = await supabase
         .from('financial_transactions')
-        .insert(extendedPayload);
+        .insert(payload);
 
       if (error && ['42703', 'PGRST204'].includes((error as { code?: string }).code || '')) {
         ({ error } = await supabase
@@ -297,7 +340,7 @@ export function useTransactionMutations() {
       }
 
       if (error) throw error;
-      return extendedPayload;
+      return payload;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['transactions'] });
@@ -477,7 +520,70 @@ export function useTransactionMutations() {
     },
   });
 
-  return { createTransaction, updateTransaction, deleteTransaction };
+  const refundTransaction = useMutation({
+    mutationFn: async ({
+      id,
+      reason,
+      previous,
+    }: { id: string; reason: string; previous?: TransactionData }) => {
+      if (!clinicId) throw new Error('Clínica não encontrada');
+      if (!user?.id) throw new Error('Usuário não autenticado');
+
+      const { data, error } = await supabase
+        .from('financial_transactions')
+        .update({
+          refunded_at: new Date().toISOString(),
+          refunded_by: user.id,
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', id)
+        .select()
+        .single();
+
+      if (error) throw error;
+
+      if (clinicId && user?.id && reason) {
+        const refundedRow = data as Record<string, unknown>;
+        const { error: auditError } = await supabase.from('financial_audit').insert({
+          clinic_id: clinicId,
+          transaction_id: id,
+          action: 'update',
+          before: previous || null,
+          after: refundedRow,
+          reason: `Estorno: ${reason}`,
+          user_id: user.id,
+        });
+        if (auditError && (auditError as { code?: string }).code !== '42P01') {
+          console.warn('Audit insert failed:', auditError);
+        }
+
+        const { error: eventError } = await supabase.from('audit_events').insert({
+          clinic_id: clinicId,
+          entity_type: 'financial',
+          entity_id: id,
+          action: 'refund',
+          reason: reason,
+          user_id: user.id,
+        });
+        if (eventError && (eventError as { code?: string }).code !== '42P01') {
+          console.warn('Audit event insert failed:', eventError);
+        }
+      }
+      return data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['transactions'] });
+      queryClient.invalidateQueries({ queryKey: ['financial-summary'] });
+      queryClient.invalidateQueries({ queryKey: ['dashboard-stats'] });
+      toast.success('Estorno registrado com sucesso.');
+    },
+    onError: (error) => {
+      console.error('Error refunding transaction:', error);
+      toast.error('Erro ao estornar transação');
+    },
+  });
+
+  return { createTransaction, updateTransaction, deleteTransaction, refundTransaction };
 }
 
 /** Normaliza data para YYYY-MM-DD (Supabase pode retornar string ISO ou Date). */

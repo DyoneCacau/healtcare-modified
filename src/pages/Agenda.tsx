@@ -15,7 +15,8 @@ import { PaymentMethod } from '@/types/financial';
 import { useAppointments, useAppointmentMutations } from '@/hooks/useAppointments';
 import { useProfessionals } from '@/hooks/useProfessionals';
 import { useClinic } from '@/hooks/useClinic';
-import { useCommissionRules } from '@/hooks/useCommissions';
+import { useCommissionRules, useCommissionMutations } from '@/hooks/useCommissions';
+import type { CommissionBreakdownItem } from '@/components/agenda/CompleteAppointmentDialog';
 import { useTransactionMutations } from '@/hooks/useFinancial';
 import { toast } from 'sonner';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -36,6 +37,7 @@ export default function Agenda() {
   const { activeProfessionals, isLoading: isLoadingProfessionals } = useProfessionals();
   const { createAppointment, updateAppointment } = useAppointmentMutations();
   const { createTransaction } = useTransactionMutations();
+  const { createCommission } = useCommissionMutations();
   const { rules: commissionRules } = useCommissionRules();
 
   // Transform DB appointments to UI format
@@ -94,7 +96,7 @@ export default function Agenda() {
 
   const filteredAppointments = useMemo(() => {
     return appointments.filter((apt) => {
-      if (apt.status === 'cancelled' || apt.status === 'completed') return false;
+      if (apt.status === 'cancelled') return false;
       if (selectedProfessional !== 'all' && apt.professional.id !== selectedProfessional) return false;
       if (selectedClinic !== 'all' && apt.clinic.id !== selectedClinic) return false;
       if (selectedStatus !== 'all' && apt.status !== selectedStatus) return false;
@@ -142,7 +144,8 @@ export default function Agenda() {
     appointment: AgendaAppointment,
     serviceValue: number,
     paymentMethod: PaymentMethod,
-    quantity: number
+    quantity: number,
+    commissionBreakdown: CommissionBreakdownItem[]
   ) => {
     // Update appointment status
     await updateAppointment.mutateAsync({
@@ -161,6 +164,43 @@ export default function Agenda() {
       reference_type: 'appointment',
       reference_id: appointment.id,
     });
+
+    // Registrar comissões no banco
+    try {
+      for (const { rule, amount } of commissionBreakdown) {
+        const beneficiaryId =
+          rule.beneficiaryType === 'professional'
+            ? appointment.professional.id
+            : rule.beneficiaryId || appointment.sellerId || appointment.professional.id;
+        if (!beneficiaryId) continue; // seller/reception sem beneficiário definido
+        await createCommission.mutateAsync({
+          appointmentId: appointment.id,
+          professionalId: appointment.professional.id,
+          professionalName: appointment.professional.name,
+          beneficiaryType: rule.beneficiaryType,
+          beneficiaryId,
+          beneficiaryName: rule.beneficiaryName || appointment.professional.name,
+          clinicId: appointment.clinic.id,
+          clinicName: appointment.clinic.name,
+          procedure: appointment.procedure,
+          serviceValue,
+          quantity,
+          commissionRuleId: rule.id,
+          calculationType: rule.calculationType,
+          calculationUnit: rule.calculationUnit,
+          ruleValue: rule.value,
+          commissionAmount: amount,
+          date: appointment.date,
+          status: 'pending',
+        });
+      }
+    } catch (err) {
+      console.error('Erro ao registrar comissão:', err);
+      toast.error('Atendimento finalizado, mas a comissão não foi registrada. Execute o script RLS de comissões no Supabase.');
+      setCompleteDialogOpen(false);
+      setCompletingAppointment(null);
+      return;
+    }
 
     toast.success(`Atendimento finalizado! Valor: R$ ${serviceValue.toFixed(2)}`);
   };

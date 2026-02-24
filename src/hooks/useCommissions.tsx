@@ -249,6 +249,7 @@ export function useCommissionMutations() {
           clinic_id: clinicId,
           beneficiary_id: data.beneficiaryId || data.professionalId,
           beneficiary_type: data.beneficiaryType,
+          beneficiary_name: data.beneficiaryName || data.professionalName || null,
           appointment_id: data.appointmentId,
           amount: data.commissionAmount,
           base_value: data.serviceValue,

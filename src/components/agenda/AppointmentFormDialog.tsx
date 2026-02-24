@@ -166,13 +166,22 @@ export function AppointmentFormDialog({
     }
   };
 
-  const timeOptions = [];
-  for (let h = 7; h <= 20; h++) {
+  const timeOptions: string[] = [];
+  for (let h = 7; h <= 22; h++) {
     for (let m = 0; m < 60; m += 30) {
       const time = `${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}`;
       timeOptions.push(time);
     }
   }
+
+  const addMinutesToTime = (time: string, minutes: number): string => {
+    const [h, m] = time.split(':').map(Number);
+    const total = h * 60 + m + minutes;
+    const newH = Math.floor(total / 60);
+    const newM = total % 60;
+    const result = `${newH.toString().padStart(2, '0')}:${newM.toString().padStart(2, '0')}`;
+    return timeOptions.includes(result) ? result : timeOptions[timeOptions.indexOf(time) + 1] || time;
+  };
 
   const activePatients = patients.filter((p) => p.status === 'active');
 
@@ -266,7 +275,14 @@ export function AppointmentFormDialog({
           <div className="grid grid-cols-2 gap-4">
             <div className="grid gap-2">
               <Label>Horário Início *</Label>
-              <Select value={startTime} onValueChange={setStartTime}>
+              <Select
+                value={startTime}
+                onValueChange={(v) => {
+                  setStartTime(v);
+                  const suggestedEnd = addMinutesToTime(v, 30);
+                  if (suggestedEnd && suggestedEnd > v) setEndTime(suggestedEnd);
+                }}
+              >
                 <SelectTrigger>
                   <SelectValue />
                 </SelectTrigger>

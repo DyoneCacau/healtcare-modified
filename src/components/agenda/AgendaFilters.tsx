@@ -162,6 +162,7 @@ export function AgendaFilters({
             <SelectItem value="confirmed">Confirmado</SelectItem>
             <SelectItem value="pending">Pendente</SelectItem>
             <SelectItem value="return">Retorno</SelectItem>
+            <SelectItem value="completed">Finalizado</SelectItem>
           </SelectContent>
         </Select>
       </div>

@@ -38,12 +38,18 @@ import {
 import { CommissionSummary, CommissionCalculation, beneficiaryTypeLabels, BeneficiaryType } from '@/types/commission';
 import { leadSourceLabels, LeadSource } from '@/types/agenda';
 import { generateCommissionSummary } from '@/hooks/useCommissions';
-import { CommissionReportFilters } from './CommissionReportFilters';
+import { CommissionReportFilters, type PeriodType } from './CommissionReportFilters';
 import { useClinics } from '@/hooks/useClinic';
-import { format, subMonths, parseISO, isWithinInterval } from 'date-fns';
+import { format, parseISO, isWithinInterval, startOfWeek, endOfWeek, startOfMonth, endOfMonth } from 'date-fns';
+
+interface ProfessionalOption {
+  id: string;
+  name: string;
+}
 
 interface CommissionReportProps {
   calculations: CommissionCalculation[];
+  professionals?: ProfessionalOption[];
 }
 
 const formatCurrency = (value: number) =>
@@ -65,12 +71,29 @@ const beneficiaryIcons: Record<BeneficiaryType, typeof Stethoscope> = {
   reception: Headphones,
 };
 
-export function CommissionReport({ calculations }: CommissionReportProps) {
+export function CommissionReport({ calculations, professionals = [] }: CommissionReportProps) {
   const { clinics } = useClinics();
-  const [startDate, setStartDate] = useState(format(subMonths(new Date(), 3), 'yyyy-MM-dd'));
-  const [endDate, setEndDate] = useState(format(new Date(), 'yyyy-MM-dd'));
+  const [periodType, setPeriodType] = useState<PeriodType>('month');
+  const [startDate, setStartDate] = useState(format(startOfMonth(new Date()), 'yyyy-MM-dd'));
+  const [endDate, setEndDate] = useState(format(endOfMonth(new Date()), 'yyyy-MM-dd'));
   const [selectedClinic, setSelectedClinic] = useState('all');
   const [selectedBeneficiaryType, setSelectedBeneficiaryType] = useState('all');
+  const [selectedProfessional, setSelectedProfessional] = useState('all');
+
+  const handlePeriodTypeChange = (type: PeriodType) => {
+    setPeriodType(type);
+    const now = new Date();
+    if (type === 'day') {
+      setStartDate(format(now, 'yyyy-MM-dd'));
+      setEndDate(format(now, 'yyyy-MM-dd'));
+    } else if (type === 'week') {
+      setStartDate(format(startOfWeek(now, { weekStartsOn: 1 }), 'yyyy-MM-dd'));
+      setEndDate(format(endOfWeek(now, { weekStartsOn: 1 }), 'yyyy-MM-dd'));
+    } else if (type === 'month') {
+      setStartDate(format(startOfMonth(now), 'yyyy-MM-dd'));
+      setEndDate(format(endOfMonth(now), 'yyyy-MM-dd'));
+    }
+  };
 
   // Filter calculations based on selected filters
   const filteredCalculations = useMemo(() => {
@@ -91,9 +114,15 @@ export function CommissionReport({ calculations }: CommissionReportProps) {
       // Filter by beneficiary type
       if (selectedBeneficiaryType !== 'all' && calc.beneficiaryType !== selectedBeneficiaryType) return false;
 
+      // Filter by professional
+      if (selectedProfessional !== 'all') {
+        if (calc.beneficiaryType !== 'professional') return false;
+        if (calc.beneficiaryId !== selectedProfessional && calc.professionalId !== selectedProfessional) return false;
+      }
+
       return true;
     });
-  }, [calculations, startDate, endDate, selectedClinic, selectedBeneficiaryType]);
+  }, [calculations, startDate, endDate, selectedClinic, selectedBeneficiaryType, selectedProfessional]);
 
   const summary = useMemo(() => generateCommissionSummary(filteredCalculations), [filteredCalculations]);
 
@@ -242,13 +271,18 @@ export function CommissionReport({ calculations }: CommissionReportProps) {
       <CommissionReportFilters
         startDate={startDate}
         endDate={endDate}
+        periodType={periodType}
         selectedClinic={selectedClinic}
         selectedBeneficiaryType={selectedBeneficiaryType}
+        selectedProfessional={selectedProfessional}
         onStartDateChange={setStartDate}
         onEndDateChange={setEndDate}
+        onPeriodTypeChange={handlePeriodTypeChange}
         onClinicChange={setSelectedClinic}
         onBeneficiaryTypeChange={setSelectedBeneficiaryType}
+        onProfessionalChange={setSelectedProfessional}
         clinics={clinics}
+        professionals={professionals}
         onExport={handleExport}
       />
 
