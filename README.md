@@ -1,59 +1,6 @@
 # HealthCare - Sistema de Gestão Odontológica
 
-## 🔧 Correções Aplicadas - 12/02/2026
-
-### ✅ Problemas Corrigidos
-
-#### 1. Nome da Clínica Não Aparecia
-**Problema**: O sistema não mostrava o nome da clínica em que o usuário estava logado.
-
-**Solução**:
-- ✅ Criado hook `useCurrentClinic` aprimorado
-- ✅ Agora busca a primeira clínica disponível quando superadmin não tem seleção
-- ✅ Adicionados logs de erro para facilitar debug
-- ✅ Sidebar mostra o nome da clínica abaixo do nome do usuário
-- ✅ Dashboard mostra o nome da clínica no header
-
-**Onde visualizar**:
-- **Sidebar**: Canto inferior esquerdo (abaixo do nome do usuário)
-- **Dashboard**: Título do header (no lugar de "Dashboard")
-
-#### 2. Página de Administração Desbloqueada
-**Problema**: Menu de Administração aparecia desbloqueado para todos os usuários.
-
-**Solução**:
-- ✅ Adicionada verificação especial na Sidebar
-- ✅ Menu aparece bloqueado com ícone de cadeado para não-admins
-- ✅ Apenas admin e superadmin podem acessar
-
-#### 3. Usuários Duplicados
-**Problema**: Era possível criar múltiplos usuários com o mesmo email.
-
-**Solução**:
-- ✅ Índice único no email (case-insensitive)
-- ✅ Trigger que previne duplicação
-- ✅ Sistema bloqueia criação de emails duplicados
-
----
-
-## 🗑️ Limpeza do Banco de Dados
-
-### Script de Limpeza Incluído
-
-O arquivo LIMPAR_BANCO_DEFINITIVO.sql remove:
-- Usuário: dyone.cacau01@aluno.unifametro.edu.br
-- Clínicas de teste: "teste", "teste piloto", "clinica sorriso"
-- Usuários órfãos (sem clínica, exceto superadmins)
-
-### Como Usar
-
-Via Supabase Dashboard (RECOMENDADO):
-1. Acesse https://supabase.com
-2. Vá em "SQL Editor"
-3. Copie o conteúdo de LIMPAR_BANCO_DEFINITIVO.sql
-4. Execute o script
-
-⚠️ ATENÇÃO: Faz BACKUP antes de executar!
+Sistema completo de gestão para clínicas odontológicas: agenda, pacientes, financeiro, comissões, estoque, ponto e mais.
 
 ---
 
@@ -61,8 +8,65 @@ Via Supabase Dashboard (RECOMENDADO):
 
 ```bash
 npm install
-npx supabase db push
+cp .env.example .env
+# Edite .env com suas credenciais do Supabase
+npx supabase db push   # ou execute as migrations manualmente
 npm run dev
 ```
 
-Consulte INSTRUCOES_LIMPEZA.txt para mais detalhes.
+---
+
+## 📚 Documentação
+
+| Arquivo | Descrição |
+|---------|-----------|
+| [DEPLOY.md](DEPLOY.md) | Guia de deploy (Vercel, Netlify, Supabase) |
+| [CHECKLIST_PENDENCIAS.md](CHECKLIST_PENDENCIAS.md) | Checklist para lançamento e comercialização |
+| [.env.example](.env.example) | Variáveis de ambiente necessárias |
+
+---
+
+## ✨ Funcionalidades Principais
+
+- **Agenda** – Agendamentos, confirmação, finalização com pagamento
+- **Pacientes** – CRUD, prontuário, WhatsApp
+- **Financeiro** – Caixa, entradas, saídas, estorno (com justificativa), sangria, fechamento
+- **Comissões** – Regras por procedimento, relatório com filtros
+- **Profissionais** – Cadastro e gestão
+- **Estoque** – Controle de materiais
+- **Ponto** – Registro de ponto eletrônico
+- **Permissões** – Por role (admin, recepcionista, etc.) e por feature
+- **Multi-clínica** – Suporte a várias clínicas por usuário
+- **Assinatura** – Planos, Mercado Pago (modelo vendas fechadas)
+
+### Segurança
+
+- Exclusão de lançamento: apenas admin, com senha obrigatória
+- Estorno: justificativa obrigatória (registrada em auditoria)
+- Clínica sem assinatura: tela "Contacte o administrador"
+- Política de Privacidade (LGPD) em `/privacidade`
+
+---
+
+## 🔧 Correções e Melhorias (12/02/2026)
+
+- Nome da clínica na sidebar e dashboard
+- Administração bloqueada para não-admins
+- Usuários duplicados prevenidos (índice único)
+- Estorno com card dedicado e justificativa
+- Exclusão com senha (apenas admin)
+- Tela de clínica pendente de ativação
+- Política de Privacidade (LGPD)
+- Config de deploy (Vercel, Netlify)
+
+---
+
+## 🗑️ Limpeza do Banco
+
+O arquivo `LIMPAR_BANCO_DEFINITIVO.sql` remove dados de teste. Execute via Supabase SQL Editor. **Faça backup antes!**
+
+---
+
+## 📋 Pré-Lançamento
+
+Consulte [CHECKLIST_PENDENCIAS.md](CHECKLIST_PENDENCIAS.md) para o checklist completo de itens antes de colocar em produção.

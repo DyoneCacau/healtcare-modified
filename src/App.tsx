@@ -6,6 +6,7 @@ import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { AuthProvider, useAuth } from "@/hooks/useAuth";
 import { SubscriptionProvider, useSubscription } from "@/hooks/useSubscription";
 import { TrialExpiredScreen } from "@/components/subscription/TrialExpiredScreen";
+import { ContactAdminScreen } from "@/components/subscription/ContactAdminScreen";
 import { RequireFeature } from "@/components/subscription/RequireFeature";
 import Index from "./pages/Index";
 import Login from "./pages/Login";
@@ -24,6 +25,7 @@ import Administration from "./pages/Administration";
 import SuperAdmin from "./pages/SuperAdmin";
 import Settings from "./pages/Settings";
 import Billing from "./pages/Billing";
+import Privacy from "./pages/Privacy";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -47,10 +49,9 @@ function ProtectedRoute({ children }: { children: React.ReactNode }) {
 }
 
 function SubscriptionGate({ children }: { children: React.ReactNode }) {
-  const { isBlocked, isLoading } = useSubscription();
+  const { isBlocked, needsActivation, isLoading } = useSubscription();
   const { isSuperAdmin } = useAuth();
 
-  // SuperAdmin nunca é bloqueado
   if (isSuperAdmin) {
     return <>{children}</>;
   }
@@ -61,6 +62,10 @@ function SubscriptionGate({ children }: { children: React.ReactNode }) {
         <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
       </div>
     );
+  }
+
+  if (needsActivation) {
+    return <ContactAdminScreen />;
   }
 
   if (isBlocked) {
@@ -74,6 +79,7 @@ function AppRoutes() {
   return (
     <Routes>
       <Route path="/login" element={<Login />} />
+      <Route path="/privacidade" element={<Privacy />} />
       <Route path="/forgot-password" element={<ForgotPassword />} />
       <Route path="/reset-password" element={<ResetPassword />} />
       
