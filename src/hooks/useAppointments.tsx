@@ -18,6 +18,7 @@ export interface AppointmentData {
   notes: string | null;
   seller_id: string | null;
   lead_source: string | null;
+  referral_name?: string | null;
   booking_fee?: number | null;
   booking_fee_payment_method?: string | null;
   created_at: string;

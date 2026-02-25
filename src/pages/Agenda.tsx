@@ -43,7 +43,7 @@ export default function Agenda() {
   const { appointments: rawAppointments, isLoading: isLoadingAppointments } = useAppointments();
   const { activeProfessionals, isLoading: isLoadingProfessionals } = useProfessionals();
   const { createAppointment, updateAppointment } = useAppointmentMutations();
-  const { createTransaction } = useTransactionMutations();
+  const { createTransaction, syncBookingFeePaymentMethod } = useTransactionMutations();
   const { createCommission } = useCommissionMutations();
   const { rules: commissionRules } = useCommissionRules();
 
@@ -76,6 +76,7 @@ export default function Agenda() {
       },
       sellerId: apt.seller_id,
       leadSource: apt.lead_source,
+      referralName: apt.referral_name ?? undefined,
       bookingFee: apt.booking_fee ?? undefined,
       bookingFeePaymentMethod: apt.booking_fee_payment_method ?? undefined,
     }));
@@ -306,9 +307,21 @@ export default function Agenda() {
         notes: data.notes,
         seller_id: data.sellerId || null,
         lead_source: data.leadSource || null,
+        referral_name: data.referralName ?? null,
         booking_fee: data.bookingFee ?? null,
         booking_fee_payment_method: data.bookingFeePaymentMethod ?? null,
       });
+      // Sincronizar forma de pagamento da taxa no financeiro (se já existe transação de no-show)
+      if ((data.bookingFee ?? 0) > 0 && data.bookingFeePaymentMethod) {
+        try {
+          await syncBookingFeePaymentMethod.mutateAsync({
+            appointmentId: data.id,
+            paymentMethod: data.bookingFeePaymentMethod,
+          });
+        } catch {
+          // Silencioso: transação pode não existir ainda (paciente não faltou)
+        }
+      }
     } else {
       // Create new
       await createAppointment.mutateAsync({
@@ -323,6 +336,7 @@ export default function Agenda() {
         notes: data.notes,
         seller_id: data.sellerId || null,
         lead_source: data.leadSource || null,
+        referral_name: data.referralName ?? null,
         booking_fee: data.bookingFee ?? null,
         booking_fee_payment_method: data.bookingFeePaymentMethod ?? null,
       });

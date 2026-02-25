@@ -35,6 +35,8 @@ export interface AgendaAppointment {
   sellerId?: string;
   sellerName?: string;
   leadSource?: LeadSource;
+  /** Nome de quem indicou (quando leadSource = Indicação). Usado em bonificações. */
+  referralName?: string | null;
   /** Taxa de agendamento (ex: R$50). Se faltar/desistir, entra no caixa. */
   bookingFee?: number | null;
   /** Forma de pagamento da taxa (dinheiro, PIX, cartão). */

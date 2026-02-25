@@ -157,10 +157,10 @@ export function useFinancialSummary() {
           if (isIncomeRefunded) {
             totalRefund += amount;
             switch (t.payment_method) {
-              case 'cash': totalCash -= amount; break;
-              case 'credit': totalCredit -= amount; break;
-              case 'debit': totalDebit -= amount; break;
-              case 'pix': totalPix -= amount; break;
+              case 'cash': totalCash = Math.max(0, totalCash - amount); break;
+              case 'credit': totalCredit = Math.max(0, totalCredit - amount); break;
+              case 'debit': totalDebit = Math.max(0, totalDebit - amount); break;
+              case 'pix': totalPix = Math.max(0, totalPix - amount); break;
             }
           } else {
             totalIncome += amount;
@@ -178,7 +178,7 @@ export function useFinancialSummary() {
             totalExpense += amount;
           }
           if (t.payment_method === 'cash') {
-            totalCash -= amount;
+            totalCash = Math.max(0, totalCash - amount);
           }
         }
       });
@@ -583,7 +583,41 @@ export function useTransactionMutations() {
     },
   });
 
-  return { createTransaction, updateTransaction, deleteTransaction, refundTransaction };
+  const syncBookingFeePaymentMethod = useMutation({
+    mutationFn: async ({ appointmentId, paymentMethod }: { appointmentId: string; paymentMethod: string }) => {
+      if (!clinicId) throw new Error('Clínica não encontrada');
+
+      const { data: tx, error: findErr } = await supabase
+        .from('financial_transactions')
+        .select('id, payment_method')
+        .eq('clinic_id', clinicId)
+        .eq('reference_type', 'appointment')
+        .eq('reference_id', appointmentId)
+        .eq('category', 'Taxa de agendamento')
+        .is('deleted_at', null)
+        .maybeSingle();
+
+      if (findErr) throw findErr;
+      if (!tx) return null;
+
+      const { error: updateErr } = await supabase
+        .from('financial_transactions')
+        .update({ payment_method: paymentMethod, updated_at: new Date().toISOString() })
+        .eq('id', tx.id);
+
+      if (updateErr) throw updateErr;
+      return tx.id;
+    },
+    onSuccess: (id) => {
+      if (id) {
+        queryClient.invalidateQueries({ queryKey: ['transactions'] });
+        queryClient.invalidateQueries({ queryKey: ['financial-summary'] });
+        queryClient.invalidateQueries({ queryKey: ['dashboard-stats'] });
+      }
+    },
+  });
+
+  return { createTransaction, updateTransaction, deleteTransaction, refundTransaction, syncBookingFeePaymentMethod };
 }
 
 /** Normaliza data para YYYY-MM-DD (Supabase pode retornar string ISO ou Date). */
