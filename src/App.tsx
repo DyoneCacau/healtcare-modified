@@ -1,3 +1,4 @@
+import React from "react";
 import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
@@ -8,6 +9,8 @@ import { SubscriptionProvider, useSubscription } from "@/hooks/useSubscription";
 import { TrialExpiredScreen } from "@/components/subscription/TrialExpiredScreen";
 import { ContactAdminScreen } from "@/components/subscription/ContactAdminScreen";
 import { RequireFeature } from "@/components/subscription/RequireFeature";
+import { OnboardingScreen } from "@/components/onboarding/OnboardingScreen";
+import { useOnboarding } from "@/hooks/useOnboarding";
 import Index from "./pages/Index";
 import Login from "./pages/Login";
 import ForgotPassword from "./pages/ForgotPassword";
@@ -70,6 +73,32 @@ function SubscriptionGate({ children }: { children: React.ReactNode }) {
 
   if (isBlocked) {
     return <TrialExpiredScreen />;
+  }
+
+  return <>{children}</>;
+  // Onboarding desativado temporariamente - reative trocando por: <OnboardingGate>{children}</OnboardingGate>
+}
+
+function OnboardingGate({ children }: { children: React.ReactNode }) {
+  const { hasCompletedOnboarding, isLoading } = useOnboarding();
+
+  // Timeout de segurança: se carregar mais de 5s, deixa o usuário entrar (evita tela branca)
+  const [timedOut, setTimedOut] = React.useState(false);
+  React.useEffect(() => {
+    const t = setTimeout(() => setTimedOut(true), 5000);
+    return () => clearTimeout(t);
+  }, []);
+
+  if (isLoading && !timedOut) {
+    return (
+      <div className="flex min-h-screen items-center justify-center">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+      </div>
+    );
+  }
+
+  if (!hasCompletedOnboarding && !timedOut) {
+    return <OnboardingScreen />;
   }
 
   return <>{children}</>;

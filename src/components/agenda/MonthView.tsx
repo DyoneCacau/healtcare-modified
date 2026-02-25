@@ -24,6 +24,7 @@ const statusColors = {
   return: 'bg-blue-500',
   completed: 'bg-muted-foreground',
   cancelled: 'bg-destructive',
+  no_show: 'bg-orange-500',
 };
 
 export function MonthView({ date, appointments, onDayClick }: MonthViewProps) {
@@ -113,7 +114,9 @@ export function MonthView({ date, appointments, onDayClick }: MonthViewProps) {
                           'flex items-center gap-1 rounded px-1 py-0.5 text-xs truncate',
                           apt.status === 'confirmed' && 'bg-emerald-100 text-emerald-700',
                           apt.status === 'pending' && 'bg-amber-100 text-amber-700',
-                          apt.status === 'return' && 'bg-blue-100 text-blue-700'
+                          apt.status === 'return' && 'bg-blue-100 text-blue-700',
+                          apt.status === 'completed' && 'bg-muted text-muted-foreground',
+                          apt.status === 'no_show' && 'bg-orange-100 text-orange-700'
                         )}
                       >
                         <span className={cn('h-1.5 w-1.5 rounded-full flex-shrink-0', statusColors[apt.status])} />

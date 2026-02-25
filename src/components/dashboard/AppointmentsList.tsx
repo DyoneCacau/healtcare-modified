@@ -30,6 +30,11 @@ const statusStyles = {
     text: "text-destructive",
     label: "Cancelado",
   },
+  no_show: {
+    bg: "bg-orange-500/10",
+    text: "text-orange-600",
+    label: "Faltou",
+  },
 };
 
 export function AppointmentsList() {
@@ -57,9 +62,9 @@ export function AppointmentsList() {
     );
   }
 
-  // Filter out cancelled and show only active appointments
+  // Filter out cancelled, completed and no_show - show only active appointments
   const activeAppointments = appointments.filter(
-    apt => apt.status !== 'cancelled' && apt.status !== 'completed'
+    apt => apt.status !== 'cancelled' && apt.status !== 'completed' && apt.status !== 'no_show'
   ).slice(0, 5);
 
   return (

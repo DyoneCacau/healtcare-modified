@@ -27,7 +27,7 @@ export interface AgendaAppointment {
   patientPhone?: string;
   professional: Professional;
   procedure: string;
-  status: 'confirmed' | 'pending' | 'return' | 'completed' | 'cancelled';
+  status: 'confirmed' | 'pending' | 'return' | 'completed' | 'cancelled' | 'no_show';
   paymentStatus: 'paid' | 'pending' | 'partial' | 'refunded';
   notes?: string;
   clinic: Clinic;
@@ -35,6 +35,10 @@ export interface AgendaAppointment {
   sellerId?: string;
   sellerName?: string;
   leadSource?: LeadSource;
+  /** Taxa de agendamento (ex: R$50). Se faltar/desistir, entra no caixa. */
+  bookingFee?: number | null;
+  /** Forma de pagamento da taxa (dinheiro, PIX, cartão). */
+  bookingFeePaymentMethod?: 'cash' | 'pix' | 'credit' | 'debit' | null;
 }
 
 export type AgendaView = 'day' | 'week' | 'month';

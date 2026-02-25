@@ -4,6 +4,7 @@
  */
 export const PROCEDURE_OPTIONS = [
   'Consulta',
+  'Retorno',
   'Limpeza',
   'Clareamento',
   'Restauração',

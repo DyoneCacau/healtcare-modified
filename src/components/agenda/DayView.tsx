@@ -10,6 +10,7 @@ interface DayViewProps {
   onCancel: (appointment: AgendaAppointment) => void;
   onConfirm: (appointment: AgendaAppointment) => void;
   onComplete: (appointment: AgendaAppointment) => void;
+  onMarkNoShow?: (appointment: AgendaAppointment) => void;
   onWhatsApp: (appointment: AgendaAppointment) => void;
 }
 
@@ -28,6 +29,7 @@ export function DayView({
   onCancel,
   onConfirm,
   onComplete,
+  onMarkNoShow,
   onWhatsApp,
 }: DayViewProps) {
   const sortedSlots = (() => {
@@ -81,6 +83,7 @@ export function DayView({
                         onCancel={onCancel}
                         onConfirm={onConfirm}
                         onComplete={onComplete}
+                        onMarkNoShow={onMarkNoShow}
                         onWhatsApp={onWhatsApp}
                       />
                     ))}

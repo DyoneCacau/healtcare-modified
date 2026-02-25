@@ -1,4 +1,4 @@
-import { Clock, User, MapPin, MoreVertical, MessageSquare, Edit, Trash2, Check, X, CheckCircle } from 'lucide-react';
+import { Clock, User, MapPin, MoreVertical, MessageSquare, Edit, Trash2, Check, X, CheckCircle, UserX } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import {
   DropdownMenu,
@@ -16,6 +16,7 @@ interface AppointmentCardProps {
   onCancel: (appointment: AgendaAppointment) => void;
   onConfirm: (appointment: AgendaAppointment) => void;
   onComplete?: (appointment: AgendaAppointment) => void;
+  onMarkNoShow?: (appointment: AgendaAppointment) => void;
   onWhatsApp: (appointment: AgendaAppointment) => void;
   compact?: boolean;
 }
@@ -56,6 +57,13 @@ const statusConfig = {
     text: 'text-destructive',
     dot: 'bg-destructive',
   },
+  no_show: {
+    label: 'Faltou',
+    bg: 'bg-orange-500/10',
+    border: 'border-l-orange-500',
+    text: 'text-orange-700',
+    dot: 'bg-orange-500',
+  },
 };
 
 const paymentConfig: Record<string, { label: string; class: string }> = {
@@ -71,6 +79,7 @@ export function AppointmentCard({
   onCancel,
   onConfirm,
   onComplete,
+  onMarkNoShow,
   onWhatsApp,
   compact = false,
 }: AppointmentCardProps) {
@@ -168,6 +177,15 @@ export function AppointmentCard({
               >
                 <CheckCircle className="mr-2 h-4 w-4" />
                 Finalizar Atendimento
+              </DropdownMenuItem>
+            )}
+            {(appointment.status === 'confirmed' || appointment.status === 'pending' || appointment.status === 'return') && onMarkNoShow && (
+              <DropdownMenuItem 
+                onClick={() => onMarkNoShow(appointment)}
+                className="text-orange-600 focus:text-orange-600"
+              >
+                <UserX className="mr-2 h-4 w-4" />
+                Marcar como faltou
               </DropdownMenuItem>
             )}
             <DropdownMenuItem onClick={() => onEdit(appointment)}>
