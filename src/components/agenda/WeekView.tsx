@@ -11,6 +11,7 @@ interface WeekViewProps {
   onCancel: (appointment: AgendaAppointment) => void;
   onConfirm: (appointment: AgendaAppointment) => void;
   onComplete: (appointment: AgendaAppointment) => void;
+  onMarkNoShow?: (appointment: AgendaAppointment) => void;
   onWhatsApp: (appointment: AgendaAppointment) => void;
 }
 
@@ -26,6 +27,7 @@ export function WeekView({
   onCancel,
   onConfirm,
   onComplete,
+  onMarkNoShow,
   onWhatsApp,
 }: WeekViewProps) {
   const weekStart = startOfWeek(date, { weekStartsOn: 1 });
@@ -114,6 +116,7 @@ export function WeekView({
                       onCancel={onCancel}
                       onConfirm={onConfirm}
                       onComplete={onComplete}
+                      onMarkNoShow={onMarkNoShow}
                       onWhatsApp={onWhatsApp}
                       compact
                     />

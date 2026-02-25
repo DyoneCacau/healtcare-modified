@@ -163,6 +163,7 @@ export function AgendaFilters({
             <SelectItem value="pending">Pendente</SelectItem>
             <SelectItem value="return">Retorno</SelectItem>
             <SelectItem value="completed">Finalizado</SelectItem>
+            <SelectItem value="no_show">Faltou</SelectItem>
           </SelectContent>
         </Select>
       </div>

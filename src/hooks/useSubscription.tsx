@@ -1,7 +1,7 @@
 import { createContext, useContext, useEffect, useState, ReactNode } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from './useAuth';
-import { isPast } from 'date-fns';
+import { useSelectedClinicId } from './useSelectedClinicId';
 
 interface Plan {
   id: string;
@@ -22,6 +22,7 @@ interface SubscriptionContextType {
   isLoading: boolean;
   isTrialExpired: boolean;
   isBlocked: boolean;
+  needsActivation: boolean; // clínica sem assinatura - contactar admin
   allowedFeatures: string[];
   hasFeature: (feature: string) => boolean;
   refreshSubscription: () => Promise<void>;
@@ -74,7 +75,9 @@ export type Feature = typeof ALL_FEATURES[number];
 
 export function SubscriptionProvider({ children }: { children: ReactNode }) {
   const { user, isSuperAdmin } = useAuth();
+  const { selectedClinicId } = useSelectedClinicId();
   const [subscription, setSubscription] = useState<Subscription | null>(null);
+  const [hasClinic, setHasClinic] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
 
   const fetchSubscription = async () => {
@@ -84,19 +87,38 @@ export function SubscriptionProvider({ children }: { children: ReactNode }) {
     }
 
     try {
-      // Buscar a clínica do usuário
-      const { data: clinicUser } = await supabase
-        .from('clinic_users')
-        .select('clinic_id')
-        .eq('user_id', user.id)
-        .maybeSingle();
+      let clinicId: string | null = null;
 
-      if (!clinicUser) {
+      if (selectedClinicId) {
+        const { data: cu } = await supabase
+          .from('clinic_users')
+          .select('clinic_id')
+          .eq('user_id', user.id)
+          .eq('clinic_id', selectedClinicId)
+          .maybeSingle();
+        clinicId = cu?.clinic_id ?? null;
+      }
+
+      if (!clinicId) {
+        const { data: clinicUser } = await supabase
+          .from('clinic_users')
+          .select('clinic_id')
+          .eq('user_id', user.id)
+          .order('is_owner', { ascending: false })
+          .limit(1)
+          .maybeSingle();
+        clinicId = clinicUser?.clinic_id ?? null;
+      }
+
+      if (!clinicId) {
+        setHasClinic(false);
+        setSubscription(null);
         setIsLoading(false);
         return;
       }
 
-      // Buscar assinatura da clínica
+      setHasClinic(true);
+
       const { data: subData } = await supabase
         .from('subscriptions')
         .select(`
@@ -110,7 +132,7 @@ export function SubscriptionProvider({ children }: { children: ReactNode }) {
             features
           )
         `)
-        .eq('clinic_id', clinicUser.clinic_id)
+        .eq('clinic_id', clinicId)
         .maybeSingle();
 
       if (subData) {
@@ -124,6 +146,8 @@ export function SubscriptionProvider({ children }: { children: ReactNode }) {
             features: Array.isArray(plan.features) ? plan.features : JSON.parse(plan.features as unknown as string || '[]')
           } : null,
         });
+      } else {
+        setSubscription(null);
       }
     } catch (error) {
       console.error('Error fetching subscription:', error);
@@ -138,7 +162,7 @@ export function SubscriptionProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     fetchSubscription();
-  }, [user, isSuperAdmin]);
+  }, [user, isSuperAdmin, selectedClinicId]);
 
   // Real-time listener: auto-refresh when subscription or plan changes
   useEffect(() => {
@@ -164,7 +188,10 @@ export function SubscriptionProvider({ children }: { children: ReactNode }) {
   // Trial não é mais usado no modelo de vendas diretas
   const isTrialExpired = false;
 
-  // Verificar se acesso está bloqueado (removido trial)
+  // Clínica sem assinatura: usuário vinculado a clínica mas sem registro em subscriptions
+  const needsActivation = !isSuperAdmin && hasClinic && subscription === null;
+
+  // Bloqueado: assinatura suspensa, bloqueada ou cancelada
   const isBlocked = 
     !isSuperAdmin && 
     subscription !== null && 
@@ -201,6 +228,7 @@ export function SubscriptionProvider({ children }: { children: ReactNode }) {
         isLoading,
         isTrialExpired,
         isBlocked,
+        needsActivation,
         allowedFeatures,
         hasFeature,
         refreshSubscription,

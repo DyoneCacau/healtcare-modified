@@ -18,6 +18,8 @@ export interface AppointmentData {
   notes: string | null;
   seller_id: string | null;
   lead_source: string | null;
+  booking_fee?: number | null;
+  booking_fee_payment_method?: string | null;
   created_at: string;
   updated_at: string;
   // Joined data
@@ -121,8 +123,9 @@ export function useAppointmentMutations() {
       }
       return appointmentPayload;
     },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['appointments'] });
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ['appointments'] });
+      await queryClient.refetchQueries({ queryKey: ['appointments'] });
       queryClient.invalidateQueries({ queryKey: ['dashboard-stats'] });
       toast.success('Agendamento criado com sucesso!');
     },

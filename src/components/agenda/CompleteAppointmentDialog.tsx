@@ -13,6 +13,7 @@ import {
   ShieldAlert,
   Users,
   TrendingUp,
+  CalendarPlus,
 } from 'lucide-react';
 import {
   Dialog,
@@ -63,7 +64,8 @@ interface CompleteAppointmentDialogProps {
     serviceValue: number,
     paymentMethod: PaymentMethod,
     quantity: number,
-    commissionBreakdown: CommissionBreakdownItem[]
+    commissionBreakdown: CommissionBreakdownItem[],
+    scheduleReturn?: boolean
   ) => void;
   commissionRules?: CommissionRule[];
 }
@@ -85,11 +87,13 @@ export function CompleteAppointmentDialog({
   const [commissionBreakdown, setCommissionBreakdown] = useState<{rule: CommissionRule; amount: number}[]>([]);
   const [validation, setValidation] = useState<ValidationResult>({ isValid: true });
   const [proceedWithoutRule, setProceedWithoutRule] = useState(false);
+  const [scheduleReturn, setScheduleReturn] = useState(false);
 
   useEffect(() => {
     if (appointment) {
       // Reset states
       setProceedWithoutRule(false);
+      setScheduleReturn(false);
       setQuantity(1);
       
       // Validate appointment completion
@@ -156,7 +160,8 @@ export function CompleteAppointmentDialog({
       serviceValue,
       paymentMethod,
       quantity,
-      commissionBreakdown
+      commissionBreakdown,
+      scheduleReturn
     );
     onOpenChange(false);
   };
@@ -422,6 +427,22 @@ export function CompleteAppointmentDialog({
                 </CardContent>
               </Card>
             )}
+          </div>
+
+          {/* Opção de agendar retorno */}
+          <div className="flex items-center space-x-2 rounded-lg border border-border/50 bg-muted/30 p-3">
+            <Checkbox
+              id="scheduleReturn"
+              checked={scheduleReturn}
+              onCheckedChange={(checked) => setScheduleReturn(checked === true)}
+            />
+            <label
+              htmlFor="scheduleReturn"
+              className="flex items-center gap-2 text-sm font-medium leading-none cursor-pointer"
+            >
+              <CalendarPlus className="h-4 w-4 text-primary" />
+              Agendar retorno após finalizar
+            </label>
           </div>
         </div>
 

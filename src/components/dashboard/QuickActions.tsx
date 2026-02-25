@@ -1,7 +1,6 @@
 import { useState } from "react";
-import { CalendarPlus, UserPlus, Receipt, FileText } from "lucide-react";
+import { CalendarPlus, UserPlus, Receipt } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { useNavigate } from "react-router-dom";
 import { PatientFormDialog } from "@/components/patients/PatientFormDialog";
 import { AppointmentFormDialog } from "@/components/agenda/AppointmentFormDialog";
 import { PaymentForm } from "@/components/financial/PaymentForm";
@@ -12,7 +11,6 @@ import { useProfessionals } from "@/hooks/useProfessionals";
 import { useClinic } from "@/hooks/useClinic";
 
 export function QuickActions() {
-  const navigate = useNavigate();
   const [patientDialogOpen, setPatientDialogOpen] = useState(false);
   const [appointmentDialogOpen, setAppointmentDialogOpen] = useState(false);
   const [paymentDialogOpen, setPaymentDialogOpen] = useState(false);
@@ -52,6 +50,7 @@ export function QuickActions() {
       notes: appointmentData.notes || null,
       seller_id: appointmentData.sellerId || null,
       lead_source: appointmentData.leadSource || null,
+      booking_fee: appointmentData.bookingFee ?? null,
     });
     setAppointmentDialogOpen(false);
   };
@@ -68,10 +67,6 @@ export function QuickActions() {
       voucher_discount: transaction.voucherDiscount || null,
       payment_split: transaction.paymentSplit || null,
     });
-  };
-
-  const handleGenerateReport = () => {
-    navigate("/relatorios");
   };
 
   const actions = [
@@ -93,19 +88,17 @@ export function QuickActions() {
       description: "Registrar movimento",
       onClick: () => setPaymentDialogOpen(true),
     },
-    {
-      icon: FileText,
-      label: "Gerar Relatório",
-      description: "Exportar dados",
-      onClick: handleGenerateReport,
-    },
   ];
 
   return (
     <>
-      <div className="rounded-xl border border-border bg-card p-6 shadow-card">
-        <h3 className="mb-4 font-semibold text-foreground">Ações Rápidas</h3>
-        <div className="grid grid-cols-2 gap-3">
+      <div className="rounded-xl border border-border bg-card shadow-card">
+        <div className="border-b border-border p-4">
+          <h3 className="font-semibold text-foreground">Ações Rápidas</h3>
+          <p className="text-sm text-muted-foreground">Atalhos para tarefas comuns</p>
+        </div>
+        <div className="p-4">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
           {actions.map((action) => {
             const Icon = action.icon;
             return (
@@ -127,6 +120,7 @@ export function QuickActions() {
               </Button>
             );
           })}
+          </div>
         </div>
       </div>
 

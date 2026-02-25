@@ -1,4 +1,5 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { format } from 'date-fns';
 import { Plus } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -10,6 +11,7 @@ import { WeekView } from '@/components/agenda/WeekView';
 import { MonthView } from '@/components/agenda/MonthView';
 import { AppointmentFormDialog } from '@/components/agenda/AppointmentFormDialog';
 import { CompleteAppointmentDialog } from '@/components/agenda/CompleteAppointmentDialog';
+import { NoShowFeeDialog } from '@/components/agenda/NoShowFeeDialog';
 import { AgendaAppointment, AgendaView, Professional } from '@/types/agenda';
 import { PaymentMethod } from '@/types/financial';
 import { useAppointments, useAppointmentMutations } from '@/hooks/useAppointments';
@@ -22,6 +24,7 @@ import { toast } from 'sonner';
 import { Skeleton } from '@/components/ui/skeleton';
 
 export default function Agenda() {
+  const [searchParams, setSearchParams] = useSearchParams();
   const [selectedDate, setSelectedDate] = useState(new Date());
   const [selectedProfessional, setSelectedProfessional] = useState('all');
   const [selectedClinic, setSelectedClinic] = useState('all');
@@ -29,8 +32,12 @@ export default function Agenda() {
   const [view, setView] = useState<AgendaView>('day');
   const [formDialogOpen, setFormDialogOpen] = useState(false);
   const [editingAppointment, setEditingAppointment] = useState<AgendaAppointment | null>(null);
+  const [prefillPatientId, setPrefillPatientId] = useState<string | null>(null);
+  const [prefillProcedure, setPrefillProcedure] = useState<string>('');
   const [completeDialogOpen, setCompleteDialogOpen] = useState(false);
   const [completingAppointment, setCompletingAppointment] = useState<AgendaAppointment | null>(null);
+  const [noShowFeeDialogOpen, setNoShowFeeDialogOpen] = useState(false);
+  const [noShowAppointment, setNoShowAppointment] = useState<AgendaAppointment | null>(null);
 
   const { clinic } = useClinic();
   const { appointments: rawAppointments, isLoading: isLoadingAppointments } = useAppointments();
@@ -69,6 +76,8 @@ export default function Agenda() {
       },
       sellerId: apt.seller_id,
       leadSource: apt.lead_source,
+      bookingFee: apt.booking_fee ?? undefined,
+      bookingFeePaymentMethod: apt.booking_fee_payment_method ?? undefined,
     }));
   }, [rawAppointments, clinic]);
 
@@ -99,6 +108,8 @@ export default function Agenda() {
       if (apt.status === 'cancelled') return false;
       if (selectedProfessional !== 'all' && apt.professional.id !== selectedProfessional) return false;
       if (selectedClinic !== 'all' && apt.clinic.id !== selectedClinic) return false;
+      // Atendimentos finalizados e faltas sempre visíveis na agenda (registro do dia)
+      if (apt.status === 'completed' || apt.status === 'no_show') return true;
       if (selectedStatus !== 'all' && apt.status !== selectedStatus) return false;
       return true;
     });
@@ -109,8 +120,24 @@ export default function Agenda() {
     return filteredAppointments.filter((apt) => apt.date === dateStr);
   }, [filteredAppointments, selectedDate]);
 
+  // Abrir formulário com paciente/procedimento pré-preenchidos (vindo do Alerta de Retorno)
+  useEffect(() => {
+    const patientId = searchParams.get('patientId');
+    const procedure = searchParams.get('procedure');
+    const fromAlert = searchParams.get('fromAlert');
+    if (fromAlert && patientId) {
+      setPrefillPatientId(patientId);
+      setPrefillProcedure(procedure || 'Retorno');
+      setFormDialogOpen(true);
+      setEditingAppointment(null);
+      setSearchParams({}, { replace: true });
+    }
+  }, [searchParams, setSearchParams]);
+
   const handleNewAppointment = () => {
     setEditingAppointment(null);
+    setPrefillPatientId(null);
+    setPrefillProcedure('');
     setFormDialogOpen(true);
   };
 
@@ -125,6 +152,43 @@ export default function Agenda() {
       status: 'cancelled',
     });
     toast.success('Agendamento cancelado');
+  };
+
+  const handleMarkNoShow = async (appointment: AgendaAppointment, paymentMethod?: PaymentMethod) => {
+    await updateAppointment.mutateAsync({
+      id: appointment.id,
+      status: 'no_show',
+    });
+    const fee = appointment.bookingFee ?? 0;
+    if (fee > 0) {
+      await createTransaction.mutateAsync({
+        type: 'income',
+        amount: fee,
+        description: `Taxa de agendamento - ${appointment.patientName} (faltou)`,
+        category: 'Taxa de agendamento',
+        payment_method: paymentMethod ?? 'cash',
+        reference_type: 'appointment',
+        reference_id: appointment.id,
+      });
+      const methodLabel = { cash: 'Dinheiro', pix: 'PIX', credit: 'Cartão Crédito', debit: 'Cartão Débito' }[paymentMethod ?? 'cash'];
+      toast.success(`Marcado como faltou. Taxa de R$ ${fee.toFixed(2)} registrada no caixa (${methodLabel}).`);
+    } else {
+      toast.success('Marcado como faltou');
+    }
+  };
+
+  const handleMarkNoShowClick = (appointment: AgendaAppointment) => {
+    const fee = appointment.bookingFee ?? 0;
+    const paymentMethod = appointment.bookingFeePaymentMethod;
+    // Se já tem forma de pagamento definida no agendamento, usa direto; senão abre o diálogo
+    if (fee > 0 && (paymentMethod === 'cash' || paymentMethod === 'pix' || paymentMethod === 'credit' || paymentMethod === 'debit')) {
+      handleMarkNoShow(appointment, paymentMethod);
+    } else if (fee > 0) {
+      setNoShowAppointment(appointment);
+      setNoShowFeeDialogOpen(true);
+    } else {
+      handleMarkNoShow(appointment);
+    }
   };
 
   const handleConfirm = async (appointment: AgendaAppointment) => {
@@ -145,7 +209,8 @@ export default function Agenda() {
     serviceValue: number,
     paymentMethod: PaymentMethod,
     quantity: number,
-    commissionBreakdown: CommissionBreakdownItem[]
+    commissionBreakdown: CommissionBreakdownItem[],
+    scheduleReturn?: boolean
   ) => {
     // Update appointment status
     await updateAppointment.mutateAsync({
@@ -203,6 +268,14 @@ export default function Agenda() {
     }
 
     toast.success(`Atendimento finalizado! Valor: R$ ${serviceValue.toFixed(2)}`);
+
+    if (scheduleReturn) {
+      setCompleteDialogOpen(false);
+      setCompletingAppointment(null);
+      setPrefillPatientId(appointment.patientId);
+      setPrefillProcedure('Retorno');
+      setFormDialogOpen(true);
+    }
   };
 
   const handleWhatsApp = (appointment: AgendaAppointment) => {
@@ -233,6 +306,8 @@ export default function Agenda() {
         notes: data.notes,
         seller_id: data.sellerId || null,
         lead_source: data.leadSource || null,
+        booking_fee: data.bookingFee ?? null,
+        booking_fee_payment_method: data.bookingFeePaymentMethod ?? null,
       });
     } else {
       // Create new
@@ -248,6 +323,8 @@ export default function Agenda() {
         notes: data.notes,
         seller_id: data.sellerId || null,
         lead_source: data.leadSource || null,
+        booking_fee: data.bookingFee ?? null,
+        booking_fee_payment_method: data.bookingFeePaymentMethod ?? null,
       });
     }
   };
@@ -323,6 +400,7 @@ export default function Agenda() {
             onCancel={handleCancel}
             onConfirm={handleConfirm}
             onComplete={handleComplete}
+            onMarkNoShow={handleMarkNoShowClick}
             onWhatsApp={handleWhatsApp}
           />
         )}
@@ -335,6 +413,7 @@ export default function Agenda() {
             onCancel={handleCancel}
             onConfirm={handleConfirm}
             onComplete={handleComplete}
+            onMarkNoShow={handleMarkNoShowClick}
             onWhatsApp={handleWhatsApp}
           />
         )}
@@ -351,12 +430,22 @@ export default function Agenda() {
       {/* Form Dialog */}
       <AppointmentFormDialog
         open={formDialogOpen}
-        onOpenChange={setFormDialogOpen}
+        onOpenChange={(open) => {
+          setFormDialogOpen(open);
+          if (!open) {
+            setEditingAppointment(null);
+            setPrefillPatientId(null);
+            setPrefillProcedure('');
+          }
+        }}
         appointment={editingAppointment}
         professionals={professionals}
         clinics={clinics}
         existingAppointments={appointments}
         onSave={handleSave}
+        prefillPatientId={prefillPatientId}
+        prefillProcedure={prefillProcedure}
+        initialDate={selectedDate}
       />
 
       {/* Complete Appointment Dialog */}
@@ -366,6 +455,18 @@ export default function Agenda() {
         appointment={completingAppointment}
         onComplete={handleCompleteConfirm}
         commissionRules={commissionRules}
+      />
+
+      {/* No Show Fee - Forma de pagamento da taxa (Dinheiro, PIX, Cartão) */}
+      <NoShowFeeDialog
+        key={noShowAppointment?.id ?? 'closed'}
+        open={noShowFeeDialogOpen}
+        onOpenChange={(open) => {
+          setNoShowFeeDialogOpen(open);
+          if (!open) setNoShowAppointment(null);
+        }}
+        appointment={noShowAppointment}
+        onConfirm={handleMarkNoShow}
       />
     </MainLayout>
   );

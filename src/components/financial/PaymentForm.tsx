@@ -37,6 +37,7 @@ const incomeCategories = [
   'Procedimento',
   'Retorno',
   'Exame',
+  'Taxa de agendamento',
   'Outros',
 ];
 

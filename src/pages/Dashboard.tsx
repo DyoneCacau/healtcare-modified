@@ -4,6 +4,7 @@ import { ptBR } from "date-fns/locale";
 import { Header } from "@/components/layout/Header";
 import { StatCard } from "@/components/dashboard/StatCard";
 import { AppointmentsList } from "@/components/dashboard/AppointmentsList";
+import { ReturnAlertsList } from "@/components/dashboard/ReturnAlertsList";
 import { RevenueChart } from "@/components/dashboard/RevenueChart";
 import { QuickActions } from "@/components/dashboard/QuickActions";
 import { useDashboardStats } from "@/hooks/useDashboardStats";
@@ -101,9 +102,10 @@ export default function Dashboard() {
             <RevenueChart />
           </div>
 
-          {/* Quick Actions */}
-          <div>
+          {/* Quick Actions + Alertas de Retorno */}
+          <div className="space-y-6">
             <QuickActions />
+            <ReturnAlertsList />
           </div>
         </div>
 

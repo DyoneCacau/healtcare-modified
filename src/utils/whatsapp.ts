@@ -76,3 +76,22 @@ export const prepareWhatsAppMessage = (
     whatsappUrl,
   };
 };
+
+/** Mensagem para pedir retorno após consulta (alerta de retorno) */
+export const generateReturnMessage = (
+  patientName: string,
+  procedure: string,
+  clinicName: string,
+  clinicPhone?: string
+): string => {
+  const firstName = patientName.split(' ')[0] || patientName;
+  return `Olá, ${firstName}!
+
+Passando para lembrar que você realizou o procedimento *${procedure}* conosco.
+
+Gostaríamos de agendar seu retorno para acompanhamento. Qual o melhor dia e horário para você?
+
+${clinicName}${clinicPhone ? `\n📞 ${clinicPhone}` : ''}
+
+Aguardamos seu retorno!`;
+};
