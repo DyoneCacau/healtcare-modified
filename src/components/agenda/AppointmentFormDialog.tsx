@@ -38,7 +38,7 @@ import { AgendaAppointment, Professional, LeadSource, leadSourceLabels } from '@
 import { PaymentMethod } from '@/types/financial';
 import { Clinic } from '@/types/clinic';
 import { usePatients } from '@/hooks/usePatients';
-import { PROCEDURE_OPTIONS, isKnownProcedure } from '@/lib/procedures';
+import { PROCEDURE_OPTIONS } from '@/lib/procedures';
 import { toast } from 'sonner';
 
 interface AppointmentFormDialogProps {
@@ -81,6 +81,8 @@ export function AppointmentFormDialog({
   const [calendarOpen, setCalendarOpen] = useState(false);
   const [sellerId, setSellerId] = useState<string>('');
   const [leadSource, setLeadSource] = useState<LeadSource | ''>('');
+  const [referralName, setReferralName] = useState('');
+  const [customProcedure, setCustomProcedure] = useState('');
   const [bookingFee, setBookingFee] = useState<number | null>(null);
   const [bookingFeePaymentMethod, setBookingFeePaymentMethod] = useState<PaymentMethod | null>(null);
 
@@ -105,12 +107,14 @@ export function AppointmentFormDialog({
       setPatientId(appointment.patientId);
       setProfessionalId(appointment.professional.id);
       setClinicId(appointment.clinic.id);
-      setProcedure(appointment.procedure);
+      setProcedure(PROCEDURE_OPTIONS.includes(appointment.procedure as any) ? appointment.procedure : 'Outros');
       setStatus(appointment.status);
       setPaymentStatus(appointment.paymentStatus);
       setNotes(appointment.notes || '');
       setSellerId(appointment.sellerId || '');
       setLeadSource(appointment.leadSource || '');
+      setReferralName(appointment.referralName || '');
+      setCustomProcedure(PROCEDURE_OPTIONS.includes(appointment.procedure as any) ? '' : appointment.procedure);
       setBookingFee(appointment.bookingFee ?? null);
       setBookingFeePaymentMethod(appointment.bookingFeePaymentMethod ?? null);
     } else {
@@ -127,6 +131,8 @@ export function AppointmentFormDialog({
       setNotes('');
       setSellerId('');
       setLeadSource('');
+      setReferralName('');
+      setCustomProcedure('');
       setBookingFee(null);
       setBookingFeePaymentMethod(null);
     }
@@ -151,8 +157,13 @@ export function AppointmentFormDialog({
   };
 
   const handleSave = async () => {
+    const effectiveProcedure = procedure === 'Outros' && customProcedure.trim() ? customProcedure.trim() : procedure;
     if (!patientId || !professionalId || !clinicId || !procedure) {
       toast.error('Preencha todos os campos obrigatórios');
+      return;
+    }
+    if (procedure === 'Outros' && !customProcedure.trim()) {
+      toast.error('Informe o nome do procedimento quando selecionar "Outros"');
       return;
     }
 
@@ -179,7 +190,7 @@ export function AppointmentFormDialog({
         patientId,
         patientName: patient.name,
         professional,
-        procedure,
+        procedure: effectiveProcedure,
         status,
         paymentStatus,
         notes,
@@ -188,6 +199,7 @@ export function AppointmentFormDialog({
         clinic,
         sellerId: sellerId || undefined,
         leadSource: leadSource || undefined,
+        referralName: leadSource === 'referral' ? (referralName.trim() || undefined) : undefined,
       });
 
       // Fecha apenas se salvou com sucesso (evita toast "criado" + erro logo depois).
@@ -369,7 +381,7 @@ export function AppointmentFormDialog({
 
           <div className="grid gap-2">
             <Label htmlFor="procedure">Procedimento *</Label>
-            <Select value={procedure || ''} onValueChange={setProcedure}>
+            <Select value={procedure || ''} onValueChange={(v) => { setProcedure(v); if (v !== 'Outros') setCustomProcedure(''); }}>
               <SelectTrigger id="procedure">
                 <SelectValue placeholder="Selecione o procedimento" />
               </SelectTrigger>
@@ -379,11 +391,18 @@ export function AppointmentFormDialog({
                     {p}
                   </SelectItem>
                 ))}
-                {procedure && !isKnownProcedure(procedure) && (
+                {procedure && !PROCEDURE_OPTIONS.includes(procedure as any) && (
                   <SelectItem value={procedure}>{procedure} (atual)</SelectItem>
                 )}
               </SelectContent>
             </Select>
+            {procedure === 'Outros' && (
+              <Input
+                placeholder="Ex: Facetas superiores, Harmonização labial..."
+                value={customProcedure}
+                onChange={(e) => setCustomProcedure(e.target.value)}
+              />
+            )}
             <p className="text-xs text-muted-foreground">
               Use a mesma lista das regras de comissão para o cálculo bater ao finalizar.
             </p>
@@ -485,7 +504,7 @@ export function AppointmentFormDialog({
             <Label>Origem do Lead</Label>
             <Select 
               value={leadSource || 'none'} 
-              onValueChange={(v) => setLeadSource(v === 'none' ? '' : v as LeadSource)}
+              onValueChange={(v) => { setLeadSource(v === 'none' ? '' : v as LeadSource); if (v !== 'referral') setReferralName(''); }}
             >
               <SelectTrigger>
                 <SelectValue placeholder="Selecione (opcional)" />
@@ -499,6 +518,13 @@ export function AppointmentFormDialog({
                 ))}
               </SelectContent>
             </Select>
+            {leadSource === 'referral' && (
+              <Input
+                placeholder="Nome de quem indicou (para bonificações)"
+                value={referralName}
+                onChange={(e) => setReferralName(e.target.value)}
+              />
+            )}
           </div>
 
           <div className="grid gap-2">
