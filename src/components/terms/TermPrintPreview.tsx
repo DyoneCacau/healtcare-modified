@@ -20,6 +20,8 @@ interface TermPrintPreviewProps {
   branding: ClinicBranding;
   patient: Patient;
   clinicName: string;
+  clinicAddress?: string;
+  clinicPhone?: string;
 }
 
 export function TermPrintPreview({
@@ -29,6 +31,8 @@ export function TermPrintPreview({
   branding,
   patient,
   clinicName,
+  clinicAddress,
+  clinicPhone,
 }: TermPrintPreviewProps) {
   const printRef = useRef<HTMLDivElement>(null);
 
@@ -184,9 +188,6 @@ export function TermPrintPreview({
             >
               {clinicName}
             </h1>
-            {branding.headerText && (
-              <p className="text-sm text-muted-foreground">{branding.headerText}</p>
-            )}
           </div>
 
           {/* Date */}
@@ -229,9 +230,9 @@ export function TermPrintPreview({
           </div>
 
           {/* Footer */}
-          {branding.footerText && (
+          {(clinicAddress || clinicPhone) && (
             <div className="mt-12 pt-4 border-t text-center text-xs text-muted-foreground">
-              {branding.footerText}
+              {[clinicAddress, clinicPhone].filter(Boolean).join(' - ')}
             </div>
           )}
         </div>
