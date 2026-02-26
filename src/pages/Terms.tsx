@@ -4,20 +4,22 @@ import { TermsList } from '@/components/terms/TermsList';
 import { TermEditor } from '@/components/terms/TermEditor';
 import { TermPrintPreview } from '@/components/terms/TermPrintPreview';
 import { ClinicBrandingEditor } from '@/components/terms/ClinicBrandingEditor';
+import { DocumentsAndModelsTab } from '@/components/terms/DocumentsAndModelsTab';
 import { Button } from '@/components/ui/button';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useTerms, useTermMutations, useClinicBranding } from '@/hooks/useTerms';
 import { useClinic } from '@/hooks/useClinic';
 import { usePatients } from '@/hooks/usePatients';
 import { ConsentTerm, ClinicBranding } from '@/types/terms';
 import { Patient } from '@/types/patient';
-import { FileText, Plus, Building2 } from 'lucide-react';
+import { FileText, Plus, Building2, FileSignature, FileStack } from 'lucide-react';
 import { Skeleton } from '@/components/ui/skeleton';
 
 export default function Terms() {
   const { clinic, clinicId } = useClinic();
   const { terms, isLoading } = useTerms();
   const { createTerm, updateTerm, deleteTerm } = useTermMutations();
-  const { branding, updateBranding } = useClinicBranding();
+  const { branding, updateBranding, uploadLogo } = useClinicBranding();
   const { patients } = usePatients();
   
   const [editorOpen, setEditorOpen] = useState(false);
@@ -112,14 +114,33 @@ export default function Terms() {
           </div>
         </div>
 
-        <div className="grid gap-6 lg:grid-cols-3">
-          <div className="lg:col-span-2">
-            <TermsList terms={terms} onEdit={handleEditTerm} onPrint={handlePrintTerm} onDelete={handleDeleteTerm} />
-          </div>
-          <div>
-            <ClinicBrandingEditor branding={branding} onSave={handleSaveBranding} />
-          </div>
-        </div>
+        <Tabs defaultValue="termos" className="space-y-6">
+          <TabsList>
+            <TabsTrigger value="termos" className="gap-2">
+              <FileSignature className="h-4 w-4" />
+              Termos de Consentimento
+            </TabsTrigger>
+            <TabsTrigger value="modelos" className="gap-2">
+              <FileStack className="h-4 w-4" />
+              Modelos e Documentos
+            </TabsTrigger>
+          </TabsList>
+
+          <TabsContent value="termos" className="space-y-6">
+            <div className="grid gap-6 lg:grid-cols-3">
+              <div className="lg:col-span-2">
+                <TermsList terms={terms} onEdit={handleEditTerm} onPrint={handlePrintTerm} onDelete={handleDeleteTerm} />
+              </div>
+              <div>
+                <ClinicBrandingEditor branding={branding} onSave={handleSaveBranding} onUploadLogo={uploadLogo} />
+              </div>
+            </div>
+          </TabsContent>
+
+          <TabsContent value="modelos">
+            <DocumentsAndModelsTab />
+          </TabsContent>
+        </Tabs>
       </div>
 
       <TermEditor 
@@ -137,7 +158,9 @@ export default function Terms() {
           term={printingTerm} 
           branding={branding} 
           patient={samplePatient} 
-          clinicName={clinic?.name || ''} 
+          clinicName={clinic?.name || ''}
+          clinicAddress={clinic?.address}
+          clinicPhone={clinic?.phone}
         />
       )}
     </MainLayout>

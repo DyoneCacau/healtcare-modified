@@ -12,9 +12,8 @@ export interface ConsentTerm {
 export interface ClinicBranding {
   clinicId: string;
   logo?: string;
-  headerText?: string;
-  footerText?: string;
-  primaryColor?: string;
+  primaryColor?: string | null;
+  hasCustomColor?: boolean;
 }
 
 export interface SignedTerm {
@@ -25,4 +24,18 @@ export interface SignedTerm {
   signedAt: string;
   signedBy: string; // receptionist name
   clinicId: string;
+}
+
+export type ClinicDocumentType = 'atestado' | 'declaracao' | 'termo_ciencia' | 'recibo' | 'outro';
+
+export interface ClinicDocument {
+  id: string;
+  clinicId: string;
+  name: string;
+  type: ClinicDocumentType;
+  fileUrl?: string | null;
+  content?: string | null;
+  isUpload: boolean;
+  createdAt: string;
+  updatedAt: string;
 }
