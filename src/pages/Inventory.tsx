@@ -40,16 +40,19 @@ import {
   Edit,
   ArrowDownToLine,
   ArrowUpFromLine,
+  HelpCircle,
 } from 'lucide-react';
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from '@/components/ui/tooltip';
 import { useInventoryProducts, useInventoryMovements, useInventoryMutations } from '@/hooks/useInventory';
-import { inventoryCategoryLabels, movementTypeLabels } from '@/types/inventory';
+import { inventoryCategoryLabels, movementTypeLabels, inventoryUnitLabels } from '@/types/inventory';
 import { toast } from 'sonner';
 import { format } from 'date-fns';
 import { FeatureButton } from '@/components/subscription/FeatureButton';
 import { Skeleton } from '@/components/ui/skeleton';
-
-const formatCurrency = (value: number) =>
-  new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(value);
 
 export default function Inventory() {
   const [searchTerm, setSearchTerm] = useState('');
@@ -68,8 +71,6 @@ export default function Inventory() {
   const [productSku, setProductSku] = useState('');
   const [productCategory, setProductCategory] = useState('');
   const [productDescription, setProductDescription] = useState('');
-  const [productCostPrice, setProductCostPrice] = useState('');
-  const [productSalePrice, setProductSalePrice] = useState('');
   const [productCurrentStock, setProductCurrentStock] = useState('');
   const [productMinimumStock, setProductMinimumStock] = useState('');
   const [productUnit, setProductUnit] = useState('un');
@@ -149,8 +150,6 @@ export default function Inventory() {
     setProductSku('');
     setProductCategory('');
     setProductDescription('');
-    setProductCostPrice('');
-    setProductSalePrice('');
     setProductCurrentStock('0');
     setProductMinimumStock('0');
     setProductUnit('un');
@@ -171,8 +170,6 @@ export default function Inventory() {
         category: productCategory || null,
         current_stock: parseInt(productCurrentStock) || 0,
         minimum_stock: parseInt(productMinimumStock) || 0,
-        cost_price: parseFloat(productCostPrice) || 0,
-        sale_price: parseFloat(productSalePrice) || 0,
         unit: productUnit || 'un',
         is_active: true,
       });
@@ -326,8 +323,6 @@ export default function Inventory() {
                     <TableHead>Categoria</TableHead>
                     <TableHead className="text-center">Estoque Atual</TableHead>
                     <TableHead className="text-center">Mínimo</TableHead>
-                    <TableHead className="text-right">Custo Unit.</TableHead>
-                    <TableHead className="text-right">Valor Total</TableHead>
                     <TableHead className="text-center">Ações</TableHead>
                   </TableRow>
                 </TableHeader>
@@ -357,12 +352,6 @@ export default function Inventory() {
                         </TableCell>
                         <TableCell className="text-center text-muted-foreground">
                           {product.minimum_stock || 0}
-                        </TableCell>
-                        <TableCell className="text-right">
-                          {formatCurrency(product.cost_price || 0)}
-                        </TableCell>
-                        <TableCell className="text-right font-medium">
-                          {formatCurrency(product.current_stock * (product.cost_price || 0))}
                         </TableCell>
                         <TableCell>
                           <div className="flex items-center justify-center gap-1">
@@ -551,12 +540,28 @@ export default function Inventory() {
 
           <div className="grid gap-4 py-4">
             <div className="grid gap-2">
-              <Label htmlFor="productName">Nome *</Label>
+              <Label htmlFor="productName">Nome do produto *</Label>
               <Input id="productName" value={productName} onChange={(e) => setProductName(e.target.value)} placeholder="Nome do produto" />
             </div>
             <div className="grid grid-cols-2 gap-4">
               <div className="grid gap-2">
-                <Label htmlFor="productSku">SKU</Label>
+                <div className="flex items-center gap-1.5">
+                  <Label htmlFor="productSku">SKU</Label>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <button
+                        type="button"
+                        className="inline-flex h-4 w-4 items-center justify-center rounded-full text-muted-foreground hover:text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
+                        aria-label="O que é SKU?"
+                      >
+                        <HelpCircle className="h-4 w-4" />
+                      </button>
+                    </TooltipTrigger>
+                    <TooltipContent side="right" className="max-w-[260px]">
+                      <p>SKU (Stock Keeping Unit) é o código único de identificação do produto. Facilita a busca e o controle de estoque. Ex: ANEST-001, GLOV-M</p>
+                    </TooltipContent>
+                  </Tooltip>
+                </div>
                 <Input id="productSku" value={productSku} onChange={(e) => setProductSku(e.target.value)} placeholder="Código" />
               </div>
               <div className="grid gap-2">
@@ -592,7 +597,14 @@ export default function Inventory() {
               </div>
               <div className="grid gap-2">
                 <Label>Unidade</Label>
-                <Input value={productUnit} onChange={(e) => setProductUnit(e.target.value)} placeholder="un" />
+                <Select value={productUnit} onValueChange={setProductUnit}>
+                  <SelectTrigger><SelectValue placeholder="Selecione" /></SelectTrigger>
+                  <SelectContent>
+                    {Object.entries(inventoryUnitLabels).map(([value, label]) => (
+                      <SelectItem key={value} value={value}>{label}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               </div>
             </div>
           </div>

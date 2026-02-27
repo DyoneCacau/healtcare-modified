@@ -57,3 +57,19 @@ export const movementTypeLabels: Record<InventoryMovement['type'], string> = {
   saida: 'Saída',
   ajuste: 'Ajuste',
 };
+
+export type InventoryUnit = 'un' | 'cx' | 'pct' | 'fd' | 'ml' | 'g' | 'kg' | 'pt' | 'tb' | 'fr' | 'bl';
+
+export const inventoryUnitLabels: Record<InventoryUnit, string> = {
+  un: 'UN - Unidade',
+  cx: 'CX - Caixa',
+  pct: 'PCT - Pacote',
+  fd: 'FD - Fardo',
+  ml: 'ML - Mililitro',
+  g: 'G - Grama',
+  kg: 'KG - Quilograma',
+  pt: 'PT - Pote',
+  tb: 'TB - Tubo',
+  fr: 'FR - Frasco',
+  bl: 'BL - Blister',
+};

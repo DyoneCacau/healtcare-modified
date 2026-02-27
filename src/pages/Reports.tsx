@@ -1,16 +1,20 @@
 import { useState, useEffect } from 'react';
 import { MainLayout } from '@/components/layout/MainLayout';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
+import { Label } from '@/components/ui/label';
+import { Switch } from '@/components/ui/switch';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { FileBarChart, DollarSign, Calendar, Users, TrendingUp, Percent, Loader2 } from 'lucide-react';
+import { FileBarChart, DollarSign, Calendar, Users, TrendingUp, Percent, Loader2, BarChart3, ArrowUpRight, ArrowDownRight, Trophy, AlertCircle, UserCheck, Stethoscope } from 'lucide-react';
 import { toast } from 'sonner';
-import { format, subMonths } from 'date-fns';
+import { format, subMonths, subYears, startOfMonth, endOfMonth, addMonths } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { useFeatureAccess } from '@/components/subscription/FeatureAction';
 import { supabase } from '@/integrations/supabase/client';
 import { useClinic } from '@/hooks/useClinic';
 import { ReportFilters } from '@/components/reports/ReportFilters';
 import { useProfessionals } from '@/hooks/useProfessionals';
+import { leadSourceLabels, LeadSource } from '@/types/agenda';
 import {
   BarChart,
   Bar,
@@ -27,14 +31,35 @@ import {
 
 const COLORS = ['#10b981', '#3b82f6', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899'];
 
+const paymentMethodLabels: Record<string, string> = {
+  cash: 'Dinheiro',
+  credit: 'Cartão de Crédito',
+  debit: 'Cartão de Débito',
+  pix: 'PIX',
+  voucher: 'Voucher/Parceria',
+  split: 'Pagamento Dividido',
+};
+
+const appointmentStatusLabels: Record<string, string> = {
+  completed: 'Concluído',
+  cancelled: 'Cancelado',
+  pending: 'Pendente',
+  confirmed: 'Confirmado',
+  no_show: 'Faltou',
+  return: 'Retorno',
+};
+
 export default function Reports() {
   const { canAccess: canExport } = useFeatureAccess('relatorios');
   const { clinicId, clinic } = useClinic();
   const { professionals } = useProfessionals();
-  const [startDate, setStartDate] = useState(format(subMonths(new Date(), 3), 'yyyy-MM-dd'));
+  const [startDate, setStartDate] = useState(format(startOfMonth(subMonths(new Date(), 6)), 'yyyy-MM-dd'));
   const [endDate, setEndDate] = useState(format(new Date(), 'yyyy-MM-dd'));
   const [selectedClinic, setSelectedClinic] = useState('all');
   const [selectedProfessional, setSelectedProfessional] = useState('all');
+  const [biComparePeriod, setBiComparePeriod] = useState<'3' | '6' | '12' | 'custom'>('6');
+  const [activeTab, setActiveTab] = useState('financial');
+  const [showBiDetails, setShowBiDetails] = useState(true);
   const [isLoading, setIsLoading] = useState(true);
   
   const [financialData, setFinancialData] = useState<any>({
@@ -43,6 +68,7 @@ export default function Reports() {
     netBalance: 0,
     byPaymentMethod: [],
     byCategory: [],
+    byExpenseCategory: [],
     dailyTrend: [],
   });
   
@@ -62,11 +88,25 @@ export default function Reports() {
     newThisMonth: 0,
   });
 
+  const [biData, setBiData] = useState<any>({
+    patients: { current: { newCount: 0, byLeadSource: [] }, prevMonth: { newCount: 0 }, prevYear: { newCount: 0 } },
+    appointments: { current: { total: 0, completed: 0, byLeadSource: [] }, prevMonth: { total: 0, completed: 0 }, prevYear: { total: 0, completed: 0 } },
+  });
+
   useEffect(() => {
     if (clinicId) {
       fetchReportData();
     }
   }, [clinicId, startDate, endDate, selectedProfessional]);
+
+  const applyBiPeriod = (months: '3' | '6' | '12') => {
+    const n = parseInt(months, 10);
+    const end = new Date();
+    const start = subMonths(end, n);
+    setStartDate(format(startOfMonth(start), 'yyyy-MM-dd'));
+    setEndDate(format(end, 'yyyy-MM-dd'));
+    setBiComparePeriod(months);
+  };
 
   const fetchReportData = async () => {
     if (!clinicId) return;
@@ -97,12 +137,24 @@ export default function Reports() {
           byCategory.set(cat, (byCategory.get(cat) || 0) + Number(t.amount));
         });
 
+        const byExpenseCategory = new Map<string, number>();
+        transactions.filter(t => t.type === 'expense').forEach(t => {
+          const cat = t.category || 'Sem categoria';
+          byExpenseCategory.set(cat, (byExpenseCategory.get(cat) || 0) + Number(t.amount));
+        });
+
         setFinancialData({
           totalIncome: incomeTotal,
           totalExpense: expenseTotal,
           netBalance: incomeTotal - expenseTotal,
-          byPaymentMethod: Array.from(byMethod.entries()).map(([name, value]) => ({ name, value })),
+          byPaymentMethod: Array.from(byMethod.entries()).map(([name, value]) => ({
+            name: paymentMethodLabels[name] || name,
+            value,
+          })),
           byCategory: Array.from(byCategory.entries()).map(([name, value]) => ({ name, value })),
+          byExpenseCategory: Array.from(byExpenseCategory.entries())
+            .map(([name, value]) => ({ name, value }))
+            .sort((a, b) => a.name.localeCompare(b.name)),
           dailyTrend: [],
         });
       }
@@ -136,7 +188,7 @@ export default function Reports() {
           cancelled: appointments.filter(a => a.status === 'cancelled').length,
           pending: appointments.filter(a => a.status === 'pending').length,
           byStatus: Array.from(byStatus.entries()).map(([name, value]) => ({ 
-            name: name === 'completed' ? 'Concluído' : name === 'cancelled' ? 'Cancelado' : name === 'pending' ? 'Pendente' : name === 'confirmed' ? 'Confirmado' : name,
+            name: appointmentStatusLabels[name] || name,
             value 
           })),
           byProfessional: Array.from(byProf.entries()).map(([id, value]) => {
@@ -163,6 +215,193 @@ export default function Reports() {
           newThisMonth: newPatients,
         });
       }
+
+      // BI: períodos para comparação
+      const start = new Date(startDate);
+      const end = new Date(endDate);
+      const prevMonthStart = format(startOfMonth(subMonths(start, 1)), 'yyyy-MM-dd');
+      const prevMonthEnd = format(endOfMonth(subMonths(start, 1)), 'yyyy-MM-dd');
+      const prevYearStart = format(subYears(start, 1), 'yyyy-MM-dd');
+      const prevYearEnd = format(subYears(end, 1), 'yyyy-MM-dd');
+
+      // Pacientes novos por período
+      const { data: patientsCurrent } = await supabase
+        .from('patients')
+        .select('id, created_at')
+        .eq('clinic_id', clinicId)
+        .gte('created_at', `${startDate}T00:00:00`)
+        .lte('created_at', `${endDate}T23:59:59`);
+      const { data: patientsPrevMonth } = await supabase
+        .from('patients')
+        .select('id')
+        .eq('clinic_id', clinicId)
+        .gte('created_at', `${prevMonthStart}T00:00:00`)
+        .lte('created_at', `${prevMonthEnd}T23:59:59`);
+      const { data: patientsPrevYear } = await supabase
+        .from('patients')
+        .select('id')
+        .eq('clinic_id', clinicId)
+        .gte('created_at', `${prevYearStart}T00:00:00`)
+        .lte('created_at', `${prevYearEnd}T23:59:59`);
+
+      // Agendamentos por período (com lead_source)
+      let aptsPrevMonth: any[] = [];
+      let aptsPrevYear: any[] = [];
+      if (selectedProfessional === 'all') {
+        const [r1, r2] = await Promise.all([
+          supabase.from('appointments').select('id, status, lead_source').eq('clinic_id', clinicId).gte('date', prevMonthStart).lte('date', prevMonthEnd),
+          supabase.from('appointments').select('id, status, lead_source').eq('clinic_id', clinicId).gte('date', prevYearStart).lte('date', prevYearEnd),
+        ]);
+        aptsPrevMonth = r1.data || [];
+        aptsPrevYear = r2.data || [];
+      } else {
+        const [r1, r2] = await Promise.all([
+          supabase.from('appointments').select('id, status, lead_source').eq('clinic_id', clinicId).eq('professional_id', selectedProfessional).gte('date', prevMonthStart).lte('date', prevMonthEnd),
+          supabase.from('appointments').select('id, status, lead_source').eq('clinic_id', clinicId).eq('professional_id', selectedProfessional).gte('date', prevYearStart).lte('date', prevYearEnd),
+        ]);
+        aptsPrevMonth = r1.data || [];
+        aptsPrevYear = r2.data || [];
+      }
+
+      const aptsCurrent = appointments || [];
+      const byLeadSource = new Map<string, number>();
+      aptsCurrent.forEach((a: any) => {
+        const src = a.lead_source || 'other';
+        byLeadSource.set(src, (byLeadSource.get(src) || 0) + 1);
+      });
+      const byLeadSourceArr = Array.from(byLeadSource.entries())
+        .map(([k, v]) => ({ name: leadSourceLabels[k as LeadSource] || k, value: v }))
+        .sort((a, b) => b.value - a.value);
+
+      const newPatientsCurrent = patientsCurrent?.length ?? 0;
+      const newPatientsPrevMonth = patientsPrevMonth?.length ?? 0;
+      const newPatientsPrevYear = patientsPrevYear?.length ?? 0;
+
+      const pctPatientsVsPrevMonth = newPatientsPrevMonth > 0
+        ? ((newPatientsCurrent - newPatientsPrevMonth) / newPatientsPrevMonth) * 100
+        : (newPatientsCurrent > 0 ? 100 : 0);
+      const pctPatientsVsPrevYear = newPatientsPrevYear > 0
+        ? ((newPatientsCurrent - newPatientsPrevYear) / newPatientsPrevYear) * 100
+        : (newPatientsCurrent > 0 ? 100 : 0);
+
+      const aptsCompletedCurrent = aptsCurrent.filter((a: any) => a.status === 'completed').length;
+      const aptsCompletedPrevMonth = aptsPrevMonth.filter((a: any) => a.status === 'completed').length;
+      const aptsCompletedPrevYear = aptsPrevYear.filter((a: any) => a.status === 'completed').length;
+
+      const pctAptsVsPrevMonth = aptsPrevMonth.length > 0
+        ? ((aptsCurrent.length - aptsPrevMonth.length) / aptsPrevMonth.length) * 100
+        : (aptsCurrent.length > 0 ? 100 : 0);
+      const pctAptsVsPrevYear = aptsPrevYear.length > 0
+        ? ((aptsCurrent.length - aptsPrevYear.length) / aptsPrevYear.length) * 100
+        : (aptsCurrent.length > 0 ? 100 : 0);
+
+      const pctAptsCompletedVsPrevMonth = aptsCompletedPrevMonth > 0
+        ? ((aptsCompletedCurrent - aptsCompletedPrevMonth) / aptsCompletedPrevMonth) * 100
+        : (aptsCompletedCurrent > 0 ? 100 : 0);
+      const pctAptsCompletedVsPrevYear = aptsCompletedPrevYear > 0
+        ? ((aptsCompletedCurrent - aptsCompletedPrevYear) / aptsCompletedPrevYear) * 100
+        : (aptsCompletedCurrent > 0 ? 100 : 0);
+
+      const referralCount = byLeadSource.get('referral') || 0;
+
+      // Dados mensais para comparação (melhor/pior mês em vendas)
+      const incomeTx = (await supabase.from('financial_transactions').select('type, amount, created_at').eq('clinic_id', clinicId).eq('type', 'income').gte('created_at', `${startDate}T00:00:00`).lte('created_at', `${endDate}T23:59:59`)).data || [];
+      const monthNames: Record<string, string> = { '01': 'Jan', '02': 'Fev', '03': 'Mar', '04': 'Abr', '05': 'Mai', '06': 'Jun', '07': 'Jul', '08': 'Ago', '09': 'Set', '10': 'Out', '11': 'Nov', '12': 'Dez' };
+      const monthlyMap = new Map<string, { revenue: number; appointments: number; completed: number; newPatients: number }>();
+      let monthCursor = new Date(startDate);
+      monthCursor.setDate(1);
+      const endMonth = new Date(endDate);
+      endMonth.setDate(1);
+      while (monthCursor <= endMonth) {
+        const key = format(monthCursor, 'yyyy-MM');
+        monthlyMap.set(key, { revenue: 0, appointments: 0, completed: 0, newPatients: 0 });
+        monthCursor = addMonths(monthCursor, 1);
+      }
+      (incomeTx as any[]).forEach((t: any) => {
+        const key = t.created_at?.slice(0, 7) || '';
+        if (monthlyMap.has(key)) {
+          const m = monthlyMap.get(key)!;
+          m.revenue += Number(t.amount || 0);
+          monthlyMap.set(key, m);
+        }
+      });
+      (aptsCurrent as any[]).forEach((a: any) => {
+        const key = (a.date || '').slice(0, 7);
+        if (monthlyMap.has(key)) {
+          const m = monthlyMap.get(key)!;
+          m.appointments += 1;
+          if (a.status === 'completed') m.completed += 1;
+          monthlyMap.set(key, m);
+        }
+      });
+      (patientsCurrent || []).forEach((p: any) => {
+        const key = (p.created_at || '').slice(0, 7);
+        if (monthlyMap.has(key)) {
+          const m = monthlyMap.get(key)!;
+          m.newPatients += 1;
+          monthlyMap.set(key, m);
+        }
+      });
+      const monthlyData = Array.from(monthlyMap.entries())
+        .map(([key, v]) => {
+          const [y, m] = key.split('-');
+          return { monthKey: key, monthLabel: `${monthNames[m] || m}/${y}`, ...v };
+        })
+        .sort((a, b) => a.monthKey.localeCompare(b.monthKey));
+      const withRevenue = monthlyData.filter((m) => m.revenue > 0);
+      const bestMonth = withRevenue.length ? withRevenue.reduce((a, b) => (b.revenue > a.revenue ? b : a)) : null;
+      const worstMonth = withRevenue.length ? withRevenue.reduce((a, b) => (b.revenue < a.revenue ? b : a)) : null;
+
+      // Top vendedor e profissional
+      const bySeller = new Map<string, number>();
+      const byProfCompleted = new Map<string, number>();
+      (aptsCurrent as any[]).forEach((a: any) => {
+        if (a.seller_id) {
+          bySeller.set(a.seller_id, (bySeller.get(a.seller_id) || 0) + 1);
+        }
+        if (a.status === 'completed') {
+          byProfCompleted.set(a.professional_id, (byProfCompleted.get(a.professional_id) || 0) + 1);
+        }
+      });
+      const sellerIds = Array.from(bySeller.keys());
+      let sellerNames: Record<string, string> = {};
+      if (sellerIds.length > 0) {
+        const { data: profiles } = await supabase.from('profiles').select('user_id, name').in('user_id', sellerIds);
+        (profiles || []).forEach((p: any) => { sellerNames[p.user_id] = p.name || 'Vendedor'; });
+      }
+      const topSellerEntry = Array.from(bySeller.entries()).sort((a, b) => b[1] - a[1])[0];
+      const topSeller = topSellerEntry ? { name: sellerNames[topSellerEntry[0]] || 'Vendedor', count: topSellerEntry[1] } : null;
+      const topProfEntry = Array.from(byProfCompleted.entries()).sort((a, b) => b[1] - a[1])[0];
+      const topProfessional = topProfEntry ? { name: professionals.find(p => p.id === topProfEntry[0])?.name || 'Profissional', count: topProfEntry[1] } : null;
+
+      setBiData({
+        patients: {
+          current: { newCount: newPatientsCurrent, byLeadSource: byLeadSourceArr, referralCount },
+          prevMonth: { newCount: newPatientsPrevMonth },
+          prevYear: { newCount: newPatientsPrevYear },
+          pctVsPrevMonth: pctPatientsVsPrevMonth,
+          pctVsPrevYear: pctPatientsVsPrevYear,
+        },
+        appointments: {
+          current: { total: aptsCurrent.length, completed: aptsCompletedCurrent, byLeadSource: byLeadSourceArr, referralCount },
+          prevMonth: { total: aptsPrevMonth.length, completed: aptsCompletedPrevMonth },
+          prevYear: { total: aptsPrevYear.length, completed: aptsCompletedPrevYear },
+          pctVsPrevMonth: pctAptsVsPrevMonth,
+          pctVsPrevYear: pctAptsVsPrevYear,
+          pctCompletedVsPrevMonth: pctAptsCompletedVsPrevMonth,
+          pctCompletedVsPrevYear: pctAptsCompletedVsPrevYear,
+        },
+        periodLabels: {
+          current: `${format(new Date(startDate), 'dd/MM/yyyy', { locale: ptBR })} a ${format(new Date(endDate), 'dd/MM/yyyy', { locale: ptBR })}`,
+          prevMonth: `${format(new Date(prevMonthStart), 'MM/yyyy', { locale: ptBR })}`,
+          prevYear: `${format(new Date(prevYearStart), 'dd/MM/yyyy', { locale: ptBR })} a ${format(new Date(prevYearEnd), 'dd/MM/yyyy', { locale: ptBR })}`,
+        },
+        monthlyData,
+        bestMonth,
+        worstMonth,
+        topSeller,
+        topProfessional,
+      });
 
     } catch (error) {
       console.error('Error fetching report data:', error);
@@ -203,6 +442,9 @@ export default function Reports() {
         <table class="dre-table">
           <tr><td>Receitas</td><td class="text-right">R$ ${fmt(financialData.totalIncome)}</td></tr>
           <tr><td class="sub">(-) Despesas</td><td class="text-right sub">R$ ${fmt(financialData.totalExpense)}</td></tr>
+          ${((financialData.byExpenseCategory || []) as { name: string; value: number }[])
+            .map((r, i) => `<tr><td class="sub indent">1.${i + 1} ${r.name}</td><td class="text-right sub">R$ ${fmt(r.value)}</td></tr>`)
+            .join('')}
           <tr class="result"><td>Saldo líquido</td><td class="text-right">R$ ${fmt(financialData.netBalance)}</td></tr>
         </table>
       </section>
@@ -285,6 +527,7 @@ export default function Reports() {
             .dre-table td { padding: 8px 12px; border-bottom: 1px solid #ccfbf1; }
             .dre-table tr:last-child td { border-bottom: none; }
             .dre-table .sub { color: #6b7280; }
+            .dre-table .indent { padding-left: 24px !important; }
             .dre-table .result { font-weight: 700; font-size: 15px; color: #0d9488; }
             .dre-table .result td { padding-top: 12px; border-top: 2px solid #0d9488; }
             .data-table { width: 100%; border-collapse: collapse; font-size: 12px; margin-top: 6px; }
@@ -395,17 +638,17 @@ export default function Reports() {
         <div>
           <ReportFilters
               startDate={startDate} endDate={endDate} selectedClinic={selectedClinic} selectedProfessional={selectedProfessional}
-              onStartDateChange={setStartDate} onEndDateChange={setEndDate} onClinicChange={setSelectedClinic} onProfessionalChange={setSelectedProfessional}
+              onStartDateChange={(d) => { setStartDate(d); setBiComparePeriod('custom'); }} onEndDateChange={(d) => { setEndDate(d); setBiComparePeriod('custom'); }} onClinicChange={setSelectedClinic} onProfessionalChange={setSelectedProfessional}
               clinics={clinics} professionals={professionals.map(p => ({ id: p.id, name: p.name, specialty: p.specialty, cro: p.cro }))}
               onExportPDF={handleExportPDF} onExportExcel={handleExportExcel} onPrint={handlePrint}
             />
 
-        <Tabs defaultValue="financial" className="space-y-4">
+        <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4">
           <TabsList className="grid w-full grid-cols-4">
             <TabsTrigger value="financial" className="flex items-center gap-2"><DollarSign className="h-4 w-4" />Financeiro</TabsTrigger>
             <TabsTrigger value="appointments" className="flex items-center gap-2"><Calendar className="h-4 w-4" />Agendamentos</TabsTrigger>
             <TabsTrigger value="patients" className="flex items-center gap-2"><Users className="h-4 w-4" />Pacientes</TabsTrigger>
-            <TabsTrigger value="productivity" className="flex items-center gap-2"><TrendingUp className="h-4 w-4" />Produtividade</TabsTrigger>
+            <TabsTrigger value="bi" className="flex items-center gap-2"><BarChart3 className="h-4 w-4" />BI</TabsTrigger>
           </TabsList>
 
           {/* Financial Tab */}
@@ -616,18 +859,402 @@ export default function Reports() {
             </div>
           </TabsContent>
 
-          {/* Productivity Tab */}
-          <TabsContent value="productivity" className="space-y-4">
+          {/* BI Tab */}
+          <TabsContent value="bi" className="space-y-4">
+            {/* Filtro de período para BI */}
             <Card>
-              <CardContent className="pt-6">
-                <div className="text-center py-12 text-muted-foreground">
-                  <TrendingUp className="h-12 w-12 mx-auto mb-4 opacity-50" />
-                  <p>Relatórios de produtividade serão baseados nos dados de agendamentos e transações.</p>
-                  <p className="text-sm mt-2">Período: {format(new Date(startDate), 'dd/MM/yyyy', { locale: ptBR })} - {format(new Date(endDate), 'dd/MM/yyyy', { locale: ptBR })}</p>
+              <CardHeader>
+                <CardTitle className="text-base">Período para análise e comparação</CardTitle>
+                <p className="text-sm text-muted-foreground">
+                  Selecione o intervalo para visualizar desempenho mensal e identificar melhores e piores meses para ações de marketing
+                </p>
+              </CardHeader>
+              <CardContent>
+                <div className="flex flex-wrap gap-2">
+                  <Button
+                    variant={biComparePeriod === '3' ? 'default' : 'outline'}
+                    size="sm"
+                    onClick={() => applyBiPeriod('3')}
+                  >
+                    Últimos 3 meses
+                  </Button>
+                  <Button
+                    variant={biComparePeriod === '6' ? 'default' : 'outline'}
+                    size="sm"
+                    onClick={() => applyBiPeriod('6')}
+                  >
+                    Últimos 6 meses
+                  </Button>
+                  <Button
+                    variant={biComparePeriod === '12' ? 'default' : 'outline'}
+                    size="sm"
+                    onClick={() => applyBiPeriod('12')}
+                  >
+                    Últimos 12 meses
+                  </Button>
+                  <Button
+                    variant={biComparePeriod === 'custom' ? 'default' : 'outline'}
+                    size="sm"
+                    onClick={() => setBiComparePeriod('custom')}
+                  >
+                    Período personalizado
+                  </Button>
+                </div>
+                <p className="text-xs text-muted-foreground mt-2">
+                  {biComparePeriod === 'custom'
+                    ? `Usando datas do filtro: ${format(new Date(startDate), 'dd/MM/yyyy', { locale: ptBR })} a ${format(new Date(endDate), 'dd/MM/yyyy', { locale: ptBR })}`
+                    : `Exibindo: ${format(new Date(startDate), 'dd/MM/yyyy', { locale: ptBR })} a ${format(new Date(endDate), 'dd/MM/yyyy', { locale: ptBR })}`}
+                </p>
+              </CardContent>
+            </Card>
+
+            {/* Melhor e Pior mês em vendas */}
+            {(biData.bestMonth || biData.worstMonth) && (
+              <Card>
+                <CardHeader>
+                  <div className="flex flex-wrap items-center justify-between gap-4">
+                    <div>
+                      <CardTitle className="text-base">Desempenho mensal em vendas</CardTitle>
+                      <p className="text-sm text-muted-foreground">
+                        Identifique os meses de maior e menor faturamento para planejar promoções e ações de marketing
+                      </p>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <Switch id="bi-details" checked={showBiDetails} onCheckedChange={setShowBiDetails} />
+                      <Label htmlFor="bi-details" className="text-sm cursor-pointer">Mostrar vendedor(a) e profissional</Label>
+                    </div>
+                  </div>
+                </CardHeader>
+                <CardContent>
+                  <div className={`grid gap-4 ${showBiDetails ? 'md:grid-cols-2 lg:grid-cols-4' : 'md:grid-cols-2'}`}>
+                    {biData.bestMonth && (
+                      <Card className="bg-emerald-50 dark:bg-emerald-950/30 border-emerald-200">
+                        <CardContent className="pt-4">
+                          <div className="flex items-center gap-2 text-emerald-700 dark:text-emerald-400">
+                            <Trophy className="h-5 w-5" />
+                            <span className="font-semibold">Melhor mês em vendas</span>
+                          </div>
+                          <p className="text-2xl font-bold text-emerald-700 dark:text-emerald-400 mt-2">
+                            {biData.bestMonth.monthLabel}
+                          </p>
+                          <p className="text-lg font-medium">
+                            R$ {biData.bestMonth.revenue.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                          </p>
+                          <p className="text-xs text-muted-foreground mt-1">
+                            {biData.bestMonth.appointments} agendamentos · {biData.bestMonth.completed} concluídos · {biData.bestMonth.newPatients} novos pacientes
+                          </p>
+                        </CardContent>
+                      </Card>
+                    )}
+                    {biData.worstMonth && biData.worstMonth.monthKey !== biData.bestMonth?.monthKey && (
+                      <Card className="bg-amber-50 dark:bg-amber-950/30 border-amber-200">
+                        <CardContent className="pt-4">
+                          <div className="flex items-center gap-2 text-amber-700 dark:text-amber-400">
+                            <AlertCircle className="h-5 w-5" />
+                            <span className="font-semibold">Mês com menor faturamento</span>
+                          </div>
+                          <p className="text-2xl font-bold text-amber-700 dark:text-amber-400 mt-2">
+                            {biData.worstMonth.monthLabel}
+                          </p>
+                          <p className="text-lg font-medium">
+                            R$ {biData.worstMonth.revenue.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                          </p>
+                          <p className="text-xs text-muted-foreground mt-1">
+                            Oportunidade para promoções e campanhas de marketing
+                          </p>
+                        </CardContent>
+                      </Card>
+                    )}
+                    {showBiDetails && biData.topSeller && (
+                      <Card className="bg-blue-50 dark:bg-blue-950/30 border-blue-200">
+                        <CardContent className="pt-4">
+                          <div className="flex items-center gap-2 text-blue-700 dark:text-blue-400">
+                            <UserCheck className="h-5 w-5" />
+                            <span className="font-semibold">Vendedor(a) com melhor desempenho</span>
+                          </div>
+                          <p className="text-2xl font-bold text-blue-700 dark:text-blue-400 mt-2">
+                            {biData.topSeller.name}
+                          </p>
+                          <p className="text-lg font-medium">
+                            {biData.topSeller.count} vendas/parcerias fechadas
+                          </p>
+                          <p className="text-xs text-muted-foreground mt-1">
+                            Quem mais fechou vendas, indicações e parcerias (ex.: traz cliente, ganha procedimento)
+                          </p>
+                        </CardContent>
+                      </Card>
+                    )}
+                    {showBiDetails && biData.topProfessional && (
+                      <Card className="bg-violet-50 dark:bg-violet-950/30 border-violet-200">
+                        <CardContent className="pt-4">
+                          <div className="flex items-center gap-2 text-violet-700 dark:text-violet-400">
+                            <Stethoscope className="h-5 w-5" />
+                            <span className="font-semibold">Profissional com melhor desempenho</span>
+                          </div>
+                          <p className="text-2xl font-bold text-violet-700 dark:text-violet-400 mt-2">
+                            {biData.topProfessional.name}
+                          </p>
+                          <p className="text-lg font-medium">
+                            {biData.topProfessional.count} consultas realizadas
+                          </p>
+                          <p className="text-xs text-muted-foreground mt-1">
+                            Maior número de atendimentos concluídos
+                          </p>
+                        </CardContent>
+                      </Card>
+                    )}
+                  </div>
+                  {biData.monthlyData?.length > 0 && (
+                    <div className="mt-4">
+                      <h4 className="text-sm font-medium mb-3">Receita por mês</h4>
+                      <ResponsiveContainer width="100%" height={260}>
+                        <BarChart data={biData.monthlyData}>
+                          <CartesianGrid strokeDasharray="3 3" />
+                          <XAxis dataKey="monthLabel" tick={{ fontSize: 11 }} />
+                          <YAxis tickFormatter={(v) => `R$ ${(v / 1000).toFixed(0)}k`} />
+                          <Tooltip formatter={(value: number) => [`R$ ${value.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`, 'Receita']} />
+                          <Bar dataKey="revenue" name="Receita" fill="#10b981" radius={[4, 4, 0, 0]} />
+                        </BarChart>
+                      </ResponsiveContainer>
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+            )}
+
+            <p className="text-sm text-muted-foreground">
+              Comparação com mês anterior ({biData.periodLabels?.prevMonth}) e mesmo período ano anterior ({biData.periodLabels?.prevYear})
+            </p>
+
+            {/* Pacientes */}
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2"><Users className="h-5 w-5" />Pacientes no período</CardTitle>
+                <p className="text-sm text-muted-foreground">Novos cadastros e origem do lead</p>
+              </CardHeader>
+              <CardContent className="space-y-6">
+                <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+                  <Card className="bg-muted/50">
+                    <CardContent className="pt-4">
+                      <p className="text-sm text-muted-foreground">Novos pacientes</p>
+                      <p className="text-2xl font-bold">{biData.patients?.current?.newCount ?? 0}</p>
+                      <div className="flex items-center gap-1 mt-2 text-xs">
+                        {biData.patients?.pctVsPrevMonth != null && (
+                          <span className={biData.patients.pctVsPrevMonth >= 0 ? 'text-emerald-600' : 'text-red-600'}>
+                            {biData.patients.pctVsPrevMonth >= 0 ? <ArrowUpRight className="h-3 w-3 inline" /> : <ArrowDownRight className="h-3 w-3 inline" />}
+                            {biData.patients.pctVsPrevMonth >= 0 ? '+' : ''}{biData.patients.pctVsPrevMonth.toFixed(1)}% vs mês ant.
+                          </span>
+                        )}
+                      </div>
+                      <div className="flex items-center gap-1 mt-0.5 text-xs text-muted-foreground">
+                        {biData.patients?.pctVsPrevYear != null && (
+                          <span className={biData.patients.pctVsPrevYear >= 0 ? 'text-emerald-600' : 'text-red-600'}>
+                            {biData.patients.pctVsPrevYear >= 0 ? '+' : ''}{biData.patients.pctVsPrevYear.toFixed(1)}% vs ano ant.
+                          </span>
+                        )}
+                      </div>
+                    </CardContent>
+                  </Card>
+                  <Card className="bg-muted/50">
+                    <CardContent className="pt-4">
+                      <p className="text-sm text-muted-foreground">Por indicação</p>
+                      <p className="text-2xl font-bold">{biData.patients?.current?.referralCount ?? biData.appointments?.current?.referralCount ?? 0}</p>
+                      <p className="text-xs text-muted-foreground mt-1">Agendamentos com origem Indicação</p>
+                    </CardContent>
+                  </Card>
+                  <Card className="bg-muted/50">
+                    <CardContent className="pt-4">
+                      <p className="text-sm text-muted-foreground">Mês anterior</p>
+                      <p className="text-2xl font-bold">{biData.patients?.prevMonth?.newCount ?? 0}</p>
+                      <p className="text-xs text-muted-foreground mt-1">Novos em {biData.periodLabels?.prevMonth}</p>
+                    </CardContent>
+                  </Card>
+                  <Card className="bg-muted/50">
+                    <CardContent className="pt-4">
+                      <p className="text-sm text-muted-foreground">Ano anterior</p>
+                      <p className="text-2xl font-bold">{biData.patients?.prevYear?.newCount ?? 0}</p>
+                      <p className="text-xs text-muted-foreground mt-1">Mesmo período ano passado</p>
+                    </CardContent>
+                  </Card>
+                </div>
+                <div>
+                  <h4 className="text-sm font-medium mb-3">Origem do lead (agendamentos)</h4>
+                  {biData.appointments?.current?.byLeadSource?.length > 0 ? (
+                    <ResponsiveContainer width="100%" height={220}>
+                      <BarChart data={biData.appointments.current.byLeadSource} layout="vertical" margin={{ left: 8, right: 8 }}>
+                        <CartesianGrid strokeDasharray="3 3" />
+                        <XAxis type="number" />
+                        <YAxis dataKey="name" type="category" width={100} tick={{ fontSize: 11 }} />
+                        <Tooltip />
+                        <Bar dataKey="value" name="Agendamentos" fill="#10b981" radius={[0, 4, 4, 0]} />
+                      </BarChart>
+                    </ResponsiveContainer>
+                  ) : (
+                    <div className="flex items-center justify-center h-[120px] text-muted-foreground text-sm">
+                      Nenhum dado de origem de lead no período
+                    </div>
+                  )}
                 </div>
               </CardContent>
             </Card>
+
+            {/* Agendamentos */}
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2"><Calendar className="h-5 w-5" />Agendamentos no período</CardTitle>
+                <p className="text-sm text-muted-foreground">Total e concluídos com comparação</p>
+              </CardHeader>
+              <CardContent className="space-y-6">
+                <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+                  <Card className="bg-muted/50">
+                    <CardContent className="pt-4">
+                      <p className="text-sm text-muted-foreground">Total de agendamentos</p>
+                      <p className="text-2xl font-bold">{biData.appointments?.current?.total ?? 0}</p>
+                      <div className="flex items-center gap-1 mt-2 text-xs">
+                        {biData.appointments?.pctVsPrevMonth != null && (
+                          <span className={biData.appointments.pctVsPrevMonth >= 0 ? 'text-emerald-600' : 'text-red-600'}>
+                            {biData.appointments.pctVsPrevMonth >= 0 ? <ArrowUpRight className="h-3 w-3 inline" /> : <ArrowDownRight className="h-3 w-3 inline" />}
+                            {biData.appointments.pctVsPrevMonth >= 0 ? '+' : ''}{biData.appointments.pctVsPrevMonth.toFixed(1)}% vs mês ant.
+                          </span>
+                        )}
+                      </div>
+                      <div className="text-xs text-muted-foreground mt-0.5">
+                        {biData.appointments?.pctVsPrevYear != null && (
+                          <span className={biData.appointments.pctVsPrevYear >= 0 ? 'text-emerald-600' : 'text-red-600'}>
+                            {biData.appointments.pctVsPrevYear >= 0 ? '+' : ''}{biData.appointments.pctVsPrevYear.toFixed(1)}% vs ano ant.
+                          </span>
+                        )}
+                      </div>
+                    </CardContent>
+                  </Card>
+                  <Card className="bg-muted/50">
+                    <CardContent className="pt-4">
+                      <p className="text-sm text-muted-foreground">Concluídos</p>
+                      <p className="text-2xl font-bold text-emerald-600">{biData.appointments?.current?.completed ?? 0}</p>
+                      <div className="flex items-center gap-1 mt-2 text-xs">
+                        {biData.appointments?.pctCompletedVsPrevMonth != null && (
+                          <span className={biData.appointments.pctCompletedVsPrevMonth >= 0 ? 'text-emerald-600' : 'text-red-600'}>
+                            {biData.appointments.pctCompletedVsPrevMonth >= 0 ? '+' : ''}{biData.appointments.pctCompletedVsPrevMonth.toFixed(1)}% vs mês ant.
+                          </span>
+                        )}
+                      </div>
+                      <div className="text-xs text-muted-foreground mt-0.5">
+                        {biData.appointments?.pctCompletedVsPrevYear != null && (
+                          <span className={biData.appointments.pctCompletedVsPrevYear >= 0 ? 'text-emerald-600' : 'text-red-600'}>
+                            {biData.appointments.pctCompletedVsPrevYear >= 0 ? '+' : ''}{biData.appointments.pctCompletedVsPrevYear.toFixed(1)}% vs ano ant.
+                          </span>
+                        )}
+                      </div>
+                    </CardContent>
+                  </Card>
+                  <Card className="bg-muted/50">
+                    <CardContent className="pt-4">
+                      <p className="text-sm text-muted-foreground">Mês anterior</p>
+                      <p className="text-2xl font-bold">{biData.appointments?.prevMonth?.total ?? 0}</p>
+                      <p className="text-xs text-muted-foreground mt-1">Total: {biData.appointments?.prevMonth?.total ?? 0} · Concl.: {biData.appointments?.prevMonth?.completed ?? 0}</p>
+                    </CardContent>
+                  </Card>
+                  <Card className="bg-muted/50">
+                    <CardContent className="pt-4">
+                      <p className="text-sm text-muted-foreground">Ano anterior</p>
+                      <p className="text-2xl font-bold">{biData.appointments?.prevYear?.total ?? 0}</p>
+                      <p className="text-xs text-muted-foreground mt-1">Total: {biData.appointments?.prevYear?.total ?? 0} · Concl.: {biData.appointments?.prevYear?.completed ?? 0}</p>
+                    </CardContent>
+                  </Card>
+                </div>
+                {biData.appointments?.current?.byLeadSource?.length > 0 && (
+                  <div>
+                    <h4 className="text-sm font-medium mb-3">Distribuição por origem do lead</h4>
+                    <ResponsiveContainer width="100%" height={200}>
+                      <PieChart>
+                        <Pie
+                          data={biData.appointments.current.byLeadSource}
+                          cx="50%"
+                          cy="50%"
+                          labelLine={false}
+                          outerRadius={70}
+                          fill="#8884d8"
+                          dataKey="value"
+                          label={({ name, value }) => `${name}: ${value}`}
+                        >
+                          {biData.appointments.current.byLeadSource.map((_: any, index: number) => (
+                            <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                          ))}
+                        </Pie>
+                        <Tooltip />
+                        <Legend />
+                      </PieChart>
+                    </ResponsiveContainer>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+
+            {/* Produtividade */}
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2"><TrendingUp className="h-5 w-5" />Produtividade</CardTitle>
+                <p className="text-sm text-muted-foreground">
+                  Desempenho baseado em agendamentos e taxa de conclusão no período
+                </p>
+              </CardHeader>
+              <CardContent className="space-y-6">
+                <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+                  <Card className="bg-muted/50">
+                    <CardContent className="pt-4">
+                      <p className="text-sm text-muted-foreground">Taxa de conclusão</p>
+                      <p className="text-2xl font-bold">
+                        {appointmentData.total > 0
+                          ? ((appointmentData.completed / appointmentData.total) * 100).toFixed(1)
+                          : '0'}%
+                      </p>
+                      <p className="text-xs text-muted-foreground mt-1">
+                        {appointmentData.completed} de {appointmentData.total} consultas realizadas
+                      </p>
+                    </CardContent>
+                  </Card>
+                  <Card className="bg-muted/50">
+                    <CardContent className="pt-4">
+                      <p className="text-sm text-muted-foreground">Média diária</p>
+                      <p className="text-2xl font-bold">
+                        {(() => {
+                          const days = Math.max(1, Math.ceil((new Date(endDate).getTime() - new Date(startDate).getTime()) / (24 * 60 * 60 * 1000)));
+                          return (appointmentData.total / days).toFixed(1);
+                        })()}
+                      </p>
+                      <p className="text-xs text-muted-foreground mt-1">Consultas por dia no período</p>
+                    </CardContent>
+                  </Card>
+                  <Card className="bg-muted/50">
+                    <CardContent className="pt-4">
+                      <p className="text-sm text-muted-foreground">Cancelados</p>
+                      <p className="text-2xl font-bold text-red-600">{appointmentData.cancelled}</p>
+                      <p className="text-xs text-muted-foreground mt-1">
+                        {appointmentData.total > 0
+                          ? ((appointmentData.cancelled / appointmentData.total) * 100).toFixed(1)
+                          : '0'}% do total
+                      </p>
+                    </CardContent>
+                  </Card>
+                </div>
+                {appointmentData.byProfessional?.length > 0 && (
+                  <div>
+                    <h4 className="text-sm font-medium mb-3">Consultas por profissional</h4>
+                    <ResponsiveContainer width="100%" height={220}>
+                      <BarChart data={appointmentData.byProfessional}>
+                        <CartesianGrid strokeDasharray="3 3" />
+                        <XAxis dataKey="name" tick={{ fontSize: 11 }} />
+                        <YAxis />
+                        <Tooltip />
+                        <Bar dataKey="value" name="Consultas" fill="#3b82f6" radius={[4, 4, 0, 0]} />
+                      </BarChart>
+                    </ResponsiveContainer>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
           </TabsContent>
+
         </Tabs>
         </div>
       </div>
