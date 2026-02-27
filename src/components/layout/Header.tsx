@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { Bell, Search, UserPlus } from "lucide-react";
+import { Bell, Search, UserPlus, Wallet, CreditCard } from "lucide-react";
+import { format } from "date-fns";
+import { ptBR } from "date-fns/locale";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -14,6 +16,9 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
+import { useSubscription } from "@/hooks/useSubscription";
+import { useUnclosedCashDays, useUnclosedCashDaysAllClinics } from "@/hooks/useFinancial";
+import { useSelectedClinicId } from "@/hooks/useSelectedClinicId";
 
 interface HeaderProps {
   title: string;
@@ -30,13 +35,27 @@ interface AdminNotification {
 }
 
 export function Header({ title, subtitle }: HeaderProps) {
-  const { isSuperAdmin } = useAuth();
+  const { isSuperAdmin, isAdmin } = useAuth();
   const navigate = useNavigate();
+  const { setSelectedClinicId } = useSelectedClinicId();
+  const { subscription } = useSubscription();
   const [notifications, setNotifications] = useState<AdminNotification[]>([]);
   const [pendingContacts, setPendingContacts] = useState(0);
   const [isOpen, setIsOpen] = useState(false);
 
+  const { unclosedDates } = useUnclosedCashDays();
+  const { clinicsWithUnclosed } = useUnclosedCashDaysAllClinics(isSuperAdmin);
+
+  const paymentDueSoon = useMemo(() => {
+    if (isSuperAdmin || !subscription || subscription.status !== "active" || !subscription.current_period_end) return false;
+    const due = new Date(subscription.current_period_end);
+    const now = new Date();
+    const daysUntil = Math.floor((due.getTime() - now.getTime()) / (24 * 60 * 60 * 1000));
+    return daysUntil <= 5 && daysUntil >= 0;
+  }, [isSuperAdmin, subscription]);
+
   const fetchNotifications = async () => {
+    if (!isSuperAdmin) return [];
     const { data } = await supabase
       .from("admin_notifications")
       .select("id, title, message, created_at, is_read, type")
@@ -80,12 +99,11 @@ export function Header({ title, subtitle }: HeaderProps) {
     () => notifications.filter((n) => !n.is_read).length,
     [notifications]
   );
-  const totalCount = notifications.length;
-  const unreadIds = useMemo(
-    () => notifications.filter((n) => !n.is_read).map((n) => n.id),
-    [notifications]
+
+  const hasUnclosedCash = isAdmin && (
+    isSuperAdmin ? clinicsWithUnclosed.length > 0 : unclosedDates.length > 0
   );
-  const badgeCount = unreadCount + pendingContacts;
+  const badgeCount = unreadCount + pendingContacts + (hasUnclosedCash ? 1 : 0) + (paymentDueSoon ? 1 : 0);
 
   return (
     <header className="flex h-16 items-center justify-between border-b border-border bg-card px-6">
@@ -132,13 +150,82 @@ export function Header({ title, subtitle }: HeaderProps) {
           <DropdownMenuContent align="end" className="w-80">
             <DropdownMenuLabel>
               Notificações
-              {isSuperAdmin && (
+              {badgeCount > 0 && (
                 <span className="ml-2 text-xs text-muted-foreground">
-                  {badgeCount > 0 ? `${unreadCount + pendingContacts} pendente(s)` : "Nenhuma"}
+                  {badgeCount} pendente{badgeCount !== 1 ? "s" : ""}
                 </span>
               )}
             </DropdownMenuLabel>
             <DropdownMenuSeparator />
+
+            {/* Lembrete de pagamento - cliente (não SuperAdmin) */}
+            {!isSuperAdmin && paymentDueSoon && subscription?.current_period_end && (
+              <>
+                <DropdownMenuItem
+                  className="flex flex-col items-start gap-1 p-3 cursor-pointer"
+                  onSelect={() => {
+                    setIsOpen(false);
+                    navigate("/configuracoes");
+                  }}
+                >
+                  <div className="flex items-center gap-2">
+                    <CreditCard className="h-4 w-4 text-amber-500" />
+                    <span className="font-medium">Pagamento próximo do vencimento</span>
+                  </div>
+                  <span className="text-xs text-muted-foreground">
+                    Vencimento em {new Date(subscription.current_period_end).toLocaleDateString("pt-BR", { day: "2-digit", month: "long", year: "numeric" })}. Entre em contato para renovar.
+                  </span>
+                </DropdownMenuItem>
+                <DropdownMenuSeparator />
+              </>
+            )}
+
+            {/* Caixa não fechado - clínicas: só a sua; SuperAdmin: todas */}
+            {!isSuperAdmin && unclosedDates.length > 0 && (
+              <>
+                <DropdownMenuItem
+                  className="flex flex-col items-start gap-1 p-3 cursor-pointer"
+                  onSelect={() => {
+                    setIsOpen(false);
+                    navigate("/financeiro");
+                  }}
+                >
+                  <div className="flex items-center gap-2">
+                    <Wallet className="h-4 w-4 text-amber-500" />
+                    <span className="font-medium">Caixa não fechado</span>
+                  </div>
+                  <span className="text-xs text-muted-foreground">
+                    Dias: {unclosedDates.slice(-7).map((d) => format(new Date(d + "T12:00:00"), "dd/MM", { locale: ptBR })).join(", ")}
+                  </span>
+                </DropdownMenuItem>
+                <DropdownMenuSeparator />
+              </>
+            )}
+            {isSuperAdmin && clinicsWithUnclosed.length > 0 && (
+              <>
+                {clinicsWithUnclosed.map((c) => (
+                  <DropdownMenuItem
+                    key={c.clinicId}
+                    className="flex flex-col items-start gap-1 p-3 cursor-pointer"
+                    onSelect={() => {
+                      setIsOpen(false);
+                      setSelectedClinicId(c.clinicId);
+                      navigate("/financeiro");
+                    }}
+                  >
+                    <div className="flex items-center gap-2">
+                      <Wallet className="h-4 w-4 text-amber-500" />
+                      <span className="font-medium">{c.clinicName}</span>
+                    </div>
+                    <span className="text-xs text-muted-foreground">
+                      Dias: {c.dates.slice(-7).map((d) => format(new Date(d + "T12:00:00"), "dd/MM", { locale: ptBR })).join(", ")}
+                    </span>
+                  </DropdownMenuItem>
+                ))}
+                <DropdownMenuSeparator />
+              </>
+            )}
+
             {isSuperAdmin && pendingContacts > 0 && (
               <>
                 <DropdownMenuItem
@@ -156,17 +243,17 @@ export function Header({ title, subtitle }: HeaderProps) {
                 <DropdownMenuSeparator />
               </>
             )}
-            {notifications.length === 0 && pendingContacts === 0 ? (
-              <DropdownMenuItem className="flex flex-col items-start gap-1 p-3">
-                <span className="text-sm text-muted-foreground">Sem notificações</span>
-              </DropdownMenuItem>
-            ) : (
+            {isSuperAdmin &&
               notifications.map((n) => (
                 <DropdownMenuItem key={n.id} className="flex flex-col items-start gap-1 p-3">
                   <span className="font-medium">{n.title}</span>
                   {n.message && <span className="text-xs text-muted-foreground">{n.message}</span>}
                 </DropdownMenuItem>
-              ))
+              ))}
+            {badgeCount === 0 && (
+              <DropdownMenuItem className="flex flex-col items-start gap-1 p-3">
+                <span className="text-sm text-muted-foreground">Sem notificações</span>
+              </DropdownMenuItem>
             )}
           </DropdownMenuContent>
         </DropdownMenu>

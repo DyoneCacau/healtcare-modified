@@ -12,6 +12,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { ScrollArea } from "@/components/ui/scroll-area";
 import {
   Table,
   TableBody,
@@ -28,18 +29,25 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
-import { MoreHorizontal, Search, Building2, Mail, Phone, Key, Power, PowerOff, Eye, EyeOff } from "lucide-react";
+import { MoreHorizontal, Search, Building2, Mail, Phone, Key, Power, PowerOff, Eye, EyeOff, Pencil } from "lucide-react";
+import { ClinicDisplayName } from "@/components/common/ClinicDisplayName";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
 
 interface Clinic {
   id: string;
   name: string;
+  unit_name?: string | null;
   email: string;
   phone: string | null;
   cnpj: string | null;
+  razao_social: string | null;
+  address: string | null;
+  address_number: string | null;
+  neighborhood: string | null;
   city: string | null;
   state: string | null;
+  zip_code: string | null;
   is_active: boolean;
   created_at: string;
   owner_user_id: string | null;
@@ -58,10 +66,16 @@ export function ClinicsManagement() {
   const [isLoading, setIsLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
   const [isResetPasswordDialogOpen, setIsResetPasswordDialogOpen] = useState(false);
+  const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
   const [selectedClinic, setSelectedClinic] = useState<ClinicWithSubscription | null>(null);
   const [newPassword, setNewPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [isResetting, setIsResetting] = useState(false);
+  const [editForm, setEditForm] = useState({
+    name: "", unit_name: "", cnpj: "", email: "", phone: "", razao_social: "",
+    address: "", address_number: "", neighborhood: "", city: "", state: "", zip_code: "",
+  });
+  const [isSaving, setIsSaving] = useState(false);
 
   useEffect(() => {
     fetchClinics();
@@ -124,6 +138,7 @@ export function ClinicsManagement() {
 
   const filteredClinics = clinics.filter(clinic =>
     clinic.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    (clinic.unit_name?.toLowerCase() || "").includes(searchTerm.toLowerCase()) ||
     clinic.email.toLowerCase().includes(searchTerm.toLowerCase()) ||
     clinic.cnpj?.includes(searchTerm)
   );
@@ -159,7 +174,7 @@ export function ClinicsManagement() {
           Gestão de Clínicas
         </CardTitle>
         <p className="text-sm text-muted-foreground mt-1">
-          Para cadastrar novo cliente (clínica + usuário + plano), use o botão <strong>Criar Cliente Completo</strong> na aba <strong>Dashboard</strong>.
+          Para cadastrar novo cliente, use <strong>Criar Cliente Completo</strong> na aba Dashboard. Para adicionar uma nova unidade a um cliente existente, use <strong>Adicionar Unidade</strong>.
         </p>
       </CardHeader>
       <CardContent>
@@ -199,7 +214,7 @@ export function ClinicsManagement() {
                   <TableRow key={clinic.id} className={!clinic.is_active ? 'opacity-50' : ''}>
                     <TableCell>
                       <div>
-                        <p className="font-medium">{clinic.name}</p>
+                        <p className="font-medium"><ClinicDisplayName clinic={clinic} /></p>
                         {clinic.cnpj && (
                           <p className="text-sm text-muted-foreground">{clinic.cnpj}</p>
                         )}
@@ -239,6 +254,29 @@ export function ClinicsManagement() {
                           </Button>
                         </DropdownMenuTrigger>
                         <DropdownMenuContent align="end">
+                          <DropdownMenuItem
+                            onClick={() => {
+                              setSelectedClinic(clinic);
+                              setEditForm({
+                                name: clinic.name,
+                                unit_name: clinic.unit_name || "",
+                                cnpj: clinic.cnpj || "",
+                                email: clinic.email || "",
+                                phone: clinic.phone || "",
+                                razao_social: (clinic as any).razao_social || "",
+                                address: clinic.address || "",
+                                address_number: (clinic as any).address_number || "",
+                                neighborhood: (clinic as any).neighborhood || "",
+                                city: clinic.city || "",
+                                state: clinic.state || "",
+                                zip_code: (clinic as any).zip_code || "",
+                              });
+                              setIsEditDialogOpen(true);
+                            }}
+                          >
+                            <Pencil className="h-4 w-4 mr-2" />
+                            Editar
+                          </DropdownMenuItem>
                           <DropdownMenuItem onClick={() => toggleClinicStatus(clinic)}>
                             {clinic.is_active ? (
                               <>
@@ -271,6 +309,189 @@ export function ClinicsManagement() {
           </Table>
         </div>
       </CardContent>
+
+      {/* Edit Clinic Dialog */}
+      <Dialog open={isEditDialogOpen} onOpenChange={(open) => {
+        setIsEditDialogOpen(open);
+        if (!open) setSelectedClinic(null);
+      }}>
+        <DialogContent className="max-w-2xl max-h-[90vh]">
+          <DialogHeader>
+            <DialogTitle>Editar dados da clínica</DialogTitle>
+            <DialogDescription>
+              As alterações são aplicadas imediatamente para o cliente e aparecem nos termos, rodapé e documentos. O cliente admin também pode alterar em Configurações &gt; Dados da Clínica.
+            </DialogDescription>
+          </DialogHeader>
+          <ScrollArea className="max-h-[60vh] pr-4">
+            <div className="py-4 space-y-6">
+              <div className="grid gap-4 sm:grid-cols-2">
+                <div className="space-y-2">
+                  <Label htmlFor="edit-name">Nome da clínica *</Label>
+                  <Input
+                    id="edit-name"
+                    value={editForm.name}
+                    onChange={(e) => setEditForm((p) => ({ ...p, name: e.target.value }))}
+                    placeholder="Ex: Clínica Sorrindo Unidade Norte"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="edit-unit">Unidade/Endereço (opcional)</Label>
+                  <Input
+                    id="edit-unit"
+                    value={editForm.unit_name}
+                    onChange={(e) => setEditForm((p) => ({ ...p, unit_name: e.target.value }))}
+                    placeholder="Ex: litoral, 13 de maio, Conj. Ceara"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="edit-cnpj">CNPJ</Label>
+                  <Input
+                    id="edit-cnpj"
+                    value={editForm.cnpj}
+                    onChange={(e) => setEditForm((p) => ({ ...p, cnpj: e.target.value }))}
+                    placeholder="00.000.000/0000-00"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="edit-email">E-mail *</Label>
+                  <Input
+                    id="edit-email"
+                    type="email"
+                    value={editForm.email}
+                    onChange={(e) => setEditForm((p) => ({ ...p, email: e.target.value }))}
+                    placeholder="contato@clinica.com"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="edit-phone">Telefone</Label>
+                  <Input
+                    id="edit-phone"
+                    value={editForm.phone}
+                    onChange={(e) => setEditForm((p) => ({ ...p, phone: e.target.value }))}
+                    placeholder="(11) 99999-9999"
+                  />
+                </div>
+                <div className="sm:col-span-2 space-y-2">
+                  <Label htmlFor="edit-razao">Razão Social</Label>
+                  <Input
+                    id="edit-razao"
+                    value={editForm.razao_social}
+                    onChange={(e) => setEditForm((p) => ({ ...p, razao_social: e.target.value }))}
+                    placeholder="Para recibos e documentos oficiais"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <h4 className="font-medium mb-3">Endereço</h4>
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <div className="space-y-2">
+                    <Label>CEP</Label>
+                    <Input
+                      value={editForm.zip_code}
+                      onChange={(e) => setEditForm((p) => ({ ...p, zip_code: e.target.value.replace(/\D/g, '').replace(/(\d{5})(\d)/, '$1-$2').slice(0, 9) }))}
+                      onBlur={async () => {
+                        const cep = editForm.zip_code.replace(/\D/g, '');
+                        if (cep.length === 8) {
+                          try {
+                            const res = await fetch(`https://viacep.com.br/ws/${cep}/json/`);
+                            const data = await res.json();
+                            if (!data.erro) {
+                              setEditForm((p) => ({
+                                ...p,
+                                address: data.logradouro || p.address,
+                                neighborhood: data.bairro || p.neighborhood,
+                                city: data.localidade || p.city,
+                                state: data.uf || p.state,
+                              }));
+                              toast.success("Endereço preenchido");
+                            }
+                          } catch { /* ignore */ }
+                        }
+                      }}
+                      placeholder="00000-000"
+                      maxLength={9}
+                    />
+                  </div>
+                  <div className="space-y-2" />
+                  <div className="space-y-2">
+                    <Label>Rua / Logradouro</Label>
+                    <Input value={editForm.address} onChange={(e) => setEditForm((p) => ({ ...p, address: e.target.value }))} placeholder="Av. Paulista" />
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Número</Label>
+                    <Input value={editForm.address_number} onChange={(e) => setEditForm((p) => ({ ...p, address_number: e.target.value }))} placeholder="1000" />
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Bairro</Label>
+                    <Input value={editForm.neighborhood} onChange={(e) => setEditForm((p) => ({ ...p, neighborhood: e.target.value }))} placeholder="Bela Vista" />
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Cidade</Label>
+                    <Input value={editForm.city} onChange={(e) => setEditForm((p) => ({ ...p, city: e.target.value }))} placeholder="São Paulo" />
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Estado (UF)</Label>
+                    <Input value={editForm.state} onChange={(e) => setEditForm((p) => ({ ...p, state: e.target.value.toUpperCase().slice(0, 2) }))} placeholder="SP" maxLength={2} />
+                  </div>
+                </div>
+              </div>
+            </div>
+          </ScrollArea>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setIsEditDialogOpen(false)}>
+              Cancelar
+            </Button>
+            <Button
+              onClick={async () => {
+                if (!selectedClinic) return;
+                if (!editForm.name.trim()) {
+                  toast.error("Nome é obrigatório");
+                  return;
+                }
+                if (!editForm.email.trim()) {
+                  toast.error("E-mail é obrigatório");
+                  return;
+                }
+                setIsSaving(true);
+                try {
+                  const { error } = await supabase
+                    .from("clinics")
+                    .update({
+                      name: editForm.name.trim(),
+                      unit_name: editForm.unit_name.trim() || null,
+                      cnpj: editForm.cnpj.trim() || null,
+                      email: editForm.email.trim(),
+                      phone: editForm.phone.trim() || null,
+                      razao_social: editForm.razao_social.trim() || null,
+                      address: editForm.address.trim() || null,
+                      address_number: editForm.address_number.trim() || null,
+                      neighborhood: editForm.neighborhood.trim() || null,
+                      city: editForm.city.trim() || null,
+                      state: editForm.state.trim() || null,
+                      zip_code: editForm.zip_code.trim() || null,
+                      updated_at: new Date().toISOString(),
+                    })
+                    .eq("id", selectedClinic.id);
+
+                  if (error) throw error;
+
+                  toast.success("Clínica atualizada! As alterações já aparecem para o cliente e nos termos/documentos.");
+                  setIsEditDialogOpen(false);
+                  fetchClinics();
+                } catch (error: any) {
+                  toast.error(error.message || "Erro ao atualizar");
+                } finally {
+                  setIsSaving(false);
+                }
+              }}
+              disabled={isSaving}
+            >
+              {isSaving ? "Salvando..." : "Salvar"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* Reset Password Dialog */}
       <Dialog open={isResetPasswordDialogOpen} onOpenChange={(open) => {

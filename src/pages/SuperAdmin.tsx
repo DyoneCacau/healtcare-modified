@@ -12,6 +12,7 @@ import { SupportManagement } from "@/components/superadmin/SupportManagement";
 import { ContactRequestsManagement } from "@/components/superadmin/ContactRequestsManagement";
 import { ClientsStatusDashboard } from "@/components/superadmin/ClientsStatusDashboard";
 import { CreateCompleteClient } from "@/components/superadmin/CreateCompleteClient";
+import { AddClinicToClient } from "@/components/superadmin/AddClinicToClient";
 import { Building2, CreditCard, Package, Receipt, LayoutDashboard, Bell, MessageSquare, UserPlus } from "lucide-react";
 import { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
@@ -137,9 +138,12 @@ export default function SuperAdmin() {
 
           <TabsContent value="dashboard">
             <div className="space-y-6">
-              <div className="flex justify-between items-center">
+              <div className="flex justify-between items-center flex-wrap gap-2">
                 <h2 className="text-2xl font-bold">Gestão de Clientes</h2>
-                <CreateCompleteClient />
+                <div className="flex gap-2">
+                  <CreateCompleteClient />
+                  <AddClinicToClient />
+                </div>
               </div>
               <ClientsStatusDashboard />
             </div>

@@ -1,9 +1,10 @@
 export interface Clinic {
   id: string;
   name: string;
-  address: string;
-  phone: string;
-  cnpj: string;
+  unit_name?: string | null;
+  address?: string;
+  phone?: string;
+  cnpj?: string;
 }
 
 export interface AppointmentWithClinic {

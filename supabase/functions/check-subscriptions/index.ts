@@ -9,7 +9,9 @@ const corsHeaders = {
 interface ProcessingResult {
   expired_trials: number
   near_expiry_alerts: number
+  marked_overdue: number
   suspended_overdue: number
+  expiring_today_alerts: number
   errors: string[]
 }
 
@@ -47,8 +49,26 @@ serve(async (req) => {
     const result: ProcessingResult = {
       expired_trials: 0,
       near_expiry_alerts: 0,
+      marked_overdue: 0,
       suspended_overdue: 0,
+      expiring_today_alerts: 0,
       errors: [],
+    }
+
+    const insertNotification = async (
+      type: string,
+      title: string,
+      message: string,
+      referenceType: string,
+      referenceId: string
+    ) => {
+      await supabase.from('admin_notifications').insert({
+        type,
+        title,
+        message,
+        reference_type: referenceType,
+        reference_id: referenceId,
+      })
     }
 
     // ========================================
@@ -75,17 +95,21 @@ serve(async (req) => {
             .from('subscriptions')
             .update({
               status: 'expired',
+              billing_status: 'overdue',
               payment_status: 'overdue',
               updated_at: now.toISOString(),
             })
             .eq('id', sub.id)
 
-          if (updateError) {
-            throw updateError
-          }
+          if (updateError) throw updateError
 
-          // TODO: Enviar email de trial expirado
-          console.log(`📧 TODO: Send trial expired email to clinic ${sub.clinics?.name}`)
+          await insertNotification(
+            'trial_expired',
+            `Trial expirado: ${sub.clinics?.name || 'Clínica'}`,
+            `O período de teste da clínica ${sub.clinics?.name || 'N/A'} expirou.`,
+            'subscription',
+            sub.id
+          )
 
           result.expired_trials++
         } catch (error) {
@@ -111,6 +135,7 @@ serve(async (req) => {
       .from('subscriptions')
       .select('*, clinics(*)')
       .eq('status', 'active')
+      .eq('billing_status', 'paid')
       .lt('current_period_end', threeDaysFromNow.toISOString())
       .gt('current_period_end', now.toISOString())
 
@@ -122,9 +147,13 @@ serve(async (req) => {
 
       for (const sub of nearExpiry) {
         try {
-          // TODO: Enviar email de lembrete de renovação
-          console.log(`📧 TODO: Send renewal reminder to clinic ${sub.clinics?.name}`)
-
+          await insertNotification(
+            'near_expiry',
+            `Vencimento em 3 dias: ${sub.clinics?.name || 'Clínica'}`,
+            `A assinatura da clínica ${sub.clinics?.name || 'N/A'} vence em até 3 dias. Período até: ${sub.current_period_end?.slice(0, 10) || 'N/A'}.`,
+            'subscription',
+            sub.id
+          )
           result.near_expiry_alerts++
         } catch (error) {
           console.error(`❌ Error processing near expiry ${sub.id}:`, error)
@@ -138,9 +167,58 @@ serve(async (req) => {
     }
 
     // ========================================
-    // 3. SUSPENDER INADIMPLENTES (7 dias após vencimento)
+    // 3. MARCAR COMO ATRASADO (período já venceu)
     // ========================================
-    console.log('📋 Checking overdue subscriptions...')
+    console.log('📋 Checking expired periods (mark as overdue)...')
+
+    const { data: periodExpired, error: periodExpiredError } = await supabase
+      .from('subscriptions')
+      .select('*, clinics(*)')
+      .eq('status', 'active')
+      .eq('billing_status', 'paid')
+      .lt('current_period_end', now.toISOString())
+
+    if (periodExpiredError) {
+      console.error('❌ Error fetching period expired:', periodExpiredError)
+      result.errors.push(`Period expired: ${periodExpiredError.message}`)
+    } else if (periodExpired && periodExpired.length > 0) {
+      console.log(`⏰ Found ${periodExpired.length} subscriptions with expired period`)
+
+      for (const sub of periodExpired) {
+        try {
+          const { error: updateError } = await supabase
+            .from('subscriptions')
+            .update({
+              billing_status: 'overdue',
+              payment_status: 'overdue',
+              updated_at: now.toISOString(),
+            })
+            .eq('id', sub.id)
+
+          if (updateError) throw updateError
+
+          await insertNotification(
+            'period_expired',
+            `Período vencido: ${sub.clinics?.name || 'Clínica'}`,
+            `A assinatura da clínica ${sub.clinics?.name || 'N/A'} venceu. Renovação necessária para evitar suspensão em 7 dias.`,
+            'subscription',
+            sub.id
+          )
+          result.marked_overdue++
+        } catch (error) {
+          console.error(`❌ Error marking overdue ${sub.id}:`, error)
+          result.errors.push(`Mark overdue ${sub.id}: ${error.message}`)
+        }
+      }
+      console.log(`✅ Marked ${result.marked_overdue} as overdue`)
+    } else {
+      console.log('✓ No expired periods to mark')
+    }
+
+    // ========================================
+    // 4. SUSPENDER INADIMPLENTES (7 dias após vencimento)
+    // ========================================
+    console.log('📋 Checking overdue subscriptions to suspend...')
 
     const sevenDaysAgo = new Date()
     sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7)
@@ -149,7 +227,7 @@ serve(async (req) => {
       .from('subscriptions')
       .select('*, clinics(*)')
       .in('status', ['active', 'expired'])
-      .eq('payment_status', 'overdue')
+      .eq('billing_status', 'overdue')
       .lt('current_period_end', sevenDaysAgo.toISOString())
 
     if (overdueError) {
@@ -160,7 +238,6 @@ serve(async (req) => {
 
       for (const sub of overdue) {
         try {
-          // Atualizar status para suspended
           const { error: updateError } = await supabase
             .from('subscriptions')
             .update({
@@ -169,27 +246,28 @@ serve(async (req) => {
             })
             .eq('id', sub.id)
 
-          if (updateError) {
-            throw updateError
-          }
+          if (updateError) throw updateError
 
-          // TODO: Enviar email de suspensão
-          console.log(`📧 TODO: Send suspension email to clinic ${sub.clinics?.name}`)
-
+          await insertNotification(
+            'suspended',
+            `Assinatura suspensa: ${sub.clinics?.name || 'Clínica'}`,
+            `A assinatura da clínica ${sub.clinics?.name || 'N/A'} foi suspensa por inadimplência (7+ dias em atraso).`,
+            'subscription',
+            sub.id
+          )
           result.suspended_overdue++
         } catch (error) {
-          console.error(`❌ Error processing overdue ${sub.id}:`, error)
-          result.errors.push(`Overdue ${sub.id}: ${error.message}`)
+          console.error(`❌ Error suspending ${sub.id}:`, error)
+          result.errors.push(`Suspend ${sub.id}: ${error.message}`)
         }
       }
-
       console.log(`✅ Suspended ${result.suspended_overdue} overdue subscriptions`)
     } else {
-      console.log('✓ No overdue subscriptions found')
+      console.log('✓ No overdue subscriptions to suspend')
     }
 
     // ========================================
-    // 4. ALERTAR ASSINATURAS VENCIDAS HOJE
+    // 5. ALERTAR ASSINATURAS VENCENDO HOJE (ainda válidas)
     // ========================================
     console.log('📋 Checking subscriptions expiring today...')
 
@@ -200,6 +278,7 @@ serve(async (req) => {
       .from('subscriptions')
       .select('*, clinics(*)')
       .eq('status', 'active')
+      .eq('billing_status', 'paid')
       .gte('current_period_end', now.toISOString())
       .lte('current_period_end', endOfToday.toISOString())
 
@@ -211,26 +290,20 @@ serve(async (req) => {
 
       for (const sub of expiringToday) {
         try {
-          // Marcar como overdue se não renovado
-          const { error: updateError } = await supabase
-            .from('subscriptions')
-            .update({
-              payment_status: 'overdue',
-              updated_at: now.toISOString(),
-            })
-            .eq('id', sub.id)
-
-          if (updateError) {
-            throw updateError
-          }
-
-          // TODO: Enviar email urgente
-          console.log(`📧 TODO: Send urgent payment email to clinic ${sub.clinics?.name}`)
+          await insertNotification(
+            'expiring_today',
+            `Vence hoje: ${sub.clinics?.name || 'Clínica'}`,
+            `A assinatura da clínica ${sub.clinics?.name || 'N/A'} vence hoje. Renovação urgente para evitar interrupção.`,
+            'subscription',
+            sub.id
+          )
+          result.expiring_today_alerts++
         } catch (error) {
           console.error(`❌ Error processing expiring today ${sub.id}:`, error)
           result.errors.push(`Expiring today ${sub.id}: ${error.message}`)
         }
       }
+      console.log(`✅ Sent ${result.expiring_today_alerts} expiring today alerts`)
     } else {
       console.log('✓ No subscriptions expiring today')
     }

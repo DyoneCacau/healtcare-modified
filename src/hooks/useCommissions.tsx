@@ -210,25 +210,49 @@ export function useCommissionRules() {
 export function useCommissions() {
   const { clinicId } = useClinic();
 
-  const { data: commissions, isLoading, error, refetch } = useQuery({
+  const { data: commissionsWithLeadSource, isLoading, error, refetch } = useQuery({
     queryKey: ['commissions', clinicId],
     queryFn: async () => {
       if (!clinicId) return [];
       
-      const { data, error } = await supabase
+      const { data: commissionsData, error } = await supabase
         .from('commissions')
         .select('*')
         .eq('clinic_id', clinicId)
         .order('created_at', { ascending: false });
 
       if (error) throw error;
-      return data || [];
+      const commissions = commissionsData || [];
+
+      const appointmentIds = [...new Set(commissions.map((c: { appointment_id?: string }) => c.appointment_id).filter(Boolean))] as string[];
+      let appointmentMeta: Record<string, { lead_source?: string; referral_name?: string }> = {};
+      if (appointmentIds.length > 0) {
+        const { data: aptData } = await supabase
+          .from('appointments')
+          .select('id, lead_source, referral_name')
+          .in('id', appointmentIds);
+        appointmentMeta = Object.fromEntries(
+          (aptData || []).map((a: { id: string; lead_source?: string; referral_name?: string }) => [
+            a.id,
+            { lead_source: a.lead_source || '', referral_name: a.referral_name || undefined },
+          ])
+        );
+      }
+
+      return commissions.map((c: { appointment_id?: string }) => {
+        const meta = c.appointment_id ? appointmentMeta[c.appointment_id] : undefined;
+        return {
+          ...c,
+          _lead_source: meta?.lead_source,
+          _referral_name: meta?.referral_name,
+        };
+      });
     },
     enabled: !!clinicId,
   });
 
   return { 
-    commissions: commissions || [], 
+    commissions: commissionsWithLeadSource || [], 
     isLoading, 
     error,
     refetch 

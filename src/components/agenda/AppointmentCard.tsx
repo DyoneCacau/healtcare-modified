@@ -9,6 +9,7 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { cn } from '@/lib/utils';
 import { AgendaAppointment } from '@/types/agenda';
+import { ClinicDisplayName } from '@/components/common/ClinicDisplayName';
 
 interface AppointmentCardProps {
   appointment: AgendaAppointment;
@@ -148,7 +149,7 @@ export function AppointmentCard({
             </span>
             <span className="flex items-center gap-1">
               <MapPin className="h-3 w-3" />
-              {appointment.clinic.name}
+              <ClinicDisplayName clinic={appointment.clinic} />
             </span>
           </div>
         </div>

@@ -53,6 +53,8 @@ export interface CommissionCalculation {
   sellerId?: string;
   sellerName?: string;
   leadSource?: LeadSource;
+  /** Nome de quem indicou (quando leadSource = Indicação). */
+  referralName?: string | null;
 }
 
 export interface CommissionSummary {

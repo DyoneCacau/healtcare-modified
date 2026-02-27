@@ -28,6 +28,7 @@ import {
 } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
 import { Checkbox } from '@/components/ui/checkbox';
+import { getClinicDisplayName } from '@/lib/utils';
 import {
   Tooltip,
   TooltipContent,
@@ -308,7 +309,7 @@ export function AppointmentFormDialog({
                 <SelectContent>
                   {clinics.map((clinic) => (
                     <SelectItem key={clinic.id} value={clinic.id}>
-                      {clinic.name}
+                      {getClinicDisplayName(clinic)}
                     </SelectItem>
                   ))}
                 </SelectContent>

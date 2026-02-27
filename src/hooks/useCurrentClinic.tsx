@@ -6,6 +6,7 @@ import { useSelectedClinicId } from './useSelectedClinicId';
 export interface CurrentClinic {
   id: string;
   name: string;
+  unit_name?: string | null;
   is_owner: boolean;
   role: string;
 }
@@ -19,46 +20,31 @@ export function useCurrentClinic() {
     queryFn: async () => {
       if (!user?.id) return null;
 
-      // Para superadmins, usar a clínica selecionada ou buscar a primeira
+      // Para superadmins: usar apenas a clínica selecionada (ou null se escolheu "Nenhuma")
       if (isSuperAdmin) {
-        let clinicId = selectedClinicId;
+        if (!selectedClinicId) return null;
+
+        const { data: clinic, error: clinicError } = await supabase
+          .from('clinics')
+          .select('id, name, unit_name')
+          .eq('id', selectedClinicId)
+          .maybeSingle();
+
+        if (clinicError) {
+          console.error('Erro ao buscar clínica:', clinicError);
+          throw clinicError;
+        }
         
-        // Se não tem clínica selecionada, buscar a primeira disponível
-        if (!clinicId) {
-          const { data: firstClinic } = await supabase
-            .from('clinics')
-            .select('id')
-            .eq('is_active', true)
-            .order('created_at', { ascending: true })
-            .limit(1)
-            .maybeSingle();
-          
-          if (firstClinic) {
-            clinicId = firstClinic.id;
-          }
+        if (clinic) {
+          return {
+            id: clinic.id,
+            name: clinic.name,
+            unit_name: clinic.unit_name,
+            is_owner: false,
+            role: 'superadmin',
+          };
         }
-
-        if (clinicId) {
-          const { data: clinic, error: clinicError } = await supabase
-            .from('clinics')
-            .select('id, name')
-            .eq('id', clinicId)
-            .maybeSingle();
-
-          if (clinicError) {
-            console.error('Erro ao buscar clínica:', clinicError);
-            throw clinicError;
-          }
-          
-          if (clinic) {
-            return {
-              id: clinic.id,
-              name: clinic.name,
-              is_owner: false,
-              role: 'superadmin',
-            };
-          }
-        }
+        return null;
       }
 
       // Para usuários normais: buscar clínica via clinic_users (sem coluna role, que pode não existir)

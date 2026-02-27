@@ -6,6 +6,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
 import { FileText, Upload, Printer, FileUp, Trash2 } from 'lucide-react';
 import { useClinicDocuments, useClinicBranding } from '@/hooks/useTerms';
+import { formatClinicAddress } from '@/lib/utils';
 import { useClinic } from '@/hooks/useClinic';
 import { usePatients } from '@/hooks/usePatients';
 import { useProfessionals } from '@/hooks/useProfessionals';
@@ -276,7 +277,7 @@ export function DocumentsAndModelsTab() {
         clinicCnpj={clinicCnpj}
         clinicRazaoSocial={clinicRazaoSocial}
         clinicLogoUrl={branding?.logo}
-        clinicAddress={clinic?.address || undefined}
+        clinicAddress={clinic ? formatClinicAddress(clinic) || undefined : undefined}
         clinicPhone={clinic?.phone || undefined}
         clinicEmail={clinic?.email || undefined}
         primaryColor={branding?.primaryColor || '#000000'}

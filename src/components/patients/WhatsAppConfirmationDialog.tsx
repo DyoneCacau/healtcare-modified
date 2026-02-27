@@ -25,6 +25,7 @@ import { AppointmentWithClinic } from '@/types/clinic';
 import { prepareWhatsAppMessage, generateConfirmationMessage } from '@/utils/whatsapp';
 import { format, parseISO } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
+import { formatClinicAddress } from '@/lib/utils';
 import { toast } from 'sonner';
 
 interface WhatsAppConfirmationDialogProps {
@@ -234,7 +235,9 @@ export const WhatsAppConfirmationDialog = ({
                       <MapPin className="h-4 w-4 mt-0.5 text-primary" />
                       <div>
                         <p className="font-medium">{selectedAppointment.clinic.name}</p>
-                        <p className="text-muted-foreground">{selectedAppointment.clinic.address}</p>
+                        <p className="text-muted-foreground">
+                          {formatClinicAddress(selectedAppointment.clinic) || selectedAppointment.clinic.address}
+                        </p>
                       </div>
                     </div>
                   </div>

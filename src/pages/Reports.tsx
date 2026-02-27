@@ -57,6 +57,7 @@ export default function Reports() {
   const [endDate, setEndDate] = useState(format(new Date(), 'yyyy-MM-dd'));
   const [selectedClinic, setSelectedClinic] = useState('all');
   const [selectedProfessional, setSelectedProfessional] = useState('all');
+  const [selectedSeller, setSelectedSeller] = useState('all');
   const [biComparePeriod, setBiComparePeriod] = useState<'3' | '6' | '12' | 'custom'>('6');
   const [activeTab, setActiveTab] = useState('financial');
   const [showBiDetails, setShowBiDetails] = useState(true);
@@ -91,13 +92,15 @@ export default function Reports() {
   const [biData, setBiData] = useState<any>({
     patients: { current: { newCount: 0, byLeadSource: [] }, prevMonth: { newCount: 0 }, prevYear: { newCount: 0 } },
     appointments: { current: { total: 0, completed: 0, byLeadSource: [] }, prevMonth: { total: 0, completed: 0 }, prevYear: { total: 0, completed: 0 } },
+    sellers: [],
+    individualPerformance: null,
   });
 
   useEffect(() => {
     if (clinicId) {
       fetchReportData();
     }
-  }, [clinicId, startDate, endDate, selectedProfessional]);
+  }, [clinicId, startDate, endDate, selectedProfessional, selectedSeller]);
 
   const applyBiPeriod = (months: '3' | '6' | '12') => {
     const n = parseInt(months, 10);
@@ -169,6 +172,9 @@ export default function Reports() {
 
       if (selectedProfessional !== 'all') {
         appointmentsQuery = appointmentsQuery.eq('professional_id', selectedProfessional);
+      }
+      if (selectedSeller !== 'all') {
+        appointmentsQuery = appointmentsQuery.eq('seller_id', selectedSeller);
       }
 
       const { data: appointments } = await appointmentsQuery;
@@ -247,23 +253,27 @@ export default function Reports() {
       // Agendamentos por período (com lead_source)
       let aptsPrevMonth: any[] = [];
       let aptsPrevYear: any[] = [];
-      if (selectedProfessional === 'all') {
-        const [r1, r2] = await Promise.all([
-          supabase.from('appointments').select('id, status, lead_source').eq('clinic_id', clinicId).gte('date', prevMonthStart).lte('date', prevMonthEnd),
-          supabase.from('appointments').select('id, status, lead_source').eq('clinic_id', clinicId).gte('date', prevYearStart).lte('date', prevYearEnd),
-        ]);
-        aptsPrevMonth = r1.data || [];
-        aptsPrevYear = r2.data || [];
-      } else {
-        const [r1, r2] = await Promise.all([
-          supabase.from('appointments').select('id, status, lead_source').eq('clinic_id', clinicId).eq('professional_id', selectedProfessional).gte('date', prevMonthStart).lte('date', prevMonthEnd),
-          supabase.from('appointments').select('id, status, lead_source').eq('clinic_id', clinicId).eq('professional_id', selectedProfessional).gte('date', prevYearStart).lte('date', prevYearEnd),
-        ]);
-        aptsPrevMonth = r1.data || [];
-        aptsPrevYear = r2.data || [];
+      const basePrevMonth = supabase.from('appointments').select('id, status, lead_source').eq('clinic_id', clinicId).gte('date', prevMonthStart).lte('date', prevMonthEnd);
+      const basePrevYear = supabase.from('appointments').select('id, status, lead_source').eq('clinic_id', clinicId).gte('date', prevYearStart).lte('date', prevYearEnd);
+      let q1 = selectedProfessional !== 'all' ? basePrevMonth.eq('professional_id', selectedProfessional) : basePrevMonth;
+      let q2 = selectedProfessional !== 'all' ? basePrevYear.eq('professional_id', selectedProfessional) : basePrevYear;
+      if (selectedSeller !== 'all') {
+        q1 = q1.eq('seller_id', selectedSeller);
+        q2 = q2.eq('seller_id', selectedSeller);
       }
+      const [res1, res2] = await Promise.all([q1, q2]);
+      aptsPrevMonth = res1.data || [];
+      aptsPrevYear = res2.data || [];
 
       const aptsCurrent = appointments || [];
+      // Para "melhor profissional/vendedor" sempre usar TODOS os agendamentos do período (ignora filtro de profissional)
+      const { data: aptsAllPeriod } = await supabase
+        .from('appointments')
+        .select('id, status, professional_id, seller_id')
+        .eq('clinic_id', clinicId)
+        .gte('date', startDate)
+        .lte('date', endDate);
+      const aptsForBest = aptsAllPeriod || [];
       const byLeadSource = new Map<string, number>();
       aptsCurrent.forEach((a: any) => {
         const src = a.lead_source || 'other';
@@ -352,10 +362,10 @@ export default function Reports() {
       const bestMonth = withRevenue.length ? withRevenue.reduce((a, b) => (b.revenue > a.revenue ? b : a)) : null;
       const worstMonth = withRevenue.length ? withRevenue.reduce((a, b) => (b.revenue < a.revenue ? b : a)) : null;
 
-      // Top vendedor e profissional
+      // Top vendedor e profissional (sempre do período total, muda só ao alterar datas)
       const bySeller = new Map<string, number>();
       const byProfCompleted = new Map<string, number>();
-      (aptsCurrent as any[]).forEach((a: any) => {
+      (aptsForBest as any[]).forEach((a: any) => {
         if (a.seller_id) {
           bySeller.set(a.seller_id, (bySeller.get(a.seller_id) || 0) + 1);
         }
@@ -373,6 +383,37 @@ export default function Reports() {
       const topSeller = topSellerEntry ? { name: sellerNames[topSellerEntry[0]] || 'Vendedor', count: topSellerEntry[1] } : null;
       const topProfEntry = Array.from(byProfCompleted.entries()).sort((a, b) => b[1] - a[1])[0];
       const topProfessional = topProfEntry ? { name: professionals.find(p => p.id === topProfEntry[0])?.name || 'Profissional', count: topProfEntry[1] } : null;
+
+      // Lista de vendedores (para filtro)
+      const sellersList = Array.from(bySeller.entries()).map(([id]) => ({ id, name: sellerNames[id] || 'Vendedor' }));
+
+      // Desempenho individual (quando profissional ou vendedor selecionado)
+      let individualPerformance: { name: string; type: 'professional' | 'seller'; total: number; completed: number; revenue: number } | null = null;
+      if (selectedProfessional !== 'all' || selectedSeller !== 'all') {
+        const aptsFiltered = aptsCurrent as any[];
+        const aptIds = aptsFiltered.map((a: any) => a.id);
+        let revenue = 0;
+        if (aptIds.length > 0) {
+          const { data: txList } = await supabase
+            .from('financial_transactions')
+            .select('amount')
+            .eq('clinic_id', clinicId)
+            .eq('type', 'income')
+            .eq('reference_type', 'appointment')
+            .in('reference_id', aptIds);
+          revenue = (txList || []).reduce((s, t) => s + Number(t.amount || 0), 0);
+        }
+        const name = selectedProfessional !== 'all'
+          ? professionals.find(p => p.id === selectedProfessional)?.name || 'Profissional'
+          : sellerNames[selectedSeller] || 'Vendedor';
+        individualPerformance = {
+          name,
+          type: selectedProfessional !== 'all' ? 'professional' : 'seller',
+          total: aptsFiltered.length,
+          completed: aptsFiltered.filter((a: any) => a.status === 'completed').length,
+          revenue,
+        };
+      }
 
       setBiData({
         patients: {
@@ -401,6 +442,8 @@ export default function Reports() {
         worstMonth,
         topSeller,
         topProfessional,
+        sellers: sellersList,
+        individualPerformance,
       });
 
     } catch (error) {
@@ -637,10 +680,11 @@ export default function Reports() {
 
         <div>
           <ReportFilters
-              startDate={startDate} endDate={endDate} selectedClinic={selectedClinic} selectedProfessional={selectedProfessional}
-              onStartDateChange={(d) => { setStartDate(d); setBiComparePeriod('custom'); }} onEndDateChange={(d) => { setEndDate(d); setBiComparePeriod('custom'); }} onClinicChange={setSelectedClinic} onProfessionalChange={setSelectedProfessional}
-              clinics={clinics} professionals={professionals.map(p => ({ id: p.id, name: p.name, specialty: p.specialty, cro: p.cro }))}
+              startDate={startDate} endDate={endDate} selectedClinic={selectedClinic} selectedProfessional={selectedProfessional} selectedSeller={selectedSeller}
+              onStartDateChange={(d) => { setStartDate(d); setBiComparePeriod('custom'); }} onEndDateChange={(d) => { setEndDate(d); setBiComparePeriod('custom'); }} onClinicChange={setSelectedClinic} onProfessionalChange={setSelectedProfessional} onSellerChange={setSelectedSeller}
+              clinics={clinics} professionals={professionals.map(p => ({ id: p.id, name: p.name, specialty: p.specialty, cro: p.cro }))} sellers={biData.sellers || []}
               onExportPDF={handleExportPDF} onExportExcel={handleExportExcel} onPrint={handlePrint}
+              onPeriodShortcut={(m) => applyBiPeriod(m)} activePeriodShortcut={biComparePeriod}
             />
 
         <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4">
@@ -861,52 +905,44 @@ export default function Reports() {
 
           {/* BI Tab */}
           <TabsContent value="bi" className="space-y-4">
-            {/* Filtro de período para BI */}
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-base">Período para análise e comparação</CardTitle>
-                <p className="text-sm text-muted-foreground">
-                  Selecione o intervalo para visualizar desempenho mensal e identificar melhores e piores meses para ações de marketing
-                </p>
-              </CardHeader>
-              <CardContent>
-                <div className="flex flex-wrap gap-2">
-                  <Button
-                    variant={biComparePeriod === '3' ? 'default' : 'outline'}
-                    size="sm"
-                    onClick={() => applyBiPeriod('3')}
-                  >
-                    Últimos 3 meses
-                  </Button>
-                  <Button
-                    variant={biComparePeriod === '6' ? 'default' : 'outline'}
-                    size="sm"
-                    onClick={() => applyBiPeriod('6')}
-                  >
-                    Últimos 6 meses
-                  </Button>
-                  <Button
-                    variant={biComparePeriod === '12' ? 'default' : 'outline'}
-                    size="sm"
-                    onClick={() => applyBiPeriod('12')}
-                  >
-                    Últimos 12 meses
-                  </Button>
-                  <Button
-                    variant={biComparePeriod === 'custom' ? 'default' : 'outline'}
-                    size="sm"
-                    onClick={() => setBiComparePeriod('custom')}
-                  >
-                    Período personalizado
-                  </Button>
-                </div>
-                <p className="text-xs text-muted-foreground mt-2">
-                  {biComparePeriod === 'custom'
-                    ? `Usando datas do filtro: ${format(new Date(startDate), 'dd/MM/yyyy', { locale: ptBR })} a ${format(new Date(endDate), 'dd/MM/yyyy', { locale: ptBR })}`
-                    : `Exibindo: ${format(new Date(startDate), 'dd/MM/yyyy', { locale: ptBR })} a ${format(new Date(endDate), 'dd/MM/yyyy', { locale: ptBR })}`}
-                </p>
-              </CardContent>
-            </Card>
+            {/* Desempenho individual (quando profissional ou vendedor selecionado) */}
+            {biData.individualPerformance && (
+              <Card>
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2">
+                    {biData.individualPerformance.type === 'professional' ? <Stethoscope className="h-5 w-5" /> : <UserCheck className="h-5 w-5" />}
+                    Desempenho de {biData.individualPerformance.name}
+                  </CardTitle>
+                  <p className="text-sm text-muted-foreground">
+                    {biData.individualPerformance.type === 'professional' ? 'Produção e receita do profissional no período' : 'Vendas e parcerias fechadas no período'}
+                  </p>
+                </CardHeader>
+                <CardContent>
+                  <div className="grid gap-4 md:grid-cols-3">
+                    <Card className="bg-muted/50">
+                      <CardContent className="pt-4">
+                        <p className="text-sm text-muted-foreground">Total de agendamentos</p>
+                        <p className="text-2xl font-bold">{biData.individualPerformance.total}</p>
+                      </CardContent>
+                    </Card>
+                    <Card className="bg-muted/50">
+                      <CardContent className="pt-4">
+                        <p className="text-sm text-muted-foreground">Consultas realizadas</p>
+                        <p className="text-2xl font-bold text-emerald-600">{biData.individualPerformance.completed}</p>
+                      </CardContent>
+                    </Card>
+                    <Card className="bg-muted/50">
+                      <CardContent className="pt-4">
+                        <p className="text-sm text-muted-foreground">Receita gerada</p>
+                        <p className="text-2xl font-bold text-emerald-600">
+                          R$ {biData.individualPerformance.revenue.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                        </p>
+                      </CardContent>
+                    </Card>
+                  </div>
+                </CardContent>
+              </Card>
+            )}
 
             {/* Melhor e Pior mês em vendas */}
             {(biData.bestMonth || biData.worstMonth) && (

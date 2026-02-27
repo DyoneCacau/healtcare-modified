@@ -19,6 +19,7 @@ import {
 import { cn } from '@/lib/utils';
 import { Professional, AgendaView } from '@/types/agenda';
 import { Clinic } from '@/types/clinic';
+import { getClinicDisplayName } from '@/lib/utils';
 
 interface AgendaFiltersProps {
   selectedDate: Date;
@@ -132,7 +133,7 @@ export function AgendaFilters({
             <SelectItem value="all">Todas as clínicas</SelectItem>
             {clinics.map((clinic) => (
               <SelectItem key={clinic.id} value={clinic.id}>
-                {clinic.name}
+                {getClinicDisplayName(clinic)}
               </SelectItem>
             ))}
           </SelectContent>
