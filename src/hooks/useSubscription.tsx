@@ -8,17 +8,20 @@ interface Plan {
   name: string;
   slug: string;
   features: string[];
+  max_clinics?: number | null;
 }
 
 interface Subscription {
   id: string;
   status: string;
   trial_ends_at: string | null;
+  current_period_end: string | null;
   plan: Plan | null;
 }
 
 interface SubscriptionContextType {
   subscription: Subscription | null;
+  plan: Plan | null;
   isLoading: boolean;
   isTrialExpired: boolean;
   isBlocked: boolean;
@@ -119,12 +122,13 @@ export function SubscriptionProvider({ children }: { children: ReactNode }) {
 
       setHasClinic(true);
 
-      const { data: subData } = await supabase
+      const { data: subData, error: subError } = await supabase
         .from('subscriptions')
         .select(`
           id,
           status,
           trial_ends_at,
+          current_period_end,
           plans (
             id,
             name,
@@ -135,12 +139,17 @@ export function SubscriptionProvider({ children }: { children: ReactNode }) {
         .eq('clinic_id', clinicId)
         .maybeSingle();
 
+      if (subError) {
+        console.error('[useSubscription] Erro ao buscar assinatura:', subError.message, 'code:', subError.code);
+      }
+
       if (subData) {
         const plan = subData.plans as unknown as Plan | null;
         setSubscription({
           id: subData.id,
           status: subData.status,
           trial_ends_at: subData.trial_ends_at,
+          current_period_end: subData.current_period_end ?? null,
           plan: plan ? {
             ...plan,
             features: Array.isArray(plan.features) ? plan.features : JSON.parse(plan.features as unknown as string || '[]')
@@ -225,6 +234,7 @@ export function SubscriptionProvider({ children }: { children: ReactNode }) {
     <SubscriptionContext.Provider
       value={{
         subscription,
+        plan: subscription?.plan ?? null,
         isLoading,
         isTrialExpired,
         isBlocked,

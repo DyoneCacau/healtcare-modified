@@ -37,10 +37,12 @@ interface ClientStatus {
   billing_status: string;
   monthly_fee: number;
   setup_fee: number;
-  modules: string[];
+  modules?: string[];
   plan_name: string;
   total_clinics_of_admin: number;
   total_paid: number;
+  last_payment_at?: string | null;
+  current_period_end?: string | null;
 }
 
 export function ClientsStatusDashboard() {
@@ -172,6 +174,46 @@ export function ClientsStatusDashboard() {
     );
   }
 
+  function getDaysSinceLastPayment(client: ClientStatus): number | null {
+    if (!client.last_payment_at) return null;
+    const last = new Date(client.last_payment_at);
+    const now = new Date();
+    return Math.floor((now.getTime() - last.getTime()) / (24 * 60 * 60 * 1000));
+  }
+
+  function getDaysUntilDue(client: ClientStatus): number | null {
+    if (!client.current_period_end) return null;
+    const due = new Date(client.current_period_end);
+    const now = new Date();
+    return Math.floor((due.getTime() - now.getTime()) / (24 * 60 * 60 * 1000));
+  }
+
+  function formatDaysInfo(client: ClientStatus): { text: string; className: string } {
+    const daysSince = getDaysSinceLastPayment(client);
+    const daysUntil = getDaysUntilDue(client);
+
+    if (client.billing_status === "pending" && !client.last_payment_at) {
+      return { text: "Aguardando 1º pagamento", className: "text-amber-600 font-medium" };
+    }
+    if (client.billing_status === "overdue") {
+      const d = daysSince ?? 0;
+      return { text: `${d} dia${d !== 1 ? "s" : ""} em atraso`, className: "text-red-600 font-semibold" };
+    }
+    if (daysSince !== null) {
+      if (daysSince <= 7) return { text: `${daysSince} dia${daysSince !== 1 ? "s" : ""}`, className: "text-green-600" };
+      if (daysSince <= 30) return { text: `${daysSince} dias`, className: "text-amber-600" };
+      return { text: `${daysSince} dias`, className: "text-orange-600 font-medium" };
+    }
+    return { text: "—", className: "text-muted-foreground" };
+  }
+
+  function getRowClassName(client: ClientStatus): string {
+    if (client.billing_status === "overdue") return "bg-red-50 dark:bg-red-950/20";
+    const daysSince = getDaysSinceLastPayment(client);
+    if (daysSince !== null && daysSince > 30) return "bg-amber-50/50 dark:bg-amber-950/10";
+    return "";
+  }
+
   const adimplentes = clients.filter(c => c.billing_status === 'paid' && c.subscription_status === 'active');
   const pendentes = clients.filter(c => c.billing_status === 'pending');
   const atrasados = clients.filter(c => c.billing_status === 'overdue');
@@ -292,6 +334,8 @@ export function ClientsStatusDashboard() {
                 <TableHead>Módulos</TableHead>
                 <TableHead>Status Assinatura</TableHead>
                 <TableHead>Status Pagamento</TableHead>
+                <TableHead>Desde último pagamento</TableHead>
+                <TableHead>Próx. vencimento</TableHead>
                 <TableHead>Mensalidade</TableHead>
                 <TableHead>Total Pago</TableHead>
                 <TableHead className="text-right">Ações</TableHead>
@@ -299,7 +343,7 @@ export function ClientsStatusDashboard() {
             </TableHeader>
             <TableBody>
               {clients.map((client) => (
-                <TableRow key={client.clinic_id}>
+                <TableRow key={client.clinic_id} className={getRowClassName(client)}>
                   <TableCell>
                     <div>
                       <div className="font-medium">{client.clinic_name}</div>
@@ -341,6 +385,20 @@ export function ClientsStatusDashboard() {
                   </TableCell>
                   <TableCell>
                     {getBillingStatusBadge(client.billing_status)}
+                  </TableCell>
+                  <TableCell>
+                    <span className={formatDaysInfo(client).className}>
+                      {formatDaysInfo(client).text}
+                    </span>
+                  </TableCell>
+                  <TableCell>
+                    {client.current_period_end ? (
+                      <span className={getDaysUntilDue(client) !== null && (getDaysUntilDue(client) ?? 0) <= 5 ? "text-amber-600 font-medium" : ""}>
+                        {new Date(client.current_period_end).toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit", year: "numeric" })}
+                      </span>
+                    ) : (
+                      <span className="text-muted-foreground">—</span>
+                    )}
                   </TableCell>
                   <TableCell>
                     R$ {client.monthly_fee?.toFixed(2) || '0.00'}

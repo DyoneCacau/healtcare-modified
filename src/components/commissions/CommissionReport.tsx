@@ -162,25 +162,37 @@ export function CommissionReport({ calculations, professionals = [] }: Commissio
     return byType;
   }, [summary]);
 
-  // Lead source breakdown
+  // Lead source breakdown (Indicação desdobrada por nome do indicador)
   const leadSourceStats = useMemo(() => {
     const stats: Record<string, { count: number; revenue: number; commission: number }> = {};
     filteredCalculations.forEach(calc => {
       const source = calc.leadSource || 'other';
-      if (!stats[source]) {
-        stats[source] = { count: 0, revenue: 0, commission: 0 };
+      const referralName = calc.referralName?.trim();
+      const key = source === 'referral'
+        ? `referral:${referralName || 'Não informado'}`
+        : source;
+      if (!stats[key]) {
+        stats[key] = { count: 0, revenue: 0, commission: 0 };
       }
       if (calc.beneficiaryType === 'professional') {
-        stats[source].count++;
-        stats[source].revenue += calc.serviceValue;
+        stats[key].count++;
+        stats[key].revenue += calc.serviceValue;
       }
-      stats[source].commission += calc.commissionAmount;
+      stats[key].commission += calc.commissionAmount;
     });
-    return Object.entries(stats).map(([source, data]) => ({
-      name: leadSourceLabels[source as LeadSource] || source,
-      source: source as LeadSource,
-      ...data,
-    }));
+    return Object.entries(stats).map(([key, data]) => {
+      const [source, subKey] = key.startsWith('referral:') ? ['referral', key.replace('referral:', '')] : [key, ''];
+      const displayName = source === 'referral'
+        ? `Indicação - ${subKey}`
+        : (leadSourceLabels[source as LeadSource] || source);
+      return {
+        key,
+        name: displayName,
+        source: source as LeadSource,
+        referralName: subKey || undefined,
+        ...data,
+      };
+    });
   }, [filteredCalculations]);
 
   // Count immutable (paid) commissions
@@ -516,7 +528,7 @@ export function CommissionReport({ calculations, professionals = [] }: Commissio
                     {leadSourceStats.map((stat) => {
                       const Icon = leadSourceIcons[stat.source] || HelpCircle;
                       return (
-                        <TableRow key={stat.source}>
+                        <TableRow key={stat.key}>
                           <TableCell className="font-medium">
                             <div className="flex items-center gap-2">
                               <Icon className="h-4 w-4 text-muted-foreground" />

@@ -34,6 +34,8 @@ import { useClinics } from "@/hooks/useClinic";
 import { useSelectedClinicId } from "@/hooks/useSelectedClinicId";
 import { useCurrentClinic } from "@/hooks/useCurrentClinic";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { ClinicDisplayName } from "@/components/common/ClinicDisplayName";
+import { getClinicDisplayName } from "@/lib/utils";
 
 interface MenuItem {
   icon: React.ComponentType<{ className?: string }>;
@@ -70,14 +72,16 @@ export function Sidebar() {
 
   // Mostrar seletor só se superadmin ou se tiver mais de uma clínica (como dono)
   const showClinicSelector = isSuperAdmin || clinics.length > 1;
+  // SuperAdmin: não auto-selecionar clínica (permite "Nenhuma"). Cliente com múltiplas clínicas: auto-selecionar primeira.
   useEffect(() => {
     if (clinics.length === 0) return;
+    if (isSuperAdmin) return; // SuperAdmin escolhe manualmente, inclusive "Nenhuma"
     const firstId = clinics[0].id;
     const selectionValid = selectedClinicId && clinics.some((c) => c.id === selectedClinicId);
     if (!selectionValid) {
       setSelectedClinicId(firstId);
     }
-  }, [clinics, selectedClinicId, setSelectedClinicId]);
+  }, [clinics, selectedClinicId, setSelectedClinicId, isSuperAdmin]);
 
   const handleLogout = async () => {
     await signOut();
@@ -118,17 +122,22 @@ export function Sidebar() {
         <div className="border-b border-sidebar-border px-4 py-3">
           <div className="text-xs font-medium text-sidebar-muted mb-2">Clínica ativa</div>
           <Select
-            value={selectedClinicId || ''}
-            onValueChange={(v) => setSelectedClinicId(v)}
-            disabled={isLoadingClinics || clinics.length === 0}
+            value={selectedClinicId || '__none__'}
+            onValueChange={(v) => setSelectedClinicId(v === '__none__' ? null : v)}
+            disabled={isLoadingClinics || (!isSuperAdmin && clinics.length === 0)}
           >
             <SelectTrigger className="h-9">
-              <SelectValue placeholder="Selecione uma clínica" />
+              <SelectValue placeholder={isSuperAdmin ? "Selecione uma clínica" : "Selecione"} />
             </SelectTrigger>
             <SelectContent>
+              {isSuperAdmin && (
+                <SelectItem value="__none__">
+                  <span className="text-muted-foreground italic">Nenhuma</span>
+                </SelectItem>
+              )}
               {clinics.map((clinic) => (
                 <SelectItem key={clinic.id} value={clinic.id}>
-                  {clinic.name}
+                  {getClinicDisplayName(clinic)}
                 </SelectItem>
               ))}
             </SelectContent>
@@ -283,7 +292,11 @@ export function Sidebar() {
                 </p>
               ) : currentClinic ? (
                 <p className="truncate text-xs text-sidebar-muted">
-                  {currentClinic.name}
+                  <ClinicDisplayName clinic={currentClinic} />
+                </p>
+              ) : isSuperAdmin ? (
+                <p className="truncate text-xs text-sidebar-muted italic">
+                  Nenhuma clínica
                 </p>
               ) : (
                 <p className="truncate text-xs text-sidebar-muted">

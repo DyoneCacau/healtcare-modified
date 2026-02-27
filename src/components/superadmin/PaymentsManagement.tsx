@@ -67,6 +67,7 @@ export function PaymentsManagement() {
   const [regSubscriptionId, setRegSubscriptionId] = useState("");
   const [regAmount, setRegAmount] = useState("");
   const [regDate, setRegDate] = useState(new Date().toISOString().split("T")[0]);
+  const [regNextDueDate, setRegNextDueDate] = useState<string | "">("");
   const [regMethod, setRegMethod] = useState("pix");
   const [regDescription, setRegDescription] = useState("");
   const [regLoading, setRegLoading] = useState(false);
@@ -209,6 +210,7 @@ DELETE FROM payment_history WHERE status = 'rejected';`;
     setRegSubscriptionId("");
     setRegAmount("");
     setRegDate(new Date().toISOString().split("T")[0]);
+    setRegNextDueDate("");
     setRegMethod("pix");
     setRegDescription("");
   }
@@ -224,11 +226,12 @@ DELETE FROM payment_history WHERE status = 'rejected';`;
         p_paid_at: regDate,
         p_payment_method: regMethod,
         p_description: regDescription || null,
+        p_next_due_date: regNextDueDate || null,
       });
       if (error) {
         const msg = error.message || "";
         if (msg.includes("Could not find the function") || msg.includes("schema cache")) {
-          await registerPaymentFallback(regSubscriptionId, parseFloat(regAmount), regDate, regMethod, regDescription);
+          await registerPaymentFallback(regSubscriptionId, parseFloat(regAmount), regDate, regMethod, regDescription, regNextDueDate || null);
           return;
         }
         throw error;
@@ -248,10 +251,14 @@ DELETE FROM payment_history WHERE status = 'rejected';`;
     amount: number,
     paymentDate: string,
     paymentMethod: string,
-    description: string | null
+    description: string | null,
+    nextDueDate: string | null
   ) {
     try {
       const iso = new Date().toISOString();
+      const periodEnd = nextDueDate
+        ? new Date(nextDueDate + "T12:00:00").toISOString()
+        : new Date(new Date(paymentDate).setMonth(new Date(paymentDate).getMonth() + 1)).toISOString();
       const { error: insertError } = await supabase.from("payment_history").insert({
         subscription_id: subscriptionId,
         amount,
@@ -270,7 +277,7 @@ DELETE FROM payment_history WHERE status = 'rejected';`;
           last_payment_at: iso,
           status: "active",
           current_period_start: paymentDate,
-          current_period_end: new Date(new Date(paymentDate).setMonth(new Date(paymentDate).getMonth() + 1)).toISOString().split("T")[0],
+          current_period_end: periodEnd,
         })
         .eq("id", subscriptionId);
       if (updateError) throw updateError;
@@ -511,6 +518,13 @@ DELETE FROM payment_history WHERE status = 'rejected';`;
             <div className="space-y-2">
               <Label>Data do pagamento *</Label>
               <DateInput value={regDate} onChange={setRegDate} required />
+            </div>
+            <div className="space-y-2">
+              <Label>Próximo vencimento (opcional)</Label>
+              <DateInput value={regNextDueDate || ""} onChange={(v) => setRegNextDueDate(v || "")} />
+              <p className="text-xs text-muted-foreground">
+                Informe quando o cliente deve pagar a próxima mensalidade. Se vazio, usa data do pagamento + 30 dias.
+              </p>
             </div>
             <div className="space-y-2">
               <Label>Método *</Label>

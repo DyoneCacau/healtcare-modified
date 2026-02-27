@@ -1,10 +1,12 @@
-import { Building2, Mail, Phone, LogOut } from 'lucide-react';
+import { Building2, Mail, Phone, LogOut, RefreshCw } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { useAuth } from '@/hooks/useAuth';
+import { useSubscription } from '@/hooks/useSubscription';
 
 export function ContactAdminScreen() {
   const { signOut } = useAuth();
+  const { refreshSubscription } = useSubscription();
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-muted/30 p-4">
@@ -27,6 +29,12 @@ export function ContactAdminScreen() {
               <li>Informe o e-mail da sua conta</li>
               <li>Aguarde a ativação da assinatura</li>
             </ul>
+          </div>
+          <div className="flex gap-2">
+            <Button variant="outline" onClick={() => refreshSubscription()} className="gap-2">
+              <RefreshCw className="h-4 w-4" />
+              Tentar novamente
+            </Button>
           </div>
           <div className="flex gap-2">
             <Button variant="outline" className="flex-1" asChild>

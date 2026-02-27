@@ -10,22 +10,34 @@ import {
 } from '@/components/ui/select';
 import { Clinic } from '@/types/clinic';
 import { Professional } from '@/types/agenda';
+import { getClinicDisplayName } from '@/lib/utils';
 import { Calendar, Download, FileSpreadsheet, Printer } from 'lucide-react';
+
+export interface SellerOption {
+  id: string;
+  name: string;
+}
 
 interface ReportFiltersProps {
   startDate: string;
   endDate: string;
   selectedClinic: string;
   selectedProfessional: string;
+  selectedSeller?: string;
   onStartDateChange: (date: string) => void;
   onEndDateChange: (date: string) => void;
   onClinicChange: (clinicId: string) => void;
   onProfessionalChange: (professionalId: string) => void;
+  onSellerChange?: (sellerId: string) => void;
   clinics: Clinic[];
   professionals: Professional[];
+  sellers?: SellerOption[];
   onExportPDF: () => void;
   onExportExcel: () => void;
   onPrint: () => void;
+  /** Atalhos de período (ex: últimos 3, 6, 12 meses). Opcional. */
+  onPeriodShortcut?: (months: '3' | '6' | '12') => void;
+  activePeriodShortcut?: '3' | '6' | '12' | 'custom';
 }
 
 export function ReportFilters({
@@ -33,19 +45,24 @@ export function ReportFilters({
   endDate,
   selectedClinic,
   selectedProfessional,
+  selectedSeller = 'all',
   onStartDateChange,
   onEndDateChange,
   onClinicChange,
   onProfessionalChange,
+  onSellerChange,
   clinics,
   professionals,
+  sellers = [],
   onExportPDF,
   onExportExcel,
   onPrint,
+  onPeriodShortcut,
+  activePeriodShortcut,
 }: ReportFiltersProps) {
   return (
     <div className="space-y-4 bg-card p-4 rounded-lg border">
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-5">
         <div className="space-y-2">
           <Label className="flex items-center gap-2">
             <Calendar className="h-4 w-4" />
@@ -72,7 +89,7 @@ export function ReportFilters({
               <SelectItem value="all">Todas as clínicas</SelectItem>
               {clinics.map((clinic) => (
                 <SelectItem key={clinic.id} value={clinic.id}>
-                  {clinic.name}
+                  {getClinicDisplayName(clinic)}
                 </SelectItem>
               ))}
             </SelectContent>
@@ -95,7 +112,40 @@ export function ReportFilters({
             </SelectContent>
           </Select>
         </div>
+        {onSellerChange && (
+          <div className="space-y-2">
+            <Label>Vendedor(a)</Label>
+            <Select value={selectedSeller} onValueChange={onSellerChange}>
+              <SelectTrigger>
+                <SelectValue placeholder="Todos os vendedores" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Todos os vendedores</SelectItem>
+                {sellers.map((s) => (
+                  <SelectItem key={s.id} value={s.id}>
+                    {s.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+        )}
       </div>
+
+      {onPeriodShortcut && (
+        <div className="flex flex-wrap items-center gap-2 pt-2 border-t">
+          <span className="text-sm text-muted-foreground mr-1">Atalhos:</span>
+          <Button variant={activePeriodShortcut === '3' ? 'default' : 'outline'} size="sm" onClick={() => onPeriodShortcut('3')}>
+            Últimos 3 meses
+          </Button>
+          <Button variant={activePeriodShortcut === '6' ? 'default' : 'outline'} size="sm" onClick={() => onPeriodShortcut('6')}>
+            Últimos 6 meses
+          </Button>
+          <Button variant={activePeriodShortcut === '12' ? 'default' : 'outline'} size="sm" onClick={() => onPeriodShortcut('12')}>
+            Últimos 12 meses
+          </Button>
+        </div>
+      )}
 
       <div className="flex flex-wrap gap-2 pt-2 border-t">
         <Button variant="outline" size="sm" onClick={onExportPDF}>

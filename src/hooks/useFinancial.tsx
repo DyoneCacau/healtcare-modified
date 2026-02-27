@@ -805,6 +805,7 @@ export function useRegisterCashClosing() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['unclosed-cash-days', clinicId] });
+      queryClient.invalidateQueries({ queryKey: ['unclosed-cash-days-all-clinics'] });
       queryClient.invalidateQueries({ queryKey: ['cash-closings'] });
     },
   });
@@ -859,4 +860,54 @@ export function useUnclosedCashDays() {
   });
 
   return { unclosedDates: dates || [], isLoading };
+}
+
+/** Para SuperAdmin: dias não fechados de TODAS as clínicas. */
+export function useUnclosedCashDaysAllClinics(enabled = true) {
+  const { data, isLoading } = useQuery({
+    queryKey: ['unclosed-cash-days-all-clinics'],
+    queryFn: async () => {
+      const today = new Date().toISOString().split('T')[0];
+      const start = new Date();
+      start.setDate(start.getDate() - 31);
+      const startStr = start.toISOString().split('T')[0];
+
+      const { data: clinics } = await supabase.from('clinics').select('id, name');
+      if (!clinics?.length) return [];
+
+      const result: { clinicId: string; clinicName: string; dates: string[] }[] = [];
+
+      for (const clinic of clinics) {
+        const { data: txDates } = await supabase
+          .from('financial_transactions')
+          .select('created_at')
+          .eq('clinic_id', clinic.id)
+          .gte('created_at', `${startStr}T00:00:00`)
+          .lt('created_at', `${today}T23:59:59`);
+
+        const daysWithTx = new Set<string>();
+        (txDates || []).forEach((r: { created_at: string }) => daysWithTx.add(toDateOnly(r.created_at)));
+
+        const { data: closed } = await supabase
+          .from('cash_closings')
+          .select('closing_date')
+          .eq('clinic_id', clinic.id)
+          .gte('closing_date', startStr)
+          .lte('closing_date', today);
+
+        const closedSet = new Set((closed || []).map((r: { closing_date: string | Date }) => toDateOnly(r.closing_date)));
+        const unclosed = Array.from(daysWithTx).filter((d) => d < today && !closedSet.has(d)).sort();
+
+        if (unclosed.length > 0) {
+          result.push({ clinicId: clinic.id, clinicName: clinic.name, dates: unclosed });
+        }
+      }
+      return result;
+    },
+    enabled,
+    staleTime: 0,
+    refetchOnWindowFocus: true,
+  });
+
+  return { clinicsWithUnclosed: data || [], isLoading };
 }

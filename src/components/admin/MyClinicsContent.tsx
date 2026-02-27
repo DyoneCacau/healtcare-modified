@@ -6,6 +6,8 @@ import { useSubscription } from '@/hooks/useSubscription';
 import { Skeleton } from '@/components/ui/skeleton';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
+import { formatClinicAddress } from '@/lib/utils';
+import { ClinicDisplayName } from '@/components/common/ClinicDisplayName';
 
 export function MyClinicsContent() {
   const { clinics, isLoading } = useClinics();
@@ -27,7 +29,7 @@ export function MyClinicsContent() {
   return (
     <div className="space-y-6">
       <p className="text-muted-foreground">
-        Gerencie as clínicas que você administra
+        Gerencie as clínicas que você administra. Para adicionar uma nova unidade, entre em contato com nossa equipe comercial.
       </p>
 
       {subscription && plan && (
@@ -38,12 +40,19 @@ export function MyClinicsContent() {
                 <h3 className="font-semibold text-lg mb-1">Plano Atual: {plan.name}</h3>
                 <p className="text-sm text-muted-foreground mb-4">
                   {subscription.status === 'active' ? (
-                    <>
-                      Próxima cobrança em{' '}
-                      {subscription.current_period_end
-                        ? format(new Date(subscription.current_period_end), "dd 'de' MMMM 'de' yyyy", { locale: ptBR })
-                        : 'Data não disponível'}
-                    </>
+                    subscription.current_period_end ? (
+                      <>
+                        Próxima cobrança em{' '}
+                        <span className="font-medium text-foreground">
+                          {format(new Date(subscription.current_period_end), "dd 'de' MMMM 'de' yyyy", { locale: ptBR })}
+                        </span>
+                      </>
+                    ) : (
+                      <>
+                        Vencimento não definido.{' '}
+                        <span className="text-muted-foreground">Entre em contato com nossa equipe comercial para definir a data.</span>
+                      </>
+                    )
                   ) : (
                     'Assinatura inativa'
                   )}
@@ -73,7 +82,7 @@ export function MyClinicsContent() {
               <CardTitle className="flex items-start justify-between">
                 <div className="flex items-center gap-2">
                   <Building2 className="h-5 w-5 text-primary" />
-                  <span className="text-lg">{clinic.name}</span>
+                  <span className="text-lg"><ClinicDisplayName clinic={clinic} /></span>
                 </div>
                 <Badge variant={clinic.is_active ? 'default' : 'secondary'}>
                   {clinic.is_active ? (
@@ -108,13 +117,11 @@ export function MyClinicsContent() {
                 </div>
               )}
 
-              {clinic.address && (
+              {(clinic.address || (clinic as any).address_number || (clinic as any).neighborhood) && (
                 <div className="text-sm">
                   <span className="text-muted-foreground">Endereço:</span>
                   <p className="font-medium mt-1 text-muted-foreground">
-                    {clinic.address}
-                    {clinic.city && `, ${clinic.city}`}
-                    {clinic.state && ` - ${clinic.state}`}
+                    {formatClinicAddress(clinic)}
                   </p>
                 </div>
               )}

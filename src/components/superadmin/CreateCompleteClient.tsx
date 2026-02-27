@@ -33,8 +33,11 @@ const AVAILABLE_MODULES = [
 
 interface ClinicData {
   name: string;
+  unit_name: string;
   cnpj: string;
   address: string;
+  address_number: string;
+  neighborhood: string;
   city: string;
   state: string;
   zipcode: string;
@@ -72,8 +75,11 @@ export function CreateCompleteClient() {
     adminPhone: "",
     clinics: [{
       name: "",
+      unit_name: "",
       cnpj: "",
       address: "",
+      address_number: "",
+      neighborhood: "",
       city: "",
       state: "",
       zipcode: "",
@@ -107,8 +113,11 @@ export function CreateCompleteClient() {
       ...prev,
       clinics: [...prev.clinics, {
         name: "",
+        unit_name: "",
         cnpj: "",
         address: "",
+        address_number: "",
+        neighborhood: "",
         city: "",
         state: "",
         zipcode: "",
@@ -218,26 +227,29 @@ export function CreateCompleteClient() {
           .from('clinics')
           .insert({
             name: clinic.name,
+            unit_name: clinic.unit_name || null,
             cnpj: clinic.cnpj,
-            address: clinic.address,
-            city: clinic.city,
-            state: clinic.state,
-            zipcode: clinic.zipcode,
-            phone: clinic.phone,
-            email: clinic.email
+            address: clinic.address || null,
+            address_number: clinic.address_number || null,
+            neighborhood: clinic.neighborhood || null,
+            city: clinic.city || null,
+            state: clinic.state || null,
+            zip_code: clinic.zipcode || null,
+            phone: clinic.phone || null,
+            email: clinic.email || (clinic.name ? `${clinic.name.toLowerCase().replace(/\s/g, '')}@clinica.local` : 'contato@clinica.local')
           })
           .select()
           .single();
 
         if (clinicError) throw clinicError;
 
-        // Vincular admin à clínica
+        // Vincular admin à clínica (is_owner = true para o dono/administrador)
         const { error: linkError } = await supabase
           .from('clinic_users')
           .insert({
             user_id: authUser.user.id,
             clinic_id: newClinic.id,
-            role: 'admin'
+            is_owner: true
           });
 
         if (linkError) throw linkError;
@@ -270,8 +282,11 @@ export function CreateCompleteClient() {
         adminPhone: "",
         clinics: [{
           name: "",
+          unit_name: "",
           cnpj: "",
           address: "",
+          address_number: "",
+          neighborhood: "",
           city: "",
           state: "",
           zipcode: "",
@@ -411,7 +426,14 @@ export function CreateCompleteClient() {
                         required
                       />
                     </div>
-
+                    <div className="space-y-2">
+                      <Label>Unidade/Endereço (opcional)</Label>
+                      <Input
+                        value={clinic.unit_name}
+                        onChange={(e) => updateClinic(index, 'unit_name', e.target.value)}
+                        placeholder="Ex: litoral, 13 de maio, Conj. Ceara"
+                      />
+                    </div>
                     <div className="space-y-2">
                       <Label>CNPJ *</Label>
                       <Input
@@ -424,15 +446,67 @@ export function CreateCompleteClient() {
                   </div>
 
                   <div className="space-y-2">
-                    <Label>Endereço</Label>
+                    <Label>CEP</Label>
                     <Input
-                      value={clinic.address}
-                      onChange={(e) => updateClinic(index, 'address', e.target.value)}
-                      placeholder="Rua Exemplo, 123"
+                      value={clinic.zipcode}
+                      onChange={(e) => updateClinic(index, 'zipcode', e.target.value.replace(/\D/g, '').replace(/(\d{5})(\d)/, '$1-$2').slice(0, 9))}
+                      onBlur={async () => {
+                        const cep = clinic.zipcode.replace(/\D/g, '');
+                        if (cep.length === 8) {
+                          try {
+                            const res = await fetch(`https://viacep.com.br/ws/${cep}/json/`);
+                            const data = await res.json();
+                            if (!data.erro) {
+                              setFormData(prev => ({
+                                ...prev,
+                                clinics: prev.clinics.map((c, i) =>
+                                  i === index
+                                    ? {
+                                        ...c,
+                                        address: data.logradouro || c.address,
+                                        neighborhood: data.bairro || c.neighborhood,
+                                        city: data.localidade || c.city,
+                                        state: data.uf || c.state,
+                                      }
+                                    : c
+                                ),
+                              }));
+                              toast.success('Endereço preenchido');
+                            }
+                          } catch { /* ignore */ }
+                        }
+                      }}
+                      placeholder="00000-000"
+                      maxLength={9}
                     />
                   </div>
-
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <Label>Rua / Logradouro</Label>
+                      <Input
+                        value={clinic.address}
+                        onChange={(e) => updateClinic(index, 'address', e.target.value)}
+                        placeholder="Av. Paulista"
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label>Número</Label>
+                      <Input
+                        value={clinic.address_number}
+                        onChange={(e) => updateClinic(index, 'address_number', e.target.value)}
+                        placeholder="1000"
+                      />
+                    </div>
+                  </div>
                   <div className="grid grid-cols-3 gap-4">
+                    <div className="space-y-2">
+                      <Label>Bairro</Label>
+                      <Input
+                        value={clinic.neighborhood}
+                        onChange={(e) => updateClinic(index, 'neighborhood', e.target.value)}
+                        placeholder="Bela Vista"
+                      />
+                    </div>
                     <div className="space-y-2">
                       <Label>Cidade</Label>
                       <Input
@@ -441,23 +515,13 @@ export function CreateCompleteClient() {
                         placeholder="São Paulo"
                       />
                     </div>
-
                     <div className="space-y-2">
                       <Label>Estado</Label>
                       <Input
                         value={clinic.state}
-                        onChange={(e) => updateClinic(index, 'state', e.target.value)}
+                        onChange={(e) => updateClinic(index, 'state', e.target.value.toUpperCase().slice(0, 2))}
                         placeholder="SP"
                         maxLength={2}
-                      />
-                    </div>
-
-                    <div className="space-y-2">
-                      <Label>CEP</Label>
-                      <Input
-                        value={clinic.zipcode}
-                        onChange={(e) => updateClinic(index, 'zipcode', e.target.value)}
-                        placeholder="00000-000"
                       />
                     </div>
                   </div>

@@ -1,5 +1,6 @@
 import { Patient } from '@/types/patient';
 import { AppointmentWithClinic } from '@/types/clinic';
+import { formatClinicAddress } from '@/lib/utils';
 import { format, parseISO } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 
@@ -43,7 +44,7 @@ Gostaríamos de confirmar sua consulta agendada:
 
 *Local:*
 ${appointment.clinic.name}
-${appointment.clinic.address}
+${formatClinicAddress(appointment.clinic) || appointment.clinic.address || ''}
 
 Por favor, confirme se você comparecerá à consulta respondendo:
 *SIM* - Confirmo minha presença

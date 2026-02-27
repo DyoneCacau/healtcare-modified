@@ -28,21 +28,7 @@ export function useClinic() {
             };
           }
         }
-
-        const { data: adminClinic, error: adminClinicError } = await supabase
-          .from('clinics')
-          .select('*')
-          .order('created_at', { ascending: true })
-          .limit(1)
-          .maybeSingle();
-
-        if (adminClinicError) throw adminClinicError;
-        if (!adminClinic) return null;
-
-        return {
-          ...adminClinic,
-          isOwner: false,
-        };
+        return null; // SuperAdmin com "Nenhuma" selecionada
       }
 
       // Buscar todas as clínicas do usuário (para respeitar selectedClinicId quando houver mais de uma)

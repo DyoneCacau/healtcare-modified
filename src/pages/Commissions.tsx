@@ -56,10 +56,12 @@ export default function Commissions() {
     return map;
   }, [professionals]);
 
-  // Convert commissions from database to CommissionCalculation format
+  // Convert commissions from database to CommissionCalculation format (com lead_source do appointment para relatório)
   const commissionCalculations = useMemo(() => {
-    return commissions.map((c: { id: string; beneficiary_id: string; beneficiary_type: string; beneficiary_name?: string; appointment_id?: string; clinic_id: string; base_value?: number; percentage?: number; amount: number; created_at: string; status: string }) => {
+    return commissions.map((c: { id: string; beneficiary_id: string; beneficiary_type: string; beneficiary_name?: string; appointment_id?: string; clinic_id: string; base_value?: number; percentage?: number; amount: number; created_at: string; status: string; _lead_source?: string; _referral_name?: string }) => {
       const beneficiaryName = c.beneficiary_name || professionalsByName.get(c.beneficiary_id) || 'Profissional';
+      const leadSource = c._lead_source ?? undefined;
+      const referralName = c._referral_name ?? undefined;
       return {
         id: c.id,
         appointmentId: c.appointment_id || '',
@@ -80,6 +82,8 @@ export default function Commissions() {
         commissionAmount: c.amount,
         date: c.created_at.split('T')[0],
         status: c.status as 'pending' | 'paid',
+        leadSource,
+        referralName,
       };
     });
   }, [commissions, professionalsByName]);
