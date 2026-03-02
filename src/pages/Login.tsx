@@ -88,15 +88,26 @@ export default function Login() {
     <div className="flex min-h-screen">
       {/* Left Panel - Branding */}
       <div className="hidden lg:flex lg:w-1/2 flex-col justify-between p-12" style={{background: 'linear-gradient(145deg, hsl(215 55% 18%) 0%, hsl(204 70% 28%) 50%, hsl(215 55% 14%) 100%)'}}>
-        <div className="flex items-center gap-3">
-          <img 
-            src="/logo.png" 
-            alt="HealthCare" 
-            className="h-12 w-12 rounded-xl object-cover shadow-lg"
-          />
-          <span className="text-2xl font-bold text-white">
-            HealthCare
-          </span>
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <img 
+              src="/logo.png" 
+              alt="HealthCare" 
+              className="h-12 w-12 rounded-xl object-cover shadow-lg"
+            />
+            <span className="text-2xl font-bold text-white">
+              HealthCare
+            </span>
+          </div>
+          <div className="flex items-center gap-2 text-white/60 text-sm">
+            <span>Desenvolvido por</span>
+            <img
+              src="/octupuzz-logo.png"
+              alt="Octupuzz"
+              className="h-9 w-9 object-contain"
+            />
+            <span className="font-medium text-white/70">Octupuzz</span>
+          </div>
         </div>
 
         <div className="space-y-6">

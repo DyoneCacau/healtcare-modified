@@ -1,6 +1,6 @@
 import { useRef, useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
-import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Patient } from '@/types/patient';
 import { FileDown, X, Phone, Mail, MapPin } from 'lucide-react';
 import { jsPDF } from 'jspdf';
@@ -315,7 +315,9 @@ export function DocumentPrintPreview(props: DocumentPrintPreviewProps) {
       <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>Editar e Imprimir - {titles[type]}</DialogTitle>
-          <p className="text-sm text-muted-foreground">Edite os campos diretamente no documento. Apenas a assinatura do profissional (para carimbo e rubrica apos imprimir).</p>
+          <DialogDescription>
+            Edite os campos diretamente no documento. Apenas a assinatura do profissional (para carimbo e rubrica apos imprimir).
+          </DialogDescription>
         </DialogHeader>
 
         {type !== 'recibo' && professionals.length > 1 && (

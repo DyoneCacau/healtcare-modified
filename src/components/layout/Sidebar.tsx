@@ -52,7 +52,7 @@ const menuItems: MenuItem[] = [
   { icon: DollarSign, label: "Financeiro", path: "/financeiro", feature: "financeiro" },
   { icon: Percent, label: "Comissões", path: "/comissoes", feature: "comissoes" },
   { icon: Clock, label: "Ponto", path: "/ponto", feature: "ponto" },
-  { icon: FileText, label: "Termos", path: "/termos", feature: "termos" },
+  { icon: FileText, label: "Meus Termos", path: "/termos", feature: "termos" },
   { icon: Package, label: "Estoque", path: "/estoque", feature: "estoque" },
   { icon: FileBarChart, label: "Relatórios", path: "/relatorios", feature: "relatorios" },
   { icon: Shield, label: "Administração", path: "/administracao", feature: "administracao" },
