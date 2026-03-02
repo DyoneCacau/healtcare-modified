@@ -252,6 +252,21 @@ export function useClinicDocuments() {
     onError: (e) => toast.error(e?.message || 'Erro ao enviar documento'),
   });
 
+  const updateDocument = useMutation({
+    mutationFn: async ({ id, name }: { id: string; name: string }) => {
+      const { error } = await supabase
+        .from('clinic_documents')
+        .update({ name: name.trim(), updated_at: new Date().toISOString() })
+        .eq('id', id);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['clinic-documents'] });
+      toast.success('Documento renomeado!');
+    },
+    onError: (e) => toast.error(e?.message || 'Erro ao renomear'),
+  });
+
   const deleteDocument = useMutation({
     mutationFn: async (id: string) => {
       const { error } = await supabase.from('clinic_documents').delete().eq('id', id);
@@ -269,6 +284,7 @@ export function useClinicDocuments() {
     isLoading,
     refetch,
     uploadDocument,
+    updateDocument,
     deleteDocument,
   };
 }

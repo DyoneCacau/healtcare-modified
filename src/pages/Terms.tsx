@@ -3,23 +3,25 @@ import { MainLayout } from '@/components/layout/MainLayout';
 import { TermsList } from '@/components/terms/TermsList';
 import { TermEditor } from '@/components/terms/TermEditor';
 import { TermPrintPreview } from '@/components/terms/TermPrintPreview';
-import { ClinicBrandingEditor } from '@/components/terms/ClinicBrandingEditor';
 import { DocumentsAndModelsTab } from '@/components/terms/DocumentsAndModelsTab';
+import { UploadDocumentForm } from '@/components/terms/UploadDocumentForm';
+import { UploadedDocumentsCards } from '@/components/terms/UploadedDocumentsCards';
 import { Button } from '@/components/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { useTerms, useTermMutations, useClinicBranding } from '@/hooks/useTerms';
+import { useTerms, useTermMutations, useClinicBranding, useClinicDocuments } from '@/hooks/useTerms';
 import { useClinic } from '@/hooks/useClinic';
 import { usePatients } from '@/hooks/usePatients';
-import { ConsentTerm, ClinicBranding } from '@/types/terms';
+import { ConsentTerm } from '@/types/terms';
 import { Patient } from '@/types/patient';
-import { FileText, Plus, Building2, FileSignature, FileStack } from 'lucide-react';
+import { FileText, Plus, Building2, FileSignature, FileStack, FileUp } from 'lucide-react';
 import { Skeleton } from '@/components/ui/skeleton';
 
 export default function Terms() {
   const { clinic, clinicId } = useClinic();
   const { terms, isLoading } = useTerms();
   const { createTerm, updateTerm, deleteTerm } = useTermMutations();
-  const { branding, updateBranding, uploadLogo } = useClinicBranding();
+  const { branding } = useClinicBranding();
+  const { documents, updateDocument, deleteDocument } = useClinicDocuments();
   const { patients } = usePatients();
   
   const [editorOpen, setEditorOpen] = useState(false);
@@ -69,10 +71,6 @@ export default function Terms() {
     }
   };
 
-  const handleSaveBranding = (brandingData: ClinicBranding) => {
-    updateBranding.mutate(brandingData);
-  };
-
   if (isLoading) {
     return (
       <MainLayout>
@@ -96,7 +94,7 @@ export default function Terms() {
           <div>
             <h1 className="text-2xl font-bold flex items-center gap-2">
               <FileText className="h-7 w-7 text-primary" />
-              Termos de Consentimento
+              Meus Termos
             </h1>
             <p className="text-muted-foreground">Gerencie os termos e documentos da clínica</p>
           </div>
@@ -118,7 +116,7 @@ export default function Terms() {
           <TabsList>
             <TabsTrigger value="termos" className="gap-2">
               <FileSignature className="h-4 w-4" />
-              Termos de Consentimento
+              Meus Termos
             </TabsTrigger>
             <TabsTrigger value="modelos" className="gap-2">
               <FileStack className="h-4 w-4" />
@@ -127,13 +125,24 @@ export default function Terms() {
           </TabsList>
 
           <TabsContent value="termos" className="space-y-6">
-            <div className="grid gap-6 lg:grid-cols-3">
-              <div className="lg:col-span-2">
-                <TermsList terms={terms} onEdit={handleEditTerm} onPrint={handlePrintTerm} onDelete={handleDeleteTerm} />
-              </div>
-              <div>
-                <ClinicBrandingEditor branding={branding} onSave={handleSaveBranding} onUploadLogo={uploadLogo} />
-              </div>
+            <TermsList terms={terms} onEdit={handleEditTerm} onPrint={handlePrintTerm} onDelete={handleDeleteTerm} />
+
+            {/* Enviar documento */}
+            <UploadDocumentForm />
+
+            {/* Documentos enviados */}
+            <div className="space-y-4">
+              <h2 className="text-lg font-semibold flex items-center gap-2">
+                <FileUp className="h-5 w-5" />
+                Documentos enviados
+              </h2>
+              <UploadedDocumentsCards
+                documents={documents}
+                onRename={(id, name) => updateDocument.mutate({ id, name })}
+                onDelete={(id) => deleteDocument.mutate(id)}
+                isRenaming={updateDocument.isPending}
+                isDeleting={deleteDocument.isPending}
+              />
             </div>
           </TabsContent>
 

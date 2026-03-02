@@ -3,6 +3,7 @@ import { Button } from '@/components/ui/button';
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
   DialogFooter,
   DialogHeader,
   DialogTitle,
@@ -166,6 +167,7 @@ export function TermPrintPreview({
       <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>Pré-visualização do Termo</DialogTitle>
+          <DialogDescription>Visualize o termo antes de imprimir</DialogDescription>
         </DialogHeader>
 
         <div 

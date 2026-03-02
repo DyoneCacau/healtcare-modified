@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
+import { useClinic } from '@/hooks/useClinic';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -92,7 +93,7 @@ const PRIORITY_COLORS: Record<string, string> = {
   urgent: 'text-red-500',
 };
 
-const ALLOWED_TYPES = ['image/jpeg', 'image/png', 'image/gif', 'image/webp', 'application/pdf', 'video/mp4', 'video/quicktime'];
+const ALLOWED_TYPES = ['image/jpeg', 'image/jpg', 'image/png', 'image/gif', 'image/webp', 'application/pdf', 'video/mp4', 'video/quicktime'];
 const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB
 const MAX_FILES = 5;
 
@@ -110,13 +111,13 @@ function formatBytes(bytes: number) {
 
 export function SupportTab() {
   const { user } = useAuth();
+  const { clinicId } = useClinic();
   const [tickets, setTickets] = useState<SupportTicket[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [selectedTicket, setSelectedTicket] = useState<SupportTicket | null>(null);
   const [isDetailOpen, setIsDetailOpen] = useState(false);
-  const [clinicId, setClinicId] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const [form, setForm] = useState({
@@ -129,10 +130,13 @@ export function SupportTab() {
   const [uploadProgress, setUploadProgress] = useState(false);
 
   useEffect(() => {
-    if (user) {
-      loadClinicAndTickets();
+    if (!user) return;
+    if (clinicId) {
+      loadTickets(clinicId).finally(() => setIsLoading(false));
+    } else {
+      setIsLoading(false);
     }
-  }, [user]);
+  }, [user, clinicId]);
 
   // Real-time updates
   useEffect(() => {
@@ -149,26 +153,6 @@ export function SupportTab() {
 
     return () => { supabase.removeChannel(channel); };
   }, [clinicId]);
-
-  const loadClinicAndTickets = async () => {
-    if (!user) return;
-    try {
-      const { data: clinicUser } = await supabase
-        .from('clinic_users')
-        .select('clinic_id')
-        .eq('user_id', user.id)
-        .maybeSingle();
-
-      if (clinicUser?.clinic_id) {
-        setClinicId(clinicUser.clinic_id);
-        await loadTickets(clinicUser.clinic_id);
-      }
-    } catch (err) {
-      console.error('Error loading clinic:', err);
-    } finally {
-      setIsLoading(false);
-    }
-  };
 
   const loadTickets = async (cid: string) => {
     try {
@@ -224,36 +208,46 @@ export function SupportTab() {
 
     const uploaded: Attachment[] = [];
     for (const file of files) {
-      const ext = file.name.split('.').pop();
-      const path = `${user!.id}/${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`;
+      try {
+        const ext = file.name.split('.').pop() || 'bin';
+        const path = `${user!.id}/${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`;
 
-      const { error } = await supabase.storage
-        .from('support-attachments')
-        .upload(path, file, { contentType: file.type, upsert: false });
+        const { error } = await supabase.storage
+          .from('support-attachments')
+          .upload(path, file, { contentType: file.type, upsert: false });
 
-      if (error) {
-        toast.error(`Erro ao enviar ${file.name}`);
+        if (error) {
+          toast.warning(`Não foi possível anexar ${file.name}. O ticket será enviado. Execute fix_upload_support_attachments.sql no Supabase.`);
+          continue;
+        }
+
+        const { data: urlData } = supabase.storage
+          .from('support-attachments')
+          .getPublicUrl(path);
+
+        uploaded.push({
+          name: file.name,
+          url: urlData.publicUrl,
+          type: file.type,
+          size: file.size,
+        });
+      } catch {
         continue;
       }
-
-      const { data: urlData } = supabase.storage
-        .from('support-attachments')
-        .getPublicUrl(path);
-
-      uploaded.push({
-        name: file.name,
-        url: urlData.publicUrl,
-        type: file.type,
-        size: file.size,
-      });
     }
-
     setUploadProgress(false);
     return uploaded;
   };
 
   const handleSubmit = async () => {
-    if (!user || !clinicId) return;
+    if (!user) {
+      toast.error('Faça login para enviar um ticket.');
+      return;
+    }
+    if (!clinicId) {
+      toast.error('Você não está vinculado a uma clínica. Entre em contato com o administrador.');
+      return;
+    }
 
     if (!form.subject.trim()) {
       toast.error('Por favor, informe o assunto');
@@ -279,10 +273,15 @@ export function SupportTab() {
         status: 'open',
       });
 
-      if (error) throw error;
+      if (error) {
+        const msg = error.details || error.hint || error.message;
+        console.error('Support ticket insert error:', error);
+        toast.error(msg || 'Erro ao enviar ticket. Verifique as permissões no Supabase.');
+        return;
+      }
 
-      // Create admin notification
-      await supabase.from('admin_notifications').insert({
+      // Create admin notification (não bloqueia se falhar)
+      supabase.from('admin_notifications').insert({
         type: 'support_ticket',
         title: `Novo ticket: ${form.subject.trim()}`,
         message: `Tipo: ${TICKET_TYPES.find(t => t.value === form.type)?.label} | Prioridade: ${TICKET_PRIORITIES.find(p => p.value === form.priority)?.label}`,
@@ -297,7 +296,7 @@ export function SupportTab() {
       loadTickets(clinicId);
     } catch (err: any) {
       console.error('Error creating ticket:', err);
-      toast.error(err.message || 'Erro ao enviar ticket');
+      toast.error(err?.message || 'Erro ao enviar ticket');
     } finally {
       setIsSubmitting(false);
     }
