@@ -13,6 +13,8 @@ interface WeekViewProps {
   onComplete: (appointment: AgendaAppointment) => void;
   onMarkNoShow?: (appointment: AgendaAppointment) => void;
   onWhatsApp: (appointment: AgendaAppointment) => void;
+  /** Clique em uma célula (dia + horário) para abrir formulário de novo agendamento */
+  onSlotClick?: (day: Date, startTime: string) => void;
 }
 
 const timeSlots = [
@@ -29,6 +31,7 @@ export function WeekView({
   onComplete,
   onMarkNoShow,
   onWhatsApp,
+  onSlotClick,
 }: WeekViewProps) {
   const weekStart = startOfWeek(date, { weekStartsOn: 1 });
   const weekDays = Array.from({ length: 7 }, (_, i) => addDays(weekStart, i));
@@ -102,12 +105,14 @@ export function WeekView({
               return (
                 <div
                   key={`${day.toISOString()}-${slot}`}
+                  onClick={() => onSlotClick?.(day, slot)}
                   className={cn(
                     'min-h-[80px] border-r border-border p-1 last:border-r-0',
                     isToday ? 'bg-primary/5' : 'bg-card',
-                    slotAppointments.length === 0 && 'hover:bg-muted/50'
+                    onSlotClick && 'cursor-pointer hover:bg-muted/50 transition-colors'
                   )}
                 >
+                  <div onClick={(e) => slotAppointments.length > 0 && e.stopPropagation()}>
                   {slotAppointments.map((apt) => (
                     <AppointmentCard
                       key={apt.id}
@@ -121,6 +126,7 @@ export function WeekView({
                       compact
                     />
                   ))}
+                  </div>
                 </div>
               );
             })}

@@ -174,8 +174,19 @@ export default function Administration() {
 
     const { data: rolesData } = await rolesQuery;
 
-    if (profilesData && rolesData && clinicId) {
-      const userIds = rolesData.map((r: any) => r.user_id);
+    const roleLabels: Record<string, string> = {
+      admin: 'Administrador',
+      receptionist: 'Recepcionista',
+      seller: 'Vendedor',
+      professional: 'Profissional',
+    };
+
+    if (profilesData && clinicId) {
+      const rolesByUser = (rolesData || []).reduce((acc: Record<string, { role: string }>, r: any) => {
+        acc[r.user_id] = { role: r.role };
+        return acc;
+      }, {});
+      const userIds = allowedUserIds ?? (profilesData || []).map((p: any) => p.user_id);
       const { data: customRoleRows } = await supabase
         .from('user_clinic_custom_roles')
         .select('user_id, clinic_custom_role_id, clinic_custom_roles(name)')
@@ -186,28 +197,24 @@ export default function Administration() {
         const cr = r.clinic_custom_roles;
         customByUser[r.user_id] = { name: cr?.name ?? 'Personalizada', id: r.clinic_custom_role_id };
       });
-      const roleLabels: Record<string, string> = {
-        admin: 'Administrador',
-        receptionist: 'Recepcionista',
-        seller: 'Vendedor',
-        professional: 'Profissional',
-      };
       const usersWithRoles: SystemUser[] = [];
-      for (const role of rolesData) {
-        const profile = profilesData.find((p) => p.user_id === role.user_id);
-        if (profile) {
-          const custom = customByUser[role.user_id];
-          usersWithRoles.push({
-            id: profile.user_id,
-            name: profile.name,
-            email: profile.email,
-            phone: profile.phone || '',
-            role: custom ? custom.name : (roleLabels[role.role] ?? role.role),
-            roleId: custom ? custom.id : role.role,
-            is_active: profile.is_active,
-            created_at: profile.created_at,
-          });
-        }
+      const seenIds = new Set<string>();
+      for (const profile of profilesData) {
+        if (allowedUserIds && !allowedUserIds.includes(profile.user_id)) continue;
+        if (seenIds.has(profile.user_id)) continue;
+        seenIds.add(profile.user_id);
+        const roleRow = rolesByUser[profile.user_id];
+        const custom = customByUser[profile.user_id];
+        usersWithRoles.push({
+          id: profile.user_id,
+          name: profile.name,
+          email: profile.email,
+          phone: profile.phone || '',
+          role: custom ? custom.name : (roleRow ? (roleLabels[roleRow.role] ?? roleRow.role) : 'Sem função'),
+          roleId: custom ? custom.id : (roleRow?.role ?? ''),
+          is_active: profile.is_active,
+          created_at: profile.created_at,
+        });
       }
       setUsers(usersWithRoles);
     } else if (profilesData && rolesData) {
