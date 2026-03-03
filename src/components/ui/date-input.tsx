@@ -1,11 +1,16 @@
 import * as React from "react";
 import { Input } from "@/components/ui/input";
+import { Calendar } from "@/components/ui/calendar";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { cn } from "@/lib/utils";
 
 type Props = Omit<React.ComponentProps<typeof Input>, "type" | "value" | "onChange"> & {
   /** Valor ISO: yyyy-MM-dd (igual Supabase / inputs type=date). */
   value: string;
   /** Recebe valor ISO: yyyy-MM-dd. */
   onChange: (value: string) => void;
+  /** Se true, ao clicar no campo abre um calendário para escolher a data. */
+  showCalendar?: boolean;
 };
 
 function isoToBr(iso: string): string {
@@ -43,23 +48,42 @@ function brToIso(br: string): string | null {
   return `${yyyy}-${mm}-${dd}`;
 }
 
+function isoToDate(iso: string): Date | undefined {
+  if (!iso || iso.length < 10) return undefined;
+  const y = Number(iso.slice(0, 4));
+  const m = Number(iso.slice(5, 7)) - 1;
+  const d = Number(iso.slice(8, 10));
+  if (Number.isNaN(y) || Number.isNaN(m) || Number.isNaN(d)) return undefined;
+  const date = new Date(y, m, d);
+  if (Number.isNaN(date.getTime())) return undefined;
+  return date;
+}
+
+function dateToIso(date: Date): string {
+  const y = date.getFullYear();
+  const m = String(date.getMonth() + 1).padStart(2, "0");
+  const d = String(date.getDate()).padStart(2, "0");
+  return `${y}-${m}-${d}`;
+}
+
 /**
  * Input de data que SEMPRE mostra `dd/MM/aaaa`, sem depender do locale do navegador.
  * Internamente continua usando ISO `yyyy-MM-dd` (compatível com Supabase).
+ * Se showCalendar=true, ao clicar no campo abre um popover com calendário.
  */
 export const DateInput = React.forwardRef<HTMLInputElement, Props>(
-  ({ value, onChange, onBlur, ...props }, ref) => {
+  ({ value, onChange, onBlur, showCalendar = false, className, ...props }, ref) => {
     const [text, setText] = React.useState<string>(() => isoToBr(value));
+    const [open, setOpen] = React.useState(false);
 
     React.useEffect(() => {
-      // Sincroniza quando o value externo muda.
       setText(isoToBr(value));
     }, [value]);
 
-    return (
+    const selectedDate = isoToDate(value);
+    const inputEl = (
       <Input
         ref={ref}
-        {...props}
         type="text"
         inputMode="numeric"
         placeholder={props.placeholder || "dd/MM/aaaa"}
@@ -67,18 +91,43 @@ export const DateInput = React.forwardRef<HTMLInputElement, Props>(
         onChange={(e) => {
           const next = e.target.value;
           setText(next);
-
           const iso = brToIso(next);
           if (iso) onChange(iso);
         }}
         onBlur={(e) => {
-          // Se o usuário saiu com valor inválido, volta pro último value válido.
           const iso = brToIso(text);
           if (!iso) setText(isoToBr(value));
           onBlur?.(e);
         }}
+        className={cn(showCalendar && "cursor-pointer", className)}
+        {...props}
       />
     );
+
+    if (showCalendar) {
+      return (
+        <Popover open={open} onOpenChange={setOpen}>
+          <PopoverTrigger asChild>
+            {inputEl}
+          </PopoverTrigger>
+          <PopoverContent className="w-auto p-0" align="start">
+            <Calendar
+              mode="single"
+              selected={selectedDate}
+              onSelect={(date) => {
+                if (date) {
+                  onChange(dateToIso(date));
+                  setText(isoToBr(dateToIso(date)));
+                  setOpen(false);
+                }
+              }}
+            />
+          </PopoverContent>
+        </Popover>
+      );
+    }
+
+    return inputEl;
   }
 );
 DateInput.displayName = "DateInput";

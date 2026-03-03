@@ -126,6 +126,10 @@ export default function Financial() {
     [summary]
   );
 
+  const canCreateFinancial = isAdmin || can('financeiro', 'can_create');
+  const canEditFinancial = isAdmin || can('financeiro', 'can_edit');
+  const canDeleteFinancial = isAdmin || can('financeiro', 'can_delete');
+
   const handleAddTransaction = async (transaction: Omit<Transaction, 'id'>) => {
     await createTransaction.mutateAsync({
       type: transaction.type,
@@ -358,18 +362,24 @@ export default function Financial() {
                 <FeatureButton
                   feature="financeiro"
                   variant="outline"
+                  disabled={!canCreateFinancial}
                   onClick={() => setExpenseDialogOpen(true)}
                 >
                   <Minus className="mr-2 h-4 w-4" />
                   Saída
                 </FeatureButton>
-                <FeatureButton feature="financeiro" onClick={() => setIncomeDialogOpen(true)}>
+                <FeatureButton
+                  feature="financeiro"
+                  disabled={!canCreateFinancial}
+                  onClick={() => setIncomeDialogOpen(true)}
+                >
                   <Plus className="mr-2 h-4 w-4" />
                   Entrada
                 </FeatureButton>
                 <FeatureButton
                   feature="financeiro"
                   variant="outline"
+                  disabled={!canCreateFinancial}
                   onClick={() => setSangriaDialogOpen(true)}
                   className="border-amber-300 text-amber-700 hover:bg-amber-50"
                 >
@@ -379,6 +389,7 @@ export default function Financial() {
                 <FeatureButton
                   feature="financeiro"
                   variant="destructive"
+                  disabled={!canCreateFinancial}
                   onClick={() => setClosingDialogOpen(true)}
                 >
                   <Lock className="mr-2 h-4 w-4" />
@@ -388,6 +399,7 @@ export default function Financial() {
             ) : (
               <FeatureButton
                 feature="financeiro"
+                disabled={!canCreateFinancial}
                 onClick={handleOpenCash}
                 className="bg-emerald-600 hover:bg-emerald-700"
               >
@@ -523,39 +535,39 @@ export default function Financial() {
             </div>
 
             <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-              <Card className="bg-green-50">
-                <CardContent className="p-3 flex items-center gap-2">
-                  <Banknote className="h-4 w-4 text-green-600" />
-                  <div>
-                    <p className="text-xs text-muted-foreground">Dinheiro (líquido)</p>
-                    <p className="font-semibold text-green-700">R$ {cashSummary.totalCash.toFixed(2)}</p>
+              <Card className="bg-green-50 min-w-0">
+                <CardContent className="p-3 flex items-center gap-2 min-w-0">
+                  <Banknote className="h-4 w-4 text-green-600 flex-shrink-0" />
+                  <div className="min-w-0 overflow-hidden">
+                    <p className="text-xs text-muted-foreground truncate">Dinheiro (líquido)</p>
+                    <p className="font-semibold text-green-700 truncate">R$ {cashSummary.totalCash.toFixed(2)}</p>
                   </div>
                 </CardContent>
               </Card>
-              <Card className="bg-blue-50">
-                <CardContent className="p-3 flex items-center gap-2">
-                  <CreditCard className="h-4 w-4 text-blue-600" />
-                  <div>
-                    <p className="text-xs text-muted-foreground">Crédito</p>
-                    <p className="font-semibold text-blue-700">R$ {cashSummary.totalCredit.toFixed(2)}</p>
+              <Card className="bg-blue-50 min-w-0">
+                <CardContent className="p-3 flex items-center gap-2 min-w-0">
+                  <CreditCard className="h-4 w-4 text-blue-600 flex-shrink-0" />
+                  <div className="min-w-0 overflow-hidden">
+                    <p className="text-xs text-muted-foreground truncate">Crédito</p>
+                    <p className="font-semibold text-blue-700 truncate">R$ {cashSummary.totalCredit.toFixed(2)}</p>
                   </div>
                 </CardContent>
               </Card>
-              <Card className="bg-purple-50">
-                <CardContent className="p-3 flex items-center gap-2">
-                  <CreditCard className="h-4 w-4 text-purple-600" />
-                  <div>
-                    <p className="text-xs text-muted-foreground">Débito</p>
-                    <p className="font-semibold text-purple-700">R$ {cashSummary.totalDebit.toFixed(2)}</p>
+              <Card className="bg-purple-50 min-w-0">
+                <CardContent className="p-3 flex items-center gap-2 min-w-0">
+                  <CreditCard className="h-4 w-4 text-purple-600 flex-shrink-0" />
+                  <div className="min-w-0 overflow-hidden">
+                    <p className="text-xs text-muted-foreground truncate">Débito</p>
+                    <p className="font-semibold text-purple-700 truncate">R$ {cashSummary.totalDebit.toFixed(2)}</p>
                   </div>
                 </CardContent>
               </Card>
-              <Card className="bg-teal-50">
-                <CardContent className="p-3 flex items-center gap-2">
-                  <Smartphone className="h-4 w-4 text-teal-600" />
-                  <div>
-                    <p className="text-xs text-muted-foreground">PIX</p>
-                    <p className="font-semibold text-teal-700">R$ {cashSummary.totalPix.toFixed(2)}</p>
+              <Card className="bg-teal-50 min-w-0">
+                <CardContent className="p-3 flex items-center gap-2 min-w-0">
+                  <Smartphone className="h-4 w-4 text-teal-600 flex-shrink-0" />
+                  <div className="min-w-0 overflow-hidden">
+                    <p className="text-xs text-muted-foreground truncate">PIX</p>
+                    <p className="font-semibold text-teal-700 truncate">R$ {cashSummary.totalPix.toFixed(2)}</p>
                   </div>
                 </CardContent>
               </Card>
@@ -568,10 +580,10 @@ export default function Financial() {
               <CardContent>
                 <TransactionsList
                   transactions={transactions}
-                  canManage={isAdmin || can('financeiro', 'can_edit') || can('financeiro', 'can_delete')}
-                  onEdit={(isAdmin || can('financeiro', 'can_edit')) ? handleOpenEdit : undefined}
-                  onDelete={isAdmin ? handleOpenDelete : undefined}
-                  onRefund={(isAdmin || can('financeiro', 'can_edit')) ? handleOpenRefund : undefined}
+                  canManage={canEditFinancial || canDeleteFinancial}
+                  onEdit={canEditFinancial ? handleOpenEdit : undefined}
+                  onDelete={canDeleteFinancial ? handleOpenDelete : undefined}
+                  onRefund={canEditFinancial ? handleOpenRefund : undefined}
                 />
               </CardContent>
             </Card>

@@ -15,43 +15,43 @@ export function AgendaStats({ appointments }: AgendaStatsProps) {
 
   return (
     <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-      <div className="flex items-center gap-3 rounded-lg border border-border bg-card p-3">
-        <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10">
+      <div className="flex items-center gap-3 rounded-lg border border-border bg-card p-3 min-w-0">
+        <div className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-lg bg-primary/10">
           <CalendarCheck className="h-5 w-5 text-primary" />
         </div>
-        <div>
+        <div className="min-w-0 overflow-hidden">
           <p className="text-2xl font-bold text-foreground">{stats.total}</p>
-          <p className="text-xs text-muted-foreground">Total</p>
+          <p className="text-xs text-muted-foreground truncate">Total</p>
         </div>
       </div>
 
-      <div className="flex items-center gap-3 rounded-lg border border-border bg-card p-3">
-        <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-emerald-500/10">
+      <div className="flex items-center gap-3 rounded-lg border border-border bg-card p-3 min-w-0">
+        <div className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-lg bg-emerald-500/10">
           <CalendarCheck className="h-5 w-5 text-emerald-600" />
         </div>
-        <div>
+        <div className="min-w-0 overflow-hidden">
           <p className="text-2xl font-bold text-emerald-600">{stats.confirmed}</p>
-          <p className="text-xs text-muted-foreground">Confirmados</p>
+          <p className="text-xs text-muted-foreground truncate">Confirmados</p>
         </div>
       </div>
 
-      <div className="flex items-center gap-3 rounded-lg border border-border bg-card p-3">
-        <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-amber-500/10">
+      <div className="flex items-center gap-3 rounded-lg border border-border bg-card p-3 min-w-0">
+        <div className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-lg bg-amber-500/10">
           <AlertCircle className="h-5 w-5 text-amber-600" />
         </div>
-        <div>
+        <div className="min-w-0 overflow-hidden">
           <p className="text-2xl font-bold text-amber-600">{stats.pending}</p>
-          <p className="text-xs text-muted-foreground">Pendentes</p>
+          <p className="text-xs text-muted-foreground truncate">Pendentes</p>
         </div>
       </div>
 
-      <div className="flex items-center gap-3 rounded-lg border border-border bg-card p-3">
-        <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-blue-500/10">
+      <div className="flex items-center gap-3 rounded-lg border border-border bg-card p-3 min-w-0">
+        <div className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-lg bg-blue-500/10">
           <RotateCcw className="h-5 w-5 text-blue-600" />
         </div>
-        <div>
+        <div className="min-w-0 overflow-hidden">
           <p className="text-2xl font-bold text-blue-600">{stats.return}</p>
-          <p className="text-xs text-muted-foreground">Retornos</p>
+          <p className="text-xs text-muted-foreground truncate">Retornos</p>
         </div>
       </div>
     </div>

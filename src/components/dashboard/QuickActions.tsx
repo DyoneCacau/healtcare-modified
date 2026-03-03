@@ -19,7 +19,7 @@ export function QuickActions() {
   const { createAppointment } = useAppointmentMutations();
   const { createTransaction } = useTransactionMutations();
   const { activeProfessionals } = useProfessionals();
-  const { clinic, clinicId } = useClinic();
+  const { clinic } = useClinic();
 
   const handleSavePatient = async (patientData: any) => {
     await createPatient.mutateAsync({
@@ -39,6 +39,7 @@ export function QuickActions() {
   const handleSaveAppointment = async (appointmentData: any) => {
     // Transform from dialog format to database format
     await createAppointment.mutateAsync({
+      clinic_id: appointmentData.clinic?.id,
       patient_id: appointmentData.patientId,
       professional_id: appointmentData.professional?.id || appointmentData.professionalId,
       date: appointmentData.date,
@@ -98,28 +99,31 @@ export function QuickActions() {
           <p className="text-sm text-muted-foreground">Atalhos para tarefas comuns</p>
         </div>
         <div className="p-4">
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-          {actions.map((action) => {
-            const Icon = action.icon;
-            return (
-              <Button
-                key={action.label}
-                variant="outline"
-                className="flex h-auto flex-col items-center gap-2 p-4 hover:border-primary hover:bg-accent"
-                onClick={action.onClick}
-              >
-                <div className="rounded-lg bg-primary/10 p-2">
-                  <Icon className="h-5 w-5 text-primary" />
+          <div className="grid grid-cols-1 gap-3">
+            {actions.map((action) => {
+              const Icon = action.icon;
+              return (
+                <div key={action.label} className="min-w-0">
+                  <Button
+                    variant="outline"
+                    className="flex h-auto w-full flex-col items-center gap-2 p-4 hover:border-primary hover:bg-accent"
+                    onClick={action.onClick}
+                  >
+                    <div className="rounded-lg bg-primary/10 p-2">
+                      <Icon className="h-5 w-5 text-primary" />
+                    </div>
+                    <div className="text-center w-full space-y-0.5">
+                      <p className="text-sm font-medium leading-tight">
+                        {action.label}
+                      </p>
+                      <p className="text-xs text-muted-foreground leading-tight">
+                        {action.description}
+                      </p>
+                    </div>
+                  </Button>
                 </div>
-                <div className="text-center">
-                  <p className="text-sm font-medium">{action.label}</p>
-                  <p className="text-xs text-muted-foreground">
-                    {action.description}
-                  </p>
-                </div>
-              </Button>
-            );
-          })}
+              );
+            })}
           </div>
         </div>
       </div>

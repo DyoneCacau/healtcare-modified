@@ -68,7 +68,7 @@ export function ReportFilters({
             <Calendar className="h-4 w-4" />
             Data Inicial
           </Label>
-          <DateInput value={startDate} onChange={onStartDateChange} />
+          <DateInput value={startDate} onChange={onStartDateChange} showCalendar />
         </div>
 
         <div className="space-y-2">
@@ -76,7 +76,7 @@ export function ReportFilters({
             <Calendar className="h-4 w-4" />
             Data Final
           </Label>
-          <DateInput value={endDate} onChange={onEndDateChange} />
+          <DateInput value={endDate} onChange={onEndDateChange} showCalendar />
         </div>
 
         <div className="space-y-2">
