@@ -64,29 +64,7 @@ function ruleToDb(rule: Partial<CommissionRule>, clinicId: string): Omit<DbRow, 
 }
 
 const COMMISSION_RULES_QUERY_KEY = 'commission-rules';
-const LEGACY_STORAGE_KEY_PREFIX = 'commission_rules_';
 
-function loadLegacyRulesFromStorage(clinicId: string): CommissionRule[] {
-  try {
-    const raw = localStorage.getItem(LEGACY_STORAGE_KEY_PREFIX + clinicId);
-    return raw ? JSON.parse(raw) : [];
-  } catch {
-    return [];
-  }
-}
-
-function clearLegacyRulesFromStorage(clinicId: string) {
-  try {
-    localStorage.removeItem(LEGACY_STORAGE_KEY_PREFIX + clinicId);
-  } catch {
-    // ignore
-  }
-}
-
-/**
- * Regras de comissão persistidas no Supabase por clínica (todos os usuários da clínica veem as mesmas regras).
- * Usado na página Comissões (cadastro) e na Agenda (finalizar atendimento).
- */
 export function useCommissionRules() {
   const { clinicId } = useClinic();
   const queryClient = useQueryClient();
@@ -101,29 +79,7 @@ export function useCommissionRules() {
         .eq('clinic_id', clinicId)
         .order('priority', { ascending: false });
       if (error) throw error;
-      let result = (data || []).map((row) => dbRowToRule(row as DbRow));
-      // Migração única: se o banco está vazio e há regras no localStorage, enviar para o Supabase
-      if (result.length === 0) {
-        const legacy = loadLegacyRulesFromStorage(clinicId);
-        if (legacy.length > 0) {
-          for (const rule of legacy) {
-            const row = ruleToDb(rule, clinicId);
-            await supabase.from('commission_rules').insert({
-              ...row,
-              created_at: rule.createdAt,
-              updated_at: rule.updatedAt,
-            });
-          }
-          clearLegacyRulesFromStorage(clinicId);
-          const { data: refetch } = await supabase
-            .from('commission_rules')
-            .select('*')
-            .eq('clinic_id', clinicId)
-            .order('priority', { ascending: false });
-          result = (refetch || []).map((row) => dbRowToRule(row as DbRow));
-        }
-      }
-      return result;
+      return (data || []).map((row) => dbRowToRule(row as DbRow));
     },
     enabled: !!clinicId,
   });

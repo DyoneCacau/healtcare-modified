@@ -95,23 +95,27 @@ export default function Dashboard() {
           />
         </div>
 
-        {/* Main Content Grid */}
+        {/* Main Content Grid: chart + ações à esquerda; próximas consultas + alertas à direita */}
         <div className="grid gap-6 lg:grid-cols-3">
-          {/* Chart - Takes 2 columns */}
+          {/* Col 1–2: Gráfico */}
           <div className="lg:col-span-2">
             <RevenueChart />
           </div>
 
-          {/* Quick Actions + Alertas de Retorno */}
-          <div className="space-y-6">
+          {/* Col 3: Ações rápidas */}
+          <div>
             <QuickActions />
+          </div>
+
+          {/* Col 1–2: Próximas consultas (sobe e preenche espaço) */}
+          <div className="lg:col-span-2">
+            <AppointmentsList />
+          </div>
+
+          {/* Col 3: Alertas de retorno */}
+          <div>
             <ReturnAlertsList />
           </div>
-        </div>
-
-        {/* Appointments List */}
-        <div className="mt-6">
-          <AppointmentsList />
         </div>
       </div>
     </div>

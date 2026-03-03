@@ -217,7 +217,7 @@ export function CommissionReport({ calculations, professionals = [] }: Commissio
   ];
 
   const handleExport = () => {
-    console.log('Exporting commission report...');
+    // TODO: implementar exportação de relatório
   };
 
   const renderBeneficiaryTable = (data: CommissionSummary[], title: string, icon: React.ReactNode) => (

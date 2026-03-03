@@ -3,7 +3,6 @@ import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from './useAuth';
 
 const ONBOARDING_KEY = 'onboarding_completed_at';
-const LOCALSTORAGE_KEY = 'healthcare_onboarding_completed';
 
 export function useOnboarding() {
   const { user } = useAuth();
@@ -29,9 +28,6 @@ export function useOnboarding() {
 
   const completeOnboarding = useMutation({
     mutationFn: async () => {
-      if (typeof window !== 'undefined') {
-        localStorage.setItem(LOCALSTORAGE_KEY, '1');
-      }
       if (!user?.id) return;
       const { error } = await supabase.from('user_preferences').upsert(
         {
@@ -42,18 +38,14 @@ export function useOnboarding() {
         },
         { onConflict: 'user_id,preference_key' }
       );
-      if (error) {
-        console.warn('Onboarding: user_preferences não disponível, usando localStorage', error);
-      }
+      if (error) throw error;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['onboarding'] });
     },
   });
 
-  // Fail-open: se a query falhar ou localStorage já marcou, deixa o usuário entrar
-  const localCompleted = typeof window !== 'undefined' && localStorage.getItem(LOCALSTORAGE_KEY);
-  const hasCompletedOnboarding = !!completedAt || !!localCompleted || isError;
+  const hasCompletedOnboarding = !!completedAt || isError;
 
   return {
     hasCompletedOnboarding,

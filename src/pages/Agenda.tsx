@@ -16,10 +16,11 @@ import { AgendaAppointment, AgendaView, Professional } from '@/types/agenda';
 import { PaymentMethod } from '@/types/financial';
 import { useAppointments, useAppointmentMutations } from '@/hooks/useAppointments';
 import { useProfessionals } from '@/hooks/useProfessionals';
-import { useClinic } from '@/hooks/useClinic';
+import { useClinic, useClinics } from '@/hooks/useClinic';
 import { useCommissionRules, useCommissionMutations } from '@/hooks/useCommissions';
 import type { CommissionBreakdownItem } from '@/components/agenda/CompleteAppointmentDialog';
 import { useTransactionMutations } from '@/hooks/useFinancial';
+import { usePermissions } from '@/hooks/usePermissions';
 import { toast } from 'sonner';
 import { Skeleton } from '@/components/ui/skeleton';
 
@@ -40,12 +41,38 @@ export default function Agenda() {
   const [noShowAppointment, setNoShowAppointment] = useState<AgendaAppointment | null>(null);
 
   const { clinic } = useClinic();
-  const { appointments: rawAppointments, isLoading: isLoadingAppointments } = useAppointments();
+  const { clinics: allClinics } = useClinics();
+  const { can } = usePermissions();
+  const canSeeAllClinicsInAgenda = can('agenda_todas_clinicas', 'can_view');
+
+  const clinicIdsForQuery =
+    canSeeAllClinicsInAgenda && allClinics.length
+      ? allClinics.map((c: any) => c.id)
+      : clinic?.id
+      ? [clinic.id]
+      : [];
+
+  const { appointments: rawAppointments, isLoading: isLoadingAppointments } = useAppointments(
+    undefined,
+    clinicIdsForQuery,
+  );
   const { activeProfessionals, isLoading: isLoadingProfessionals } = useProfessionals();
   const { createAppointment, updateAppointment } = useAppointmentMutations();
   const { createTransaction, syncBookingFeePaymentMethod } = useTransactionMutations();
   const { createCommission } = useCommissionMutations();
   const { rules: commissionRules } = useCommissionRules();
+
+  // Mapa de clínicas por ID para preencher os dados da agenda
+  const clinicsById = useMemo(() => {
+    const map: Record<string, any> = {};
+    (allClinics || []).forEach((c: any) => {
+      if (c?.id) map[c.id] = c;
+    });
+    if (clinic?.id && !map[clinic.id]) {
+      map[clinic.id] = clinic;
+    }
+    return map;
+  }, [allClinics, clinic]);
 
   // Transform DB appointments to UI format
   const appointments: AgendaAppointment[] = useMemo(() => {
@@ -67,13 +94,16 @@ export default function Agenda() {
       status: apt.status as AgendaAppointment['status'],
       paymentStatus: apt.payment_status as AgendaAppointment['paymentStatus'],
       notes: apt.notes,
-      clinic: {
-        id: clinic?.id || '',
-        name: clinic?.name || '',
-        address: clinic?.address || '',
-        phone: clinic?.phone || '',
-        cnpj: clinic?.cnpj || '',
-      },
+      clinic: (() => {
+        const c = clinicsById[apt.clinic_id] || clinic;
+        return {
+          id: apt.clinic_id,
+          name: c?.name || '',
+          address: c?.address || '',
+          phone: c?.phone || '',
+          cnpj: c?.cnpj || '',
+        };
+      })(),
       sellerId: apt.seller_id,
       leadSource: apt.lead_source,
       referralName: apt.referral_name ?? undefined,
@@ -82,8 +112,17 @@ export default function Agenda() {
     }));
   }, [rawAppointments, clinic]);
 
-  // Clinics list (current clinic only for now)
+  // Lista de clínicas disponíveis na agenda
   const clinics = useMemo(() => {
+    if (canSeeAllClinicsInAgenda && allClinics.length) {
+      return allClinics.map((c: any) => ({
+        id: c.id,
+        name: c.name,
+        address: c.address || '',
+        phone: c.phone || '',
+        cnpj: c.cnpj || '',
+      }));
+    }
     if (!clinic) return [];
     return [{
       id: clinic.id,
@@ -92,7 +131,7 @@ export default function Agenda() {
       phone: clinic.phone || '',
       cnpj: clinic.cnpj || '',
     }];
-  }, [clinic]);
+  }, [clinic, allClinics, canSeeAllClinicsInAgenda]);
 
   // Professionals for select
   const professionals: Professional[] = useMemo(() => {
@@ -325,6 +364,7 @@ export default function Agenda() {
     } else {
       // Create new
       await createAppointment.mutateAsync({
+        clinic_id: data.clinic?.id,
         patient_id: data.patientId!,
         professional_id: data.professional!.id,
         date: data.date!,

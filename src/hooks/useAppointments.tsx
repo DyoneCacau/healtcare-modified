@@ -37,13 +37,20 @@ export interface AppointmentData {
   };
 }
 
-export function useAppointments(dateFilter?: string) {
+export function useAppointments(dateFilter?: string, clinicIdsOverride?: string[]) {
   const { clinicId } = useClinic();
 
+  const effectiveClinicIds =
+    clinicIdsOverride && clinicIdsOverride.length > 0
+      ? clinicIdsOverride
+      : clinicId
+      ? [clinicId]
+      : [];
+
   const { data: appointments, isLoading, error, refetch } = useQuery({
-    queryKey: ['appointments', clinicId, dateFilter],
+    queryKey: ['appointments', effectiveClinicIds.join(','), dateFilter],
     queryFn: async () => {
-      if (!clinicId) return [];
+      if (!effectiveClinicIds.length) return [];
 
       let query = supabase
         .from('appointments')
@@ -52,7 +59,7 @@ export function useAppointments(dateFilter?: string) {
           patient:patients(id, name, phone),
           professional:professionals(id, name, specialty, cro)
         `)
-        .eq('clinic_id', clinicId)
+        .in('clinic_id', effectiveClinicIds)
         .order('date', { ascending: true })
         .order('start_time', { ascending: true });
 
@@ -65,7 +72,7 @@ export function useAppointments(dateFilter?: string) {
       if (error) throw error;
       return data || [];
     },
-    enabled: !!clinicId,
+    enabled: effectiveClinicIds.length > 0,
   });
 
   return { 
@@ -87,16 +94,22 @@ export function useAppointmentMutations() {
   const { user } = useAuth();
 
   const createAppointment = useMutation({
-    mutationFn: async (data: Omit<AppointmentData, 'id' | 'clinic_id' | 'created_at' | 'updated_at' | 'patient' | 'professional'>) => {
-      if (!clinicId) throw new Error('Clínica não encontrada');
+    mutationFn: async (
+      data: Omit<AppointmentData, 'id' | 'clinic_id' | 'created_at' | 'updated_at' | 'patient' | 'professional'> & {
+        clinic_id?: string;
+      }
+    ) => {
+      const targetClinicId = data.clinic_id ?? clinicId;
+      if (!targetClinicId) throw new Error('Clínica não encontrada');
 
       // Evita depender de RLS de SELECT no retorno do INSERT.
       // (Quando usa .select().single(), o PostgREST precisa "ler" a linha inserida.)
       const appointmentId = crypto.randomUUID();
+      const { clinic_id: _ignoreClinicId, ...rest } = data as any;
       const appointmentPayload = {
         id: appointmentId,
-        ...data,
-        clinic_id: clinicId,
+        ...rest,
+        clinic_id: targetClinicId,
       };
 
       const { error } = await supabase
@@ -107,7 +120,7 @@ export function useAppointmentMutations() {
 
       if (clinicId && user?.id) {
         const { error: eventError } = await supabase.from('audit_events').insert({
-          clinic_id: clinicId,
+          clinic_id: targetClinicId,
           entity_type: 'appointment',
           entity_id: appointmentId,
           action: 'create',

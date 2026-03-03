@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, Fragment } from 'react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -11,8 +11,7 @@ import {
   TableRow,
 } from '@/components/ui/table';
 import { Label } from '@/components/ui/label';
-import { Switch } from '@/components/ui/switch';
-import { Search, Loader2, Lock } from 'lucide-react';
+import { Search, Loader2, Lock, ChevronDown, ChevronRight } from 'lucide-react';
 import {
   Select,
   SelectContent,
@@ -20,15 +19,21 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from '@/components/ui/popover';
+import { Checkbox } from '@/components/ui/checkbox';
+import { getClinicDisplayName } from '@/lib/utils';
 import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
-import { useClinic } from '@/hooks/useClinic';
+import { useClinic, useClinics } from '@/hooks/useClinic';
 import { useAuth } from '@/hooks/useAuth';
 import {
   SYSTEM_ROLES,
   ROLE_LABELS,
   PERMISSION_FEATURES,
-  PERMISSION_ACTIONS,
   getDefaultPermissionsForRole,
   type SystemRole,
 } from '@/lib/permissionsConstants';
@@ -46,22 +51,21 @@ interface ColumnDef {
   type: 'system' | 'custom';
 }
 
-/** Coluna de célula: função + ação (Ver, Criar, Editar, Excluir) */
-interface CellColDef extends ColumnDef {
-  actionKey: ActionKey;
-  actionLabel: string;
-}
-
 interface CustomRole {
   id: string;
   name: string;
   permissions: { feature: string; can_view: boolean; can_create: boolean; can_edit: boolean; can_delete: boolean }[];
 }
 
-const ALWAYS_AVAILABLE_FEATURES = ['dashboard', 'configuracoes'];
+const ALWAYS_AVAILABLE_FEATURES = ['dashboard', 'configuracoes', 'agenda_todas_clinicas'];
 const FEATURE_ALIASES: Record<string, string[]> = {
   pacientes_basico: ['pacientes'],
   financeiro_basico: ['financeiro'],
+};
+
+/** Filhos de um módulo pai (ex.: Agenda - todas as clínicas fica dentro de Agenda) */
+const FEATURE_CHILDREN: Record<string, { feature: string; featureLabel: string }[]> = {
+  agenda: [{ feature: 'agenda_todas_clinicas', featureLabel: 'Agenda - todas as clínicas' }],
 };
 
 function expandPlanFeatures(features: string[]): string[] {
@@ -70,8 +74,68 @@ function expandPlanFeatures(features: string[]): string[] {
   return Array.from(expanded);
 }
 
+/** Popover com checkboxes para marcar várias permissões (Ver, Criar, Editar, Excluir) por módulo */
+function PermFlagsPopover({
+  row,
+  getPerms,
+  setPermFlags,
+  flagOptions,
+}: {
+  row: ModuleRowDef;
+  getPerms: (r: ModuleRowDef) => Record<ActionKey, boolean>;
+  setPermFlags: (r: ModuleRowDef, v: Record<ActionKey, boolean>) => void;
+  flagOptions: { id: ActionKey; label: string }[];
+}) {
+  const perms = getPerms(row);
+  const allChecked = perms.can_view && perms.can_create && perms.can_edit && perms.can_delete;
+  const count = [perms.can_view, perms.can_create, perms.can_edit, perms.can_delete].filter(Boolean).length;
+  const label =
+    count === 0
+      ? 'Nenhuma'
+      : count === 4
+        ? 'Permissão total'
+        : count === 1
+          ? flagOptions.find((o) => perms[o.id])?.label ?? `${count} item`
+          : `${count} itens`;
+  return (
+    <Popover>
+      <PopoverTrigger asChild>
+        <Button variant="outline" size="sm" className="w-full max-w-[200px] justify-between border-border bg-background">
+          <span className="truncate">{label}</span>
+          <ChevronDown className="h-4 w-4 opacity-50 shrink-0" />
+        </Button>
+      </PopoverTrigger>
+      <PopoverContent className="w-56 p-2" align="start">
+        <label className="flex items-center gap-2 py-1.5 px-2 rounded hover:bg-muted/50 cursor-pointer text-sm font-medium">
+          <Checkbox
+            checked={allChecked}
+            onCheckedChange={(c) => {
+              const v = c === true;
+              setPermFlags(row, { can_view: v, can_create: v, can_edit: v, can_delete: v });
+            }}
+          />
+          Permissão total
+        </label>
+        {flagOptions.map((opt) => (
+          <label key={opt.id} className="flex items-center gap-2 py-1.5 px-2 rounded hover:bg-muted/50 cursor-pointer text-sm">
+            <Checkbox
+              checked={perms[opt.id]}
+              onCheckedChange={(c) => {
+                const next = { ...perms, [opt.id]: c === true };
+                setPermFlags(row, next);
+              }}
+            />
+            {opt.label}
+          </label>
+        ))}
+      </PopoverContent>
+    </Popover>
+  );
+}
+
 export function PermissionsManagement() {
-  const { clinicId } = useClinic();
+  const { clinicId, clinic } = useClinic();
+  const { clinics: clinicsList } = useClinics();
   const { isSuperAdmin } = useAuth();
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -84,13 +148,30 @@ export function PermissionsManagement() {
     professional: {},
   });
   const [customRoles, setCustomRoles] = useState<CustomRole[]>([]);
-  const [selectedRoleFilter, setSelectedRoleFilter] = useState<string>('admin');
+  /** Função: multi-select (1 ou mais) */
+  const [selectedRoleIds, setSelectedRoleIds] = useState<string[]>(['admin']);
+  /** Clínica: '' = Todas as unidades, senão id da clínica */
+  const [selectedClinicId, setSelectedClinicId] = useState<string>('');
+  /** Módulos pais expandidos (ex.: agenda = true mostra filhos) */
+  const [expandedParents, setExpandedParents] = useState<Record<string, boolean>>({ agenda: false });
+  const clinicOptions = useMemo(() => {
+    return (clinicsList?.length ? clinicsList : clinic ? [clinic] : []) as { id: string; name?: string; unit_name?: string }[];
+  }, [clinicsList, clinic]);
+  const effectiveClinicId = selectedClinicId || clinicId || clinicOptions[0]?.id || null;
 
-  /** Uma linha por tela/módulo (esquerda) */
+  /** Linhas raiz: módulos que não são filhos de outro (filhos aparecem sob o pai) */
   const buildRows = useMemo((): ModuleRowDef[] => {
     const features = Array.isArray(PERMISSION_FEATURES) ? PERMISSION_FEATURES : [];
-    return features.map((f) => ({ feature: f.id, featureLabel: f.label }));
+    const childIds = new Set(
+      Object.values(FEATURE_CHILDREN).flat().map((c) => c.feature)
+    );
+    return features
+      .filter((f) => !childIds.has(f.id))
+      .map((f) => ({ feature: f.id, featureLabel: f.label }));
   }, []);
+
+  const getChildRows = (parentFeatureId: string): ModuleRowDef[] =>
+    FEATURE_CHILDREN[parentFeatureId] ?? [];
 
   const allColumns: ColumnDef[] = useMemo(() => {
     const cols: ColumnDef[] = SYSTEM_ROLES.map((r) => ({ id: r, name: ROLE_LABELS[r], type: 'system' }));
@@ -98,40 +179,16 @@ export function PermissionsManagement() {
     return cols;
   }, [customRoles]);
 
-  const columns = useMemo(() => {
-    const list = Array.isArray(allColumns) ? allColumns : [];
-    const col = list.find((c) => c.id === selectedRoleFilter);
-    return col ? [col] : (list.length ? [list[0]] : []);
-  }, [allColumns, selectedRoleFilter]);
-
-  /** Colunas da tabela: para cada função, 4 colunas (Ver, Criar, Editar, Excluir) */
-  const cellColumns = useMemo((): CellColDef[] => {
-    const actions = Array.isArray(PERMISSION_ACTIONS) ? PERMISSION_ACTIONS : [];
-    return columns.flatMap((col) =>
-      actions.map((a) => ({
-        ...col,
-        actionKey: a.key,
-        actionLabel: a.label,
-      }))
-    );
-  }, [columns]);
-
   const filteredRows = useMemo(() => {
     if (!search.trim()) return buildRows;
     const q = search.toLowerCase().trim();
-    return buildRows.filter((r) => r.featureLabel.toLowerCase().includes(q));
+    return buildRows.filter((r) => {
+      const matchParent = r.featureLabel.toLowerCase().includes(q);
+      const children = getChildRows(r.feature);
+      const matchChild = children.some((c) => c.featureLabel.toLowerCase().includes(q));
+      return matchParent || matchChild;
+    });
   }, [buildRows, search]);
-
-  const getValue = (row: ModuleRowDef, cellCol: CellColDef): boolean => {
-    if (cellCol.type === 'system') {
-      const role = cellCol.id as SystemRole;
-      return systemPerms[role]?.[row.feature]?.[cellCol.actionKey] ?? false;
-    }
-    const cr = customRoles.find((r) => r.id === cellCol.id);
-    const p = cr?.permissions?.find((x) => x.feature === row.feature);
-    if (!p) return false;
-    return p[cellCol.actionKey] ?? false;
-  };
 
   const isModuleInPlan = (featureId: string): boolean =>
     planFeatureIds.includes(featureId);
@@ -139,49 +196,65 @@ export function PermissionsManagement() {
   const canEditModulePermission = (featureId: string): boolean =>
     isSuperAdmin || isModuleInPlan(featureId);
 
-  const setValue = (row: ModuleRowDef, cellCol: CellColDef, value: boolean) => {
-    if (!canEditModulePermission(row.feature)) return;
-    if (cellCol.type === 'system') {
-      const role = cellCol.id as SystemRole;
-      setSystemPerms((prev) => ({
-        ...prev,
-        [role]: {
-          ...prev[role],
-          [row.feature]: {
-            ...(prev[role]?.[row.feature] ?? {}),
-            [cellCol.actionKey]: value,
-          },
-        },
-      }));
-      return;
+  /** Primeira função selecionada (para exibir na tabela); alterações aplicam a todas as selecionadas */
+  const primaryRoleId = selectedRoleIds.length > 0 ? selectedRoleIds[0] : (allColumns[0]?.id ?? 'admin');
+
+  /** Retorna as flags de permissão atuais do módulo (Ver, Criar, Editar, Excluir) para a função selecionada */
+  const getPermsForRow = (row: ModuleRowDef): Record<ActionKey, boolean> => {
+    const role = primaryRoleId;
+    if (customRoles.some((r) => r.id === role)) {
+      const cr = customRoles.find((r) => r.id === role);
+      const p = cr?.permissions?.find((x) => x.feature === row.feature);
+      return p ? { can_view: p.can_view, can_create: p.can_create, can_edit: p.can_edit, can_delete: p.can_delete } : { can_view: false, can_create: false, can_edit: false, can_delete: false };
     }
-    setCustomRoles((prev) =>
-      prev.map((r) => {
-        if (r.id !== cellCol.id) return r;
-        const perms = r.permissions.find((p) => p.feature === row.feature);
-        if (!perms) {
-          const newPerms = [...r.permissions, { feature: row.feature, can_view: false, can_create: false, can_edit: false, can_delete: false }];
-          const p = newPerms.find((x) => x.feature === row.feature)!;
-          p[cellCol.actionKey] = value;
-          return { ...r, permissions: newPerms };
-        }
-        return {
-          ...r,
-          permissions: r.permissions.map((p) =>
-            p.feature === row.feature ? { ...p, [cellCol.actionKey]: value } : p
-          ),
-        };
-      })
-    );
+    const p = systemPerms[role as SystemRole]?.[row.feature];
+    return p ? { can_view: p.can_view ?? false, can_create: p.can_create ?? false, can_edit: p.can_edit ?? false, can_delete: p.can_delete ?? false } : { can_view: false, can_create: false, can_edit: false, can_delete: false };
   };
 
-  const loadAll = async () => {
-    if (!clinicId) return;
+  /** Atualiza as flags de permissão do módulo para todas as funções selecionadas (permite marcar mais de uma) */
+  const setPermFlags = (row: ModuleRowDef, value: Record<ActionKey, boolean>) => {
+    if (!canEditModulePermission(row.feature)) return;
+    const systemSelected = selectedRoleIds.filter((r) => SYSTEM_ROLES.includes(r as SystemRole));
+    const customSelected = selectedRoleIds.filter((r) => customRoles.some((cr) => cr.id === r));
+    if (systemSelected.length > 0) {
+      setSystemPerms((prev) => {
+        const next = { ...prev };
+        systemSelected.forEach((role) => {
+          next[role as SystemRole] = {
+            ...next[role as SystemRole],
+            [row.feature]: { ...value },
+          };
+        });
+        return next;
+      });
+    }
+    if (customSelected.length > 0) {
+      setCustomRoles((prev) =>
+        prev.map((r) => {
+          if (!customSelected.includes(r.id)) return r;
+          const perms = r.permissions.find((p) => p.feature === row.feature);
+          if (!perms) {
+            return { ...r, permissions: [...r.permissions, { feature: row.feature, ...value }] };
+          }
+          return { ...r, permissions: r.permissions.map((p) => (p.feature === row.feature ? { ...p, ...value } : p)) };
+        })
+      );
+    }
+  };
+
+  const PERMISSION_FLAG_OPTIONS: { id: ActionKey; label: string }[] = [
+    { id: 'can_view', label: 'Ver' },
+    { id: 'can_create', label: 'Criar' },
+    { id: 'can_edit', label: 'Editar' },
+    { id: 'can_delete', label: 'Excluir' },
+  ];
+
+  const loadAll = async (targetClinicId: string) => {
     const [roleRes, customRolesRes, permsRes, subRes] = await Promise.all([
-      supabase.from('clinic_role_permissions').select('*').eq('clinic_id', clinicId),
-      supabase.from('clinic_custom_roles').select('id, name').eq('clinic_id', clinicId),
+      supabase.from('clinic_role_permissions').select('*').eq('clinic_id', targetClinicId),
+      supabase.from('clinic_custom_roles').select('id, name').eq('clinic_id', targetClinicId),
       supabase.from('clinic_custom_role_permissions').select('*'),
-      supabase.from('subscriptions').select('plans(features)').eq('clinic_id', clinicId).maybeSingle(),
+      supabase.from('subscriptions').select('plans(features)').eq('clinic_id', targetClinicId).maybeSingle(),
     ]);
 
     const planFeatures = (subRes.data as any)?.plans?.features;
@@ -230,51 +303,65 @@ export function PermissionsManagement() {
   };
 
   useEffect(() => {
-    if (!clinicId) {
+    if (!effectiveClinicId) {
       setLoading(false);
       return;
     }
     setLoading(true);
-    loadAll().finally(() => setLoading(false));
-  }, [clinicId]);
+    loadAll(effectiveClinicId).finally(() => setLoading(false));
+  }, [effectiveClinicId]);
 
   useEffect(() => {
-    const list = Array.isArray(allColumns) ? allColumns : [];
-    if (list.length && selectedRoleFilter && !list.some((c) => c.id === selectedRoleFilter)) {
-      setSelectedRoleFilter(list[0].id);
+    if (selectedRoleIds.length === 0 && allColumns.length > 0) {
+      setSelectedRoleIds([allColumns[0].id]);
     }
-  }, [allColumns, selectedRoleFilter]);
+  }, [allColumns, selectedRoleIds.length]);
 
   const saveAll = async () => {
-    if (!clinicId) return;
+    const clinicIdsToSave = selectedClinicId ? [selectedClinicId] : clinicOptions.map((c) => c.id);
+    if (clinicIdsToSave.length === 0) {
+      toast.error('Selecione ao menos uma clínica.');
+      return;
+    }
+    if (selectedRoleIds.length === 0) {
+      toast.error('Selecione ao menos uma função.');
+      return;
+    }
     setSaving(true);
     try {
       const allFeatureIds = PERMISSION_FEATURES.map((f) => f.id);
-      for (const role of SYSTEM_ROLES) {
-        const toUpsert = allFeatureIds.map((feature) => ({
-          clinic_id: clinicId,
-          role,
-          feature,
-          can_view: systemPerms[role]?.[feature]?.can_view ?? false,
-          can_create: systemPerms[role]?.[feature]?.can_create ?? false,
-          can_edit: systemPerms[role]?.[feature]?.can_edit ?? false,
-          can_delete: systemPerms[role]?.[feature]?.can_delete ?? false,
-        }));
-        await supabase.from('clinic_role_permissions').upsert(toUpsert, { onConflict: 'clinic_id,role,feature' });
-      }
-      for (const cr of customRoles) {
-        await supabase.from('clinic_custom_role_permissions').delete().eq('clinic_custom_role_id', cr.id);
-        const toInsert = cr.permissions
-          .filter((p) => p.can_view || p.can_create || p.can_edit || p.can_delete)
-          .map((p) => ({
-            clinic_custom_role_id: cr.id,
-            feature: p.feature,
-            can_view: p.can_view,
-            can_create: p.can_create,
-            can_edit: p.can_edit,
-            can_delete: p.can_delete,
+      const systemRolesToSave = selectedRoleIds.filter((r) => SYSTEM_ROLES.includes(r as SystemRole));
+      for (const cid of clinicIdsToSave) {
+        for (const role of systemRolesToSave) {
+          const toUpsert = allFeatureIds.map((feature) => ({
+            clinic_id: cid,
+            role,
+            feature,
+            can_view: systemPerms[role as SystemRole]?.[feature]?.can_view ?? false,
+            can_create: systemPerms[role as SystemRole]?.[feature]?.can_create ?? false,
+            can_edit: systemPerms[role as SystemRole]?.[feature]?.can_edit ?? false,
+            can_delete: systemPerms[role as SystemRole]?.[feature]?.can_delete ?? false,
           }));
-        if (toInsert.length) await supabase.from('clinic_custom_role_permissions').insert(toInsert);
+          await supabase.from('clinic_role_permissions').upsert(toUpsert, { onConflict: 'clinic_id,role,feature' });
+        }
+      }
+      const customRolesToSave = selectedRoleIds.filter((r) => customRoles.some((cr) => cr.id === r));
+      if (customRolesToSave.length > 0 && effectiveClinicId && clinicIdsToSave.includes(effectiveClinicId)) {
+        for (const cr of customRoles) {
+          if (!customRolesToSave.includes(cr.id)) continue;
+          await supabase.from('clinic_custom_role_permissions').delete().eq('clinic_custom_role_id', cr.id);
+          const toInsert = cr.permissions
+            .filter((p) => p.can_view || p.can_create || p.can_edit || p.can_delete)
+            .map((p) => ({
+              clinic_custom_role_id: cr.id,
+              feature: p.feature,
+              can_view: p.can_view,
+              can_create: p.can_create,
+              can_edit: p.can_edit,
+              can_delete: p.can_delete,
+            }));
+          if (toInsert.length) await supabase.from('clinic_custom_role_permissions').insert(toInsert);
+        }
       }
       toast.success('Permissões salvas');
     } catch {
@@ -284,7 +371,7 @@ export function PermissionsManagement() {
     }
   };
 
-  if (!clinicId) {
+  if (!effectiveClinicId && clinicOptions.length === 0) {
     return (
       <Card>
         <CardContent className="pt-6">
@@ -312,17 +399,52 @@ export function PermissionsManagement() {
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between flex-wrap">
         <div className="flex flex-wrap items-center gap-3">
           <div className="flex items-center gap-2">
-            <Label className="text-sm whitespace-nowrap">Selecionar função:</Label>
-            <Select value={selectedRoleFilter} onValueChange={setSelectedRoleFilter}>
-              <SelectTrigger className="w-[200px]">
-                <SelectValue placeholder="Selecione a função" />
-              </SelectTrigger>
-              <SelectContent>
+            <Label className="text-sm whitespace-nowrap">Função:</Label>
+            <Popover>
+              <PopoverTrigger asChild>
+                <Button variant="outline" className="w-[200px] justify-between h-9 font-normal" size="sm">
+                  {selectedRoleIds.length ? `${selectedRoleIds.length} selecionada(s)` : 'Selecione'}
+                  <ChevronDown className="h-4 w-4 opacity-50" />
+                </Button>
+              </PopoverTrigger>
+              <PopoverContent className="w-56 p-2" align="start">
                 {SYSTEM_ROLES.map((r) => (
-                  <SelectItem key={r} value={r}>{ROLE_LABELS[r]}</SelectItem>
+                  <label key={r} className="flex items-center gap-2 py-1.5 px-2 rounded hover:bg-muted/50 cursor-pointer text-sm">
+                    <Checkbox
+                      checked={selectedRoleIds.includes(r)}
+                      onCheckedChange={(c) =>
+                        setSelectedRoleIds((prev) => (c ? [...prev, r] : prev.filter((id) => id !== r)))
+                      }
+                    />
+                    {ROLE_LABELS[r]}
+                  </label>
                 ))}
                 {customRoles.map((r) => (
-                  <SelectItem key={r.id} value={r.id}>{r.name} (personalizada)</SelectItem>
+                  <label key={r.id} className="flex items-center gap-2 py-1.5 px-2 rounded hover:bg-muted/50 cursor-pointer text-sm">
+                    <Checkbox
+                      checked={selectedRoleIds.includes(r.id)}
+                      onCheckedChange={(c) =>
+                        setSelectedRoleIds((prev) => (c ? [...prev, r.id] : prev.filter((id) => id !== r.id)))
+                      }
+                    />
+                    {r.name} (personalizada)
+                  </label>
+                ))}
+              </PopoverContent>
+            </Popover>
+          </div>
+          <div className="flex items-center gap-2">
+            <Label className="text-sm whitespace-nowrap">Clínica:</Label>
+            <Select value={selectedClinicId || 'all'} onValueChange={(v) => setSelectedClinicId(v === 'all' ? '' : v)}>
+              <SelectTrigger className="w-[200px] h-9">
+                <SelectValue placeholder="Clínica" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Todas as unidades</SelectItem>
+                {clinicOptions.map((c) => (
+                  <SelectItem key={c.id} value={c.id}>
+                    {getClinicDisplayName(c)}
+                  </SelectItem>
                 ))}
               </SelectContent>
             </Select>
@@ -352,40 +474,96 @@ export function PermissionsManagement() {
               <TableHeader>
                 <TableRow>
                   <TableHead className="min-w-[200px] font-semibold bg-muted/50">Tela / Módulo</TableHead>
-                  {(Array.isArray(PERMISSION_ACTIONS) ? PERMISSION_ACTIONS : []).map((a) => (
-                    <TableHead key={a.key} className="text-center min-w-[80px] font-semibold bg-muted/50">
-                      {a.label}
-                    </TableHead>
-                  ))}
+                  <TableHead className="min-w-[180px] font-semibold bg-muted/50">Permissão</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {(Array.isArray(filteredRows) ? filteredRows : []).map((row) => {
                   const canEdit = canEditModulePermission(row.feature);
                   const inPlan = isModuleInPlan(row.feature);
+                  const children = getChildRows(row.feature);
+                  const isExpanded = expandedParents[row.feature] ?? false;
+                  const toggleExpand = () => setExpandedParents((p) => ({ ...p, [row.feature]: !p[row.feature] }));
                   return (
-                    <TableRow key={row.feature} className={!inPlan ? 'bg-muted/30' : undefined}>
-                      <TableCell className="font-medium">
-                        <span className="flex items-center gap-2">
-                          {!inPlan && (
-                            <Lock className="h-4 w-4 text-muted-foreground shrink-0" title="Módulo fora do plano da clínica" />
-                          )}
-                          {row.featureLabel}
-                        </span>
-                      </TableCell>
-                      {(Array.isArray(cellColumns) ? cellColumns : []).map((cc) => (
-                        <TableCell key={`${cc.id}-${cc.actionKey}`} className="text-center">
+                    <Fragment key={row.feature}>
+                      <TableRow className={!inPlan ? 'bg-muted/30' : undefined}>
+                        <TableCell className="font-medium">
+                          <span className="flex items-center gap-2">
+                            {children.length > 0 ? (
+                              <button
+                                type="button"
+                                onClick={toggleExpand}
+                                className="p-0.5 rounded hover:bg-muted/50 shrink-0"
+                                aria-label={isExpanded ? 'Recolher' : 'Expandir'}
+                              >
+                                {isExpanded ? (
+                                  <ChevronDown className="h-4 w-4 text-muted-foreground" />
+                                ) : (
+                                  <ChevronRight className="h-4 w-4 text-muted-foreground" />
+                                )}
+                              </button>
+                            ) : (
+                              <span className="w-5 shrink-0" />
+                            )}
+                            {!inPlan && (
+                              <Lock className="h-4 w-4 text-muted-foreground shrink-0" title="Módulo fora do plano da clínica" />
+                            )}
+                            {row.featureLabel}
+                          </span>
+                        </TableCell>
+                        <TableCell>
                           {canEdit ? (
-                            <Switch
-                              checked={getValue(row, cc)}
-                              onCheckedChange={(v) => setValue(row, cc, v)}
+                            <PermFlagsPopover
+                              row={row}
+                              getPerms={getPermsForRow}
+                              setPermFlags={setPermFlags}
+                              flagOptions={PERMISSION_FLAG_OPTIONS}
                             />
                           ) : (
-                            <Lock className="h-4 w-4 text-muted-foreground mx-auto inline-block" title="Sem este módulo no plano" />
+                            <span className="inline-flex items-center gap-1.5 text-muted-foreground text-sm">
+                              <Lock className="h-4 w-4 shrink-0" title="Sem este módulo no plano" />
+                              Bloqueado
+                            </span>
                           )}
                         </TableCell>
-                      ))}
-                    </TableRow>
+                      </TableRow>
+                      {isExpanded &&
+                        children.map((child) => {
+                          const childCanEdit = canEditModulePermission(child.feature);
+                          const childInPlan = isModuleInPlan(child.feature);
+                          return (
+                            <TableRow
+                              key={child.feature}
+                              className={childInPlan ? 'bg-muted/10' : 'bg-muted/30'}
+                            >
+                              <TableCell className="font-medium pl-10">
+                                <span className="flex items-center gap-2">
+                                  <span className="w-5 shrink-0" />
+                                  {!childInPlan && (
+                                    <Lock className="h-4 w-4 text-muted-foreground shrink-0" title="Módulo fora do plano da clínica" />
+                                  )}
+                                  {child.featureLabel}
+                                </span>
+                              </TableCell>
+                              <TableCell>
+                                {childCanEdit ? (
+                                  <PermFlagsPopover
+                                    row={child}
+                                    getPerms={getPermsForRow}
+                                    setPermFlags={setPermFlags}
+                                    flagOptions={PERMISSION_FLAG_OPTIONS}
+                                  />
+                                ) : (
+                                  <span className="inline-flex items-center gap-1.5 text-muted-foreground text-sm">
+                                    <Lock className="h-4 w-4 shrink-0" title="Sem este módulo no plano" />
+                                    Bloqueado
+                                  </span>
+                                )}
+                              </TableCell>
+                            </TableRow>
+                          );
+                        })}
+                    </Fragment>
                   );
                 })}
               </TableBody>
