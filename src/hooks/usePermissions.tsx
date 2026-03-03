@@ -5,6 +5,9 @@ import { useClinic } from './useClinic';
 
 export type PermissionAction = 'can_view' | 'can_create' | 'can_edit' | 'can_delete';
 
+/** Feature que quando true em qualquer clínica do usuário libera ver todas as unidades na Agenda */
+const AGENDA_ALL_CLINICS_FEATURE = 'agenda_todas_clinicas';
+
 export function usePermissions() {
   const { user, isSuperAdmin } = useAuth();
   const { clinicId } = useClinic();
@@ -75,5 +78,37 @@ export function usePermissions() {
     return p[action] === true;
   };
 
-  return { permissions, isLoading, can };
+  // Para "Agenda - todas as clínicas": considerar true se tiver permissão na clínica atual OU em qualquer clínica do usuário
+  const { data: hasAgendaAllClinicsInAnyClinic } = useQuery({
+    queryKey: ['permissions-agenda-all-clinics-any', user?.id, isSuperAdmin],
+    queryFn: async () => {
+      if (!user?.id || isSuperAdmin) return false;
+      const { data: cu } = await supabase.from('clinic_users').select('clinic_id').eq('user_id', user.id);
+      if (!cu?.length) return false;
+      const clinicIds = cu.map((r: { clinic_id: string }) => r.clinic_id);
+      const { data: roleRow } = await supabase
+        .from('user_roles')
+        .select('role')
+        .eq('user_id', user.id)
+        .in('role', ['admin', 'receptionist', 'seller', 'professional'])
+        .maybeSingle();
+      const role = roleRow?.role as string | undefined;
+      if (!role) return false;
+      const { data: perms } = await supabase
+        .from('clinic_role_permissions')
+        .select('clinic_id')
+        .in('clinic_id', clinicIds)
+        .eq('role', role)
+        .eq('feature', AGENDA_ALL_CLINICS_FEATURE)
+        .eq('can_view', true)
+        .limit(1);
+      return (perms?.length ?? 0) > 0;
+    },
+    enabled: !!user?.id && !isSuperAdmin,
+  });
+
+  const canSeeAllClinicsInAgenda = (): boolean =>
+    isSuperAdmin || can(AGENDA_ALL_CLINICS_FEATURE, 'can_view') || !!hasAgendaAllClinicsInAnyClinic;
+
+  return { permissions, isLoading, can, canSeeAllClinicsInAgenda };
 }

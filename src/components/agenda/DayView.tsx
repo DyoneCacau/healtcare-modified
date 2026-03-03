@@ -1,5 +1,6 @@
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
+import { cn } from '@/lib/utils';
 import { AppointmentCard } from './AppointmentCard';
 import { AgendaAppointment } from '@/types/agenda';
 
@@ -12,6 +13,8 @@ interface DayViewProps {
   onComplete: (appointment: AgendaAppointment) => void;
   onMarkNoShow?: (appointment: AgendaAppointment) => void;
   onWhatsApp: (appointment: AgendaAppointment) => void;
+  /** Clique em um horário (slot) para abrir formulário de novo agendamento com essa data e horário */
+  onSlotClick?: (startTime: string) => void;
 }
 
 const timeSlots = [
@@ -31,6 +34,7 @@ export function DayView({
   onComplete,
   onMarkNoShow,
   onWhatsApp,
+  onSlotClick,
 }: DayViewProps) {
   const sortedSlots = (() => {
     const slotSet = new Set(timeSlots);
@@ -65,14 +69,19 @@ export function DayView({
           return (
             <div
               key={slot}
-              className={`flex min-h-[60px] ${hasAppointments ? 'bg-card' : 'bg-muted/20'}`}
+              onClick={() => onSlotClick?.(slot)}
+              className={cn(
+                'flex min-h-[60px]',
+                hasAppointments ? 'bg-card' : 'bg-muted/20',
+                onSlotClick && 'cursor-pointer hover:bg-muted/40 transition-colors'
+              )}
             >
               <div className="w-20 flex-shrink-0 border-r border-border px-3 py-2">
                 <span className="text-sm font-medium text-muted-foreground">
                   {slot}
                 </span>
               </div>
-              <div className="flex-1 p-2">
+              <div className="flex-1 p-2" onClick={(e) => hasAppointments && e.stopPropagation()}>
                 {slotAppointments.length > 0 ? (
                   <div className="space-y-2">
                     {slotAppointments.map((apt) => (

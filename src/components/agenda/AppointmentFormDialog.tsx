@@ -42,6 +42,12 @@ import { usePatients } from '@/hooks/usePatients';
 import { PROCEDURE_OPTIONS } from '@/lib/procedures';
 import { toast } from 'sonner';
 
+function add30Min(time: string): string {
+  const [h, m] = time.split(':').map(Number);
+  const d = new Date(2000, 0, 1, h, m + 30);
+  return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
+}
+
 interface AppointmentFormDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -55,6 +61,10 @@ interface AppointmentFormDialogProps {
   prefillProcedure?: string;
   /** Data inicial ao criar (ex: data selecionada na Agenda) */
   initialDate?: Date;
+  /** Horário inicial ao criar (ex: clique no slot da Agenda) */
+  initialStartTime?: string;
+  /** Horário final ao criar; se omitido, usa 30min após initialStartTime */
+  initialEndTime?: string;
 }
 
 export function AppointmentFormDialog({
@@ -68,6 +78,8 @@ export function AppointmentFormDialog({
   prefillPatientId,
   prefillProcedure,
   initialDate,
+  initialStartTime,
+  initialEndTime,
 }: AppointmentFormDialogProps) {
   const [date, setDate] = useState<Date>(new Date());
   const [startTime, setStartTime] = useState('09:00');
@@ -119,10 +131,10 @@ export function AppointmentFormDialog({
       setBookingFee(appointment.bookingFee ?? null);
       setBookingFeePaymentMethod(appointment.bookingFeePaymentMethod ?? null);
     } else {
-      // Novo agendamento: data do dia selecionado na agenda ou hoje
+      // Novo agendamento: data e horário do clique no slot ou padrão
       setDate(initialDate ? new Date(initialDate) : new Date());
-      setStartTime('09:00');
-      setEndTime('09:30');
+      setStartTime(initialStartTime || '09:00');
+      setEndTime(initialEndTime || (initialStartTime ? add30Min(initialStartTime) : '09:30'));
       setPatientId(prefillPatientId || '');
       setProfessionalId('');
       setClinicId(clinics[0]?.id || '');
@@ -137,7 +149,7 @@ export function AppointmentFormDialog({
       setBookingFee(null);
       setBookingFeePaymentMethod(null);
     }
-  }, [open, appointment, clinics, prefillPatientId, prefillProcedure, initialDate]);
+  }, [open, appointment, clinics, prefillPatientId, prefillProcedure, initialDate, initialStartTime, initialEndTime]);
 
   const checkConflict = (): boolean => {
     if (!professionalId || !date) return false;

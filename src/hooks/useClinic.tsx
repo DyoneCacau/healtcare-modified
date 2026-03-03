@@ -128,3 +128,29 @@ export function useClinics() {
 
   return { clinics: clinics || [], isLoading, error };
 }
+
+/**
+ * Retorna todas as clínicas do mesmo dono (owner_user_id) das clínicas em que o usuário está.
+ * Usa RPC para contornar o RLS de clinics (que só permite ver clínicas em que está em clinic_users).
+ * Usado na Agenda quando tem permissão "Agenda - todas as clínicas".
+ */
+export function useClinicsOfSameOwner() {
+  const { user } = useAuth();
+
+  const { data: clinics, isLoading, error } = useQuery({
+    queryKey: ['clinics-of-same-owner', user?.id],
+    queryFn: async () => {
+      if (!user?.id) return [];
+
+      const { data, error: rpcError } = await supabase.rpc('get_clinics_of_same_owner', {
+        p_user_id: user.id,
+      });
+
+      if (rpcError) return [];
+      return Array.isArray(data) ? data : [];
+    },
+    enabled: !!user?.id,
+  });
+
+  return { clinics: clinics || [], isLoading, error };
+}

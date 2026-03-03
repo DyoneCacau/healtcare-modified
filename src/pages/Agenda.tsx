@@ -16,7 +16,7 @@ import { AgendaAppointment, AgendaView, Professional } from '@/types/agenda';
 import { PaymentMethod } from '@/types/financial';
 import { useAppointments, useAppointmentMutations } from '@/hooks/useAppointments';
 import { useProfessionals } from '@/hooks/useProfessionals';
-import { useClinic, useClinics } from '@/hooks/useClinic';
+import { useClinic, useClinics, useClinicsOfSameOwner } from '@/hooks/useClinic';
 import { useCommissionRules, useCommissionMutations } from '@/hooks/useCommissions';
 import type { CommissionBreakdownItem } from '@/components/agenda/CompleteAppointmentDialog';
 import { useTransactionMutations } from '@/hooks/useFinancial';
@@ -35,18 +35,26 @@ export default function Agenda() {
   const [editingAppointment, setEditingAppointment] = useState<AgendaAppointment | null>(null);
   const [prefillPatientId, setPrefillPatientId] = useState<string | null>(null);
   const [prefillProcedure, setPrefillProcedure] = useState<string>('');
+  const [prefillSlotDate, setPrefillSlotDate] = useState<Date | null>(null);
+  const [prefillSlotStartTime, setPrefillSlotStartTime] = useState<string | null>(null);
   const [completeDialogOpen, setCompleteDialogOpen] = useState(false);
   const [completingAppointment, setCompletingAppointment] = useState<AgendaAppointment | null>(null);
   const [noShowFeeDialogOpen, setNoShowFeeDialogOpen] = useState(false);
   const [noShowAppointment, setNoShowAppointment] = useState<AgendaAppointment | null>(null);
 
   const { clinic } = useClinic();
-  const { clinics: allClinics } = useClinics();
-  const { can } = usePermissions();
-  const canSeeAllClinicsInAgenda = can('agenda_todas_clinicas', 'can_view');
+  const { clinics: userClinics } = useClinics();
+  const { clinics: clinicsOfSameOwner } = useClinicsOfSameOwner();
+  const { canSeeAllClinicsInAgenda } = usePermissions();
+  const canSeeAll = canSeeAllClinicsInAgenda();
+
+  // Com permissão "Agenda - todas as clínicas": listar e consultar todas as unidades do mesmo dono
+  const allClinics = canSeeAll && clinicsOfSameOwner.length > 0
+    ? clinicsOfSameOwner
+    : userClinics;
 
   const clinicIdsForQuery =
-    canSeeAllClinicsInAgenda && allClinics.length
+    canSeeAll && allClinics.length
       ? allClinics.map((c: any) => c.id)
       : clinic?.id
       ? [clinic.id]
@@ -114,7 +122,7 @@ export default function Agenda() {
 
   // Lista de clínicas disponíveis na agenda
   const clinics = useMemo(() => {
-    if (canSeeAllClinicsInAgenda && allClinics.length) {
+    if (canSeeAll && allClinics.length) {
       return allClinics.map((c: any) => ({
         id: c.id,
         name: c.name,
@@ -131,7 +139,7 @@ export default function Agenda() {
       phone: clinic.phone || '',
       cnpj: clinic.cnpj || '',
     }];
-  }, [clinic, allClinics, canSeeAllClinicsInAgenda]);
+  }, [clinic, allClinics, canSeeAll]);
 
   // Professionals for select
   const professionals: Professional[] = useMemo(() => {
@@ -388,6 +396,20 @@ export default function Agenda() {
     setView('day');
   };
 
+  const handleSlotClickDay = (startTime: string) => {
+    setPrefillSlotDate(selectedDate);
+    setPrefillSlotStartTime(startTime);
+    setEditingAppointment(null);
+    setFormDialogOpen(true);
+  };
+
+  const handleSlotClickWeek = (day: Date, startTime: string) => {
+    setPrefillSlotDate(day);
+    setPrefillSlotStartTime(startTime);
+    setEditingAppointment(null);
+    setFormDialogOpen(true);
+  };
+
   if (isLoadingAppointments || isLoadingProfessionals) {
     return (
       <MainLayout>
@@ -456,6 +478,7 @@ export default function Agenda() {
             onComplete={handleComplete}
             onMarkNoShow={handleMarkNoShowClick}
             onWhatsApp={handleWhatsApp}
+            onSlotClick={handleSlotClickDay}
           />
         )}
 
@@ -469,6 +492,7 @@ export default function Agenda() {
             onComplete={handleComplete}
             onMarkNoShow={handleMarkNoShowClick}
             onWhatsApp={handleWhatsApp}
+            onSlotClick={handleSlotClickWeek}
           />
         )}
 
@@ -490,6 +514,8 @@ export default function Agenda() {
             setEditingAppointment(null);
             setPrefillPatientId(null);
             setPrefillProcedure('');
+            setPrefillSlotDate(null);
+            setPrefillSlotStartTime(null);
           }
         }}
         appointment={editingAppointment}
@@ -499,7 +525,8 @@ export default function Agenda() {
         onSave={handleSave}
         prefillPatientId={prefillPatientId}
         prefillProcedure={prefillProcedure}
-        initialDate={selectedDate}
+        initialDate={prefillSlotDate ?? selectedDate}
+        initialStartTime={prefillSlotStartTime ?? undefined}
       />
 
       {/* Complete Appointment Dialog */}
