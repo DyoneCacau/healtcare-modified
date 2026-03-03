@@ -5,18 +5,15 @@ import type { Database } from './types';
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
 const SUPABASE_PUBLISHABLE_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY || import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
 
-// Validaï¿½ï¿½o: verificar se as variï¿½veis de ambiente estï¿½o configuradas
 if (!SUPABASE_URL || !SUPABASE_PUBLISHABLE_KEY) {
   throw new Error(
-    '? ERRO DE CONFIGURAï¿½ï¿½O: Variï¿½veis de ambiente do Supabase nï¿½o estï¿½o configuradas!\n\n' +
-    'Por favor, siga estes passos:\n' +
-    '1. Copie o arquivo .env.example para .env: cp .env.example .env\n' +
-    '2. Edite o arquivo .env e cole suas credenciais do Supabase\n' +
-    '3. Obtenha as credenciais em: https://app.supabase.com/project/SEU_PROJETO/settings/api\n' +
-    '4. Reinicie o servidor: npm run dev\n\n' +
-    'Variï¿½veis necessï¿½rias:\n' +
-    `- VITE_SUPABASE_URL: ${SUPABASE_URL ? '? OK' : '? FALTANDO'}\n` +
-    `- VITE_SUPABASE_ANON_KEY: ${SUPABASE_PUBLISHABLE_KEY ? '? OK' : '? FALTANDO'}\n`
+    'ERRO DE CONFIGURACAO: Variaveis de ambiente do Supabase nao estao configuradas.\n\n' +
+    'Passos:\n' +
+    '1. Copie .env.example para .env\n' +
+    '2. Edite o .env com suas credenciais do Supabase\n' +
+    '3. Reinicie o servidor\n\n' +
+    `- VITE_SUPABASE_URL: ${SUPABASE_URL ? 'OK' : 'FALTANDO'}\n` +
+    `- VITE_SUPABASE_ANON_KEY: ${SUPABASE_PUBLISHABLE_KEY ? 'OK' : 'FALTANDO'}\n`
   );
 }
 

@@ -22,12 +22,12 @@ export default function Billing() {
               Para qualquer alteração em seu plano, módulos contratados ou questões relacionadas 
               a pagamento, entre em contato com nosso suporte.
             </p>
-            <div className="mt-6 p-4 bg-muted rounded-lg">
+            <div className="mt-6 p-4 bg-muted rounded-lg space-y-1">
               <p className="text-sm font-medium">
-                📧 Contato: suporte@healthcare.com
+                Contato: {import.meta.env.VITE_SUPPORT_EMAIL || 'suporte@octupuzz.com.br'}
               </p>
               <p className="text-sm font-medium">
-                📞 Telefone: (11) 9999-9999
+                WhatsApp: {import.meta.env.VITE_SUPPORT_WHATSAPP || '(11) 99999-9999'}
               </p>
             </div>
           </CardContent>
