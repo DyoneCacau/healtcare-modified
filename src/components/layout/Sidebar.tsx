@@ -36,6 +36,7 @@ import { useCurrentClinic } from "@/hooks/useCurrentClinic";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { ClinicDisplayName } from "@/components/common/ClinicDisplayName";
 import { getClinicDisplayName } from "@/lib/utils";
+import { NotificationBell } from "./NotificationBell";
 
 interface MenuItem {
   icon: React.ComponentType<{ className?: string }>;
@@ -308,6 +309,7 @@ export function Sidebar() {
         </div>
 
         <div className="flex items-center gap-2">
+          <NotificationBell collapsed={collapsed} />
           <Button
             variant="ghost"
             size="icon"
