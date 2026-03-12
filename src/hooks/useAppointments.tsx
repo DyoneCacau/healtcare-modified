@@ -135,6 +135,19 @@ export function useAppointmentMutations() {
           console.warn('Failed to insert audit event (appointment create):', eventError);
         }
       }
+      // Notificar membros da clínica destino sobre o novo agendamento
+      if (user?.id) {
+        const dateStr = data.date || '';
+        const timeStr = data.start_time || '';
+        supabase.rpc('notify_clinic_users_on_appointment', {
+          p_clinic_id: targetClinicId,
+          p_title: 'Novo agendamento',
+          p_message: `Novo agendamento em ${dateStr} às ${timeStr}`,
+          p_reference_id: appointmentId,
+          p_creator_id: user.id,
+        }).catch((err: unknown) => console.warn('Falha ao notificar clínica:', err));
+      }
+
       return appointmentPayload;
     },
     onSuccess: async () => {

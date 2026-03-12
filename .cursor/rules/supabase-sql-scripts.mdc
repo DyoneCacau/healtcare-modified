@@ -1,0 +1,13 @@
+﻿---
+description: Sempre fornecer arquivo SQL para execucao manual no Supabase
+alwaysApply: true
+---
+
+# Scripts SQL para Supabase
+
+Sempre que for necessario executar scripts SQL no Supabase:
+
+1. Criar ou atualizar o arquivo em supabase/ com nome descritivo
+2. Informar o caminho do arquivo para o usuario copiar e executar manualmente
+3. Incluir no inicio do script instrucoes claras
+4. Preferir sempre o arquivo para execucao manual no painel do Supabase
