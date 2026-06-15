@@ -19,6 +19,7 @@ import {
   FileText,
   Crown,
   Lock,
+  // MessageSquare, // TODO(go-live): Atendimento omnichannel
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -55,6 +56,8 @@ const menuItems: MenuItem[] = [
   { icon: Clock, label: "Ponto", path: "/ponto", feature: "ponto" },
   { icon: FileText, label: "Meus Termos", path: "/termos", feature: "termos" },
   { icon: Package, label: "Estoque", path: "/estoque", feature: "estoque" },
+  // TODO(go-live): descomentar item Atendimento ao concluir integração Meta WhatsApp
+  // { icon: MessageSquare, label: "Atendimento", path: "/atendimento", feature: "atendimento" },
   { icon: FileBarChart, label: "Relatórios", path: "/relatorios", feature: "relatorios" },
   { icon: Shield, label: "Administração", path: "/administracao", feature: "administracao" },
   { icon: Settings, label: "Configurações", path: "/configuracoes", feature: "configuracoes" },

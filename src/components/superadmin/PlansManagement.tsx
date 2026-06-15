@@ -18,6 +18,7 @@ import {
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { Plus, Package, Edit, Trash2 } from "lucide-react";
+import { parsePlanFeatures } from "@/lib/planFeatures";
 
 interface Plan {
   id: string;
@@ -49,6 +50,8 @@ const AVAILABLE_MODULES = [
   { key: 'termos', label: 'Termos e Contratos' },
   { key: 'administracao', label: 'Administracao' },
   { key: 'ponto', label: 'Ponto Eletrônico' },
+  // TODO(go-live): Atendimento omnichannel
+  // { key: 'atendimento', label: 'Atendimento Omnichannel' },
   { key: 'multi_clinica', label: 'Multi-Clínica' },
 ];
 
@@ -88,7 +91,7 @@ export function PlansManagement() {
 
       setPlans(data.map(p => ({
         ...p,
-        features: Array.isArray(p.features) ? p.features : JSON.parse(p.features as string || '[]'),
+        features: parsePlanFeatures(p.features),
       })));
     } catch (error) {
       console.error('Error fetching plans:', error);

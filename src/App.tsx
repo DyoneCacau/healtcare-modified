@@ -3,10 +3,10 @@ import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
+import { BrowserRouter, Routes, Route, Navigate, Outlet } from "react-router-dom";
 import { AuthProvider, useAuth } from "@/hooks/useAuth";
 import { SubscriptionProvider, useSubscription } from "@/hooks/useSubscription";
-import { TrialExpiredScreen } from "@/components/subscription/TrialExpiredScreen";
+import { SubscriptionBlockedScreen } from "@/components/subscription/SubscriptionBlockedScreen";
 import { ContactAdminScreen } from "@/components/subscription/ContactAdminScreen";
 import { RequireFeature } from "@/components/subscription/RequireFeature";
 import { OnboardingScreen } from "@/components/onboarding/OnboardingScreen";
@@ -27,21 +27,27 @@ import TimeClock from "./pages/TimeClock";
 import Administration from "./pages/Administration";
 import SuperAdmin from "./pages/SuperAdmin";
 import Settings from "./pages/Settings";
-import Billing from "./pages/Billing";
+// TODO(go-live): reativar módulo Atendimento omnichannel (Meta WhatsApp)
+// import Atendimento from "./pages/Atendimento";
 import Privacy from "./pages/Privacy";
+import SelectClinic from "./pages/SelectClinic";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
+
+function LoadingScreen() {
+  return (
+    <div className="flex min-h-screen items-center justify-center">
+      <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary" />
+    </div>
+  );
+}
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const { user, isLoading } = useAuth();
 
   if (isLoading) {
-    return (
-      <div className="flex min-h-screen items-center justify-center">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
-      </div>
-    );
+    return <LoadingScreen />;
   }
 
   if (!user) {
@@ -60,11 +66,7 @@ function SubscriptionGate({ children }: { children: React.ReactNode }) {
   }
 
   if (isLoading) {
-    return (
-      <div className="flex min-h-screen items-center justify-center">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
-      </div>
-    );
+    return <LoadingScreen />;
   }
 
   if (needsActivation) {
@@ -72,29 +74,43 @@ function SubscriptionGate({ children }: { children: React.ReactNode }) {
   }
 
   if (isBlocked) {
-    return <TrialExpiredScreen />;
+    return <SubscriptionBlockedScreen />;
   }
 
-  return <>{children}</>;
-  // Onboarding desativado temporariamente - reative trocando por: <OnboardingGate>{children}</OnboardingGate>
+  return <OnboardingGate>{children}</OnboardingGate>;
 }
 
 function OnboardingGate({ children }: { children: React.ReactNode }) {
   const { hasCompletedOnboarding, isLoading } = useOnboarding();
 
-  // Timeout de segurança: se carregar mais de 5s, deixa o usuário entrar (evita tela branca)
-  const [timedOut, setTimedOut] = React.useState(false);
+  // Timeout único por sessão — evita tela branca ao trocar de rota
+  const [timedOut, setTimedOut] = React.useState(() => {
+    try {
+      return sessionStorage.getItem('healthcare_onboarding_gate_timeout') === 'true';
+    } catch {
+      return false;
+    }
+  });
+
   React.useEffect(() => {
-    const t = setTimeout(() => setTimedOut(true), 5000);
+    if (timedOut || hasCompletedOnboarding) return;
+    const t = setTimeout(() => {
+      try {
+        sessionStorage.setItem('healthcare_onboarding_gate_timeout', 'true');
+      } catch {
+        // ignore
+      }
+      setTimedOut(true);
+    }, 5000);
     return () => clearTimeout(t);
-  }, []);
+  }, [timedOut, hasCompletedOnboarding]);
+
+  if (hasCompletedOnboarding) {
+    return <>{children}</>;
+  }
 
   if (isLoading && !timedOut) {
-    return (
-      <div className="flex min-h-screen items-center justify-center">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
-      </div>
-    );
+    return <LoadingScreen />;
   }
 
   if (!hasCompletedOnboarding && !timedOut) {
@@ -104,6 +120,17 @@ function OnboardingGate({ children }: { children: React.ReactNode }) {
   return <>{children}</>;
 }
 
+/** Layout autenticado: gates montados uma vez; só a página interna troca ao navegar */
+function AuthenticatedAppLayout() {
+  return (
+    <ProtectedRoute>
+      <SubscriptionGate>
+        <Outlet />
+      </SubscriptionGate>
+    </ProtectedRoute>
+  );
+}
+
 function AppRoutes() {
   return (
     <Routes>
@@ -111,160 +138,119 @@ function AppRoutes() {
       <Route path="/privacidade" element={<Privacy />} />
       <Route path="/forgot-password" element={<ForgotPassword />} />
       <Route path="/reset-password" element={<ResetPassword />} />
-      
-      {/* Dashboard - sempre disponível */}
-      <Route
-        path="/"
-        element={
-          <ProtectedRoute>
-            <SubscriptionGate>
-              <Index />
-            </SubscriptionGate>
-          </ProtectedRoute>
-        }
-      />
 
-      {/* Pacientes */}
-      <Route
-        path="/pacientes"
-        element={
-          <ProtectedRoute>
-            <SubscriptionGate>
-              <RequireFeature feature="pacientes">
-                <Patients />
-              </RequireFeature>
-            </SubscriptionGate>
-          </ProtectedRoute>
-        }
-      />
+      <Route element={<AuthenticatedAppLayout />}>
+        <Route path="/" element={<Index />} />
 
-      {/* Agenda */}
-      <Route
-        path="/agenda"
-        element={
-          <ProtectedRoute>
-            <SubscriptionGate>
-              <RequireFeature feature="agenda">
-                <Agenda />
-              </RequireFeature>
-            </SubscriptionGate>
-          </ProtectedRoute>
-        }
-      />
+        <Route
+          path="/pacientes"
+          element={
+            <RequireFeature feature="pacientes">
+              <Patients />
+            </RequireFeature>
+          }
+        />
 
-      {/* Financeiro */}
-      <Route
-        path="/financeiro"
-        element={
-          <ProtectedRoute>
-            <SubscriptionGate>
-              <RequireFeature feature="financeiro">
-                <Financial />
-              </RequireFeature>
-            </SubscriptionGate>
-          </ProtectedRoute>
-        }
-      />
+        <Route
+          path="/agenda"
+          element={
+            <RequireFeature feature="agenda">
+              <Agenda />
+            </RequireFeature>
+          }
+        />
 
-      {/* Termos */}
-      <Route
-        path="/termos"
-        element={
-          <ProtectedRoute>
-            <SubscriptionGate>
-              <RequireFeature feature="termos">
-                <Terms />
-              </RequireFeature>
-            </SubscriptionGate>
-          </ProtectedRoute>
-        }
-      />
+        <Route
+          path="/financeiro"
+          element={
+            <RequireFeature feature="financeiro">
+              <Financial />
+            </RequireFeature>
+          }
+        />
 
-      {/* Relatórios */}
-      <Route
-        path="/relatorios"
-        element={
-          <ProtectedRoute>
-            <SubscriptionGate>
-              <RequireFeature feature="relatorios">
-                <Reports />
-              </RequireFeature>
-            </SubscriptionGate>
-          </ProtectedRoute>
-        }
-      />
+        <Route
+          path="/termos"
+          element={
+            <RequireFeature feature="termos">
+              <Terms />
+            </RequireFeature>
+          }
+        />
 
-      {/* Comissões */}
-      <Route
-        path="/comissoes"
-        element={
-          <ProtectedRoute>
-            <SubscriptionGate>
-              <RequireFeature feature="comissoes">
-                <Commissions />
-              </RequireFeature>
-            </SubscriptionGate>
-          </ProtectedRoute>
-        }
-      />
+        <Route
+          path="/relatorios"
+          element={
+            <RequireFeature feature="relatorios">
+              <Reports />
+            </RequireFeature>
+          }
+        />
 
-      {/* Estoque */}
-      <Route
-        path="/estoque"
-        element={
-          <ProtectedRoute>
-            <SubscriptionGate>
-              <RequireFeature feature="estoque">
-                <Inventory />
-              </RequireFeature>
-            </SubscriptionGate>
-          </ProtectedRoute>
-        }
-      />
+        <Route
+          path="/comissoes"
+          element={
+            <RequireFeature feature="comissoes">
+              <Commissions />
+            </RequireFeature>
+          }
+        />
 
-      {/* Profissionais */}
-      <Route
-        path="/profissionais"
-        element={
-          <ProtectedRoute>
-            <SubscriptionGate>
-              <RequireFeature feature="profissionais">
-                <Professionals />
-              </RequireFeature>
-            </SubscriptionGate>
-          </ProtectedRoute>
-        }
-      />
+        <Route
+          path="/estoque"
+          element={
+            <RequireFeature feature="estoque">
+              <Inventory />
+            </RequireFeature>
+          }
+        />
 
-      {/* Ponto */}
-      <Route
-        path="/ponto"
-        element={
-          <ProtectedRoute>
-            <SubscriptionGate>
-              <RequireFeature feature="ponto">
-                <TimeClock />
-              </RequireFeature>
-            </SubscriptionGate>
-          </ProtectedRoute>
-        }
-      />
+        <Route
+          path="/profissionais"
+          element={
+            <RequireFeature feature="profissionais">
+              <Professionals />
+            </RequireFeature>
+          }
+        />
 
-      {/* Administração */}
-      <Route
-        path="/administracao"
-        element={
-          <ProtectedRoute>
-            <SubscriptionGate>
-              <RequireFeature feature="administracao">
-                <Administration />
-              </RequireFeature>
-            </SubscriptionGate>
-          </ProtectedRoute>
-        }
-      />
+        <Route
+          path="/ponto"
+          element={
+            <RequireFeature feature="ponto">
+              <TimeClock />
+            </RequireFeature>
+          }
+        />
 
-      {/* SuperAdmin - sem verificação de feature */}
+        {/* TODO(go-live): Atendimento omnichannel — descomentar rota ao concluir integração Meta
+        <Route
+          path="/atendimento"
+          element={
+            <RequireFeature feature="atendimento">
+              <Atendimento />
+            </RequireFeature>
+          }
+        />
+        */}
+
+        <Route
+          path="/administracao"
+          element={
+            <RequireFeature feature="administracao">
+              <Administration />
+            </RequireFeature>
+          }
+        />
+
+        <Route path="/billing" element={<Navigate to="/configuracoes" replace />} />
+
+        <Route path="/selecionar-clinica" element={<SelectClinic />} />
+
+        <Route path="/configuracoes" element={<Settings />} />
+      </Route>
+
+      {/* SuperAdmin — fora dos gates de assinatura/onboarding */}
       <Route
         path="/superadmin"
         element={
@@ -274,35 +260,7 @@ function AppRoutes() {
         }
       />
 
-      {/* Billing - Planos e Pagamentos */}
-      <Route
-        path="/billing"
-        element={
-          <ProtectedRoute>
-            <SubscriptionGate>
-              <Billing />
-            </SubscriptionGate>
-          </ProtectedRoute>
-        }
-      />
-
-      {/* Minhas Clínicas: dentro de Administração (redireciona para a aba) */}
-      <Route
-        path="/minhas-clinicas"
-        element={<Navigate to="/administracao?tab=clinics" replace />}
-      />
-
-      {/* Configurações - sempre disponível */}
-      <Route
-        path="/configuracoes"
-        element={
-          <ProtectedRoute>
-            <SubscriptionGate>
-              <Settings />
-            </SubscriptionGate>
-          </ProtectedRoute>
-        }
-      />
+      <Route path="/minhas-clinicas" element={<Navigate to="/administracao?tab=clinics" replace />} />
 
       <Route path="*" element={<NotFound />} />
     </Routes>

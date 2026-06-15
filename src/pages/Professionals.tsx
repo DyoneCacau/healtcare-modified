@@ -211,6 +211,16 @@ export default function Professionals() {
       .toUpperCase();
   };
 
+  if (!clinicId) {
+    return (
+      <MainLayout>
+        <div className="rounded-lg border border-dashed p-12 text-center text-muted-foreground">
+          Selecione uma clínica no menu lateral para gerenciar profissionais.
+        </div>
+      </MainLayout>
+    );
+  }
+
   return (
     <MainLayout>
       <div className="space-y-6">

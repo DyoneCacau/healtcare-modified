@@ -1,0 +1,28 @@
+# Cron opcional: verificação diária de assinaturas
+#
+# Configure os secrets no repositório:
+#   SUPABASE_PROJECT_URL  → https://xxxx.supabase.co
+#   CRON_SECRET           → mesmo valor do Supabase Edge Functions Secrets
+#
+# Ou desative este workflow e use EasyCron / Render Cron com o curl documentado em PENDENCIAS_DEPLOY.md
+
+name: Check Subscriptions
+
+on:
+  schedule:
+    - cron: '0 9 * * *' # 09:00 UTC (~6h BRT)
+  workflow_dispatch:
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Call check-subscriptions
+        run: |
+          if [ -z "${{ secrets.SUPABASE_PROJECT_URL }}" ] || [ -z "${{ secrets.CRON_SECRET }}" ]; then
+            echo "Secrets SUPABASE_PROJECT_URL e CRON_SECRET não configurados — job ignorado."
+            exit 0
+          fi
+          curl -sf -X POST "${{ secrets.SUPABASE_PROJECT_URL }}/functions/v1/check-subscriptions" \
+            -H "Authorization: Bearer ${{ secrets.CRON_SECRET }}" \
+            -H "Content-Type: application/json"

@@ -37,7 +37,7 @@ npm run dev
 - **Ponto** – Registro de ponto eletrônico
 - **Permissões** – Por role (admin, recepcionista, etc.) e por feature
 - **Multi-clínica** – Suporte a várias clínicas por usuário
-- **Assinatura** – Planos, Mercado Pago (modelo vendas fechadas)
+- **Assinatura** – Planos, gestão manual pelo SuperAdmin (modelo vendas diretas)
 
 ### Segurança
 

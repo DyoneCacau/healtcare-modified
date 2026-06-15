@@ -105,16 +105,6 @@ if [ -f ".env" ]; then
         check "VITE_SUPERADMIN_EMAILS configurado" "false" "Configure o email do superadmin"
     fi
     
-    # Verificar Mercado Pago (opcional)
-    if [ -n "$VITE_MERCADOPAGO_PUBLIC_KEY" ]; then
-        if [[ "$VITE_MERCADOPAGO_PUBLIC_KEY" == TEST-* ]]; then
-            warn "Mercado Pago em modo TESTE" "Use apenas para desenvolvimento"
-        else
-            check "VITE_MERCADOPAGO_PUBLIC_KEY configurado (PRODUÇÃO)" "true"
-        fi
-    else
-        warn "VITE_MERCADOPAGO_PUBLIC_KEY não configurado" "Opcional: necessário apenas para pagamentos"
-    fi
 else
     warn "Arquivo .env não encontrado" "Pulando verificação de variáveis"
 fi
@@ -134,17 +124,6 @@ if [ -f "supabase/.env.local" ]; then
         check "SUPABASE_SERVICE_ROLE_KEY configurado" "true"
     else
         check "SUPABASE_SERVICE_ROLE_KEY configurado" "false" "Obtenha no Dashboard do Supabase → Settings → API"
-    fi
-    
-    # Verificar MP Access Token
-    if [ -n "$MP_ACCESS_TOKEN" ]; then
-        if [[ "$MP_ACCESS_TOKEN" == TEST-* ]]; then
-            warn "MP_ACCESS_TOKEN em modo TESTE" "Use apenas para desenvolvimento"
-        else
-            check "MP_ACCESS_TOKEN configurado (PRODUÇÃO)" "true"
-        fi
-    else
-        warn "MP_ACCESS_TOKEN não configurado" "Necessário para processar pagamentos"
     fi
 else
     warn "Arquivo supabase/.env.local não encontrado" "Crie baseado no exemplo fornecido"
@@ -185,7 +164,7 @@ else
     echo -e "${RED}⚠️  ATENÇÃO: Existem erros na configuração${NC}"
     echo ""
     echo "Corrija os erros acima antes de continuar."
-    echo "Consulte o arquivo CONFIGURACAO_MERCADOPAGO.md para mais detalhes."
+    echo "Consulte DEPLOY.md e .env.example para mais detalhes."
     echo ""
 fi
 

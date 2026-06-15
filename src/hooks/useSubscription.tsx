@@ -2,6 +2,7 @@ import { createContext, useContext, useEffect, useState, ReactNode } from 'react
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from './useAuth';
 import { useSelectedClinicId } from './useSelectedClinicId';
+import { parsePlanFeatures } from '@/lib/planFeatures';
 
 interface Plan {
   id: string;
@@ -44,6 +45,7 @@ const ROUTE_FEATURE_MAP: Record<string, string> = {
   '/estoque': 'estoque',
   '/relatorios': 'relatorios',
   '/ponto': 'ponto',
+  '/atendimento': 'atendimento',
   '/administracao': 'administracao',
   '/termos': 'termos',
   '/configuracoes': 'configuracoes',
@@ -69,6 +71,7 @@ export const ALL_FEATURES = [
   'estoque',
   'relatorios',
   'ponto',
+  'atendimento',
   'administracao',
   'termos',
   'configuracoes',
@@ -84,10 +87,21 @@ export function SubscriptionProvider({ children }: { children: ReactNode }) {
   const [isLoading, setIsLoading] = useState(true);
 
   const fetchSubscription = async () => {
-    if (!user || isSuperAdmin) {
+    if (!user) {
+      setSubscription(null);
+      setHasClinic(false);
       setIsLoading(false);
       return;
     }
+
+    if (isSuperAdmin) {
+      setSubscription(null);
+      setHasClinic(false);
+      setIsLoading(false);
+      return;
+    }
+
+    setIsLoading(true);
 
     try {
       let clinicId: string | null = null;
@@ -152,7 +166,7 @@ export function SubscriptionProvider({ children }: { children: ReactNode }) {
           current_period_end: subData.current_period_end ?? null,
           plan: plan ? {
             ...plan,
-            features: Array.isArray(plan.features) ? plan.features : JSON.parse(plan.features as unknown as string || '[]')
+            features: parsePlanFeatures(plan.features),
           } : null,
         });
       } else {

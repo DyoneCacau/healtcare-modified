@@ -1,10 +1,11 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import { Building2, ArrowRight, Star } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { supabase } from "@/integrations/supabase/client";
+import { useSelectedClinicId } from "@/hooks/useSelectedClinicId";
 import { toast } from "sonner";
 
 interface UserClinic {
@@ -18,59 +19,85 @@ interface UserClinic {
 export function ClinicSelector() {
   const [clinics, setClinics] = useState<UserClinic[]>([]);
   const [isLoading, setIsLoading] = useState(true);
-  const [selectedClinicId, setSelectedClinicId] = useState<string | null>(null);
+  const [selectedClinicId, setSelectedClinicIdLocal] = useState<string | null>(null);
+  const { setSelectedClinicId } = useSelectedClinicId();
   const navigate = useNavigate();
 
+  const handleSelectClinic = useCallback(
+    async (clinicId: string) => {
+      try {
+        setSelectedClinicId(clinicId);
+        navigate('/', { replace: true });
+      } catch (error) {
+        console.error("Erro ao selecionar clínica:", error);
+        toast.error("Erro ao acessar clínica");
+      }
+    },
+    [navigate, setSelectedClinicId]
+  );
+
   useEffect(() => {
+    async function fetchUserClinics() {
+      try {
+        const { data, error } = await supabase.rpc('get_user_clinics');
+
+        if (error) {
+          // Fallback se a RPC não existir no banco remoto
+          const { data: { user } } = await supabase.auth.getUser();
+          if (!user) throw error;
+
+          const { data: links, error: linksError } = await supabase
+            .from('clinic_users')
+            .select('clinic_id, is_owner, clinics(id, name)')
+            .eq('user_id', user.id);
+
+          if (linksError) throw linksError;
+
+          const { data: roleRow } = await supabase
+            .from('user_roles')
+            .select('role')
+            .eq('user_id', user.id)
+            .maybeSingle();
+
+          const systemRole = roleRow?.role || 'receptionist';
+
+          const mapped: UserClinic[] = (links || []).map((row) => ({
+            clinic_id: row.clinic_id,
+            clinic_name: (row.clinics as { name?: string } | null)?.name || 'Clínica',
+            is_owner: row.is_owner,
+            role: systemRole,
+            is_preferred: false,
+          }));
+
+          setClinics(mapped);
+
+          if (mapped.length === 1) {
+            await handleSelectClinic(mapped[0].clinic_id);
+          }
+          return;
+        }
+
+        setClinics(data || []);
+
+        if (data && data.length === 1) {
+          await handleSelectClinic(data[0].clinic_id);
+          return;
+        }
+
+        const preferred = data?.find((c: UserClinic) => c.is_preferred);
+        if (preferred) {
+          setSelectedClinicIdLocal(preferred.clinic_id);
+        }
+      } catch (error) {
+        console.error("Erro ao carregar clínicas:", error);
+        toast.error("Erro ao carregar suas clínicas");
+      } finally {
+        setIsLoading(false);
+      }
+    }
+
     fetchUserClinics();
-  }, []);
-
-  async function fetchUserClinics() {
-    try {
-      const { data, error } = await supabase.rpc('get_user_clinics');
-
-      if (error) throw error;
-
-      setClinics(data || []);
-      
-      // Se houver apenas uma clínica, selecionar automaticamente
-      if (data && data.length === 1) {
-        handleSelectClinic(data[0].clinic_id);
-        return;
-      }
-
-      // Se houver clínica preferida, pré-selecionar
-      const preferred = data?.find((c: UserClinic) => c.is_preferred);
-      if (preferred) {
-        setSelectedClinicId(preferred.clinic_id);
-      }
-    } catch (error) {
-      console.error("Erro ao carregar clínicas:", error);
-      toast.error("Erro ao carregar suas clínicas");
-    } finally {
-      setIsLoading(false);
-    }
-  }
-
-  async function handleSelectClinic(clinicId: string) {
-    try {
-      // Salvar como clínica preferida
-      const { data: { user } } = await supabase.auth.getUser();
-      
-      if (user) {
-        await supabase
-          .from('profiles')
-          .update({ preferred_clinic_id: clinicId })
-          .eq('user_id', user.id);
-      }
-
-      // Redirecionar para dashboard
-      navigate('/', { replace: true });
-    } catch (error) {
-      console.error("Erro ao selecionar clínica:", error);
-      toast.error("Erro ao acessar clínica");
-    }
-  }
+  }, [handleSelectClinic]);
 
   if (isLoading) {
     return (
@@ -101,7 +128,7 @@ export function ClinicSelector() {
                   ? 'ring-2 ring-primary shadow-lg'
                   : ''
               }`}
-              onClick={() => setSelectedClinicId(clinic.clinic_id)}
+              onClick={() => setSelectedClinicIdLocal(clinic.clinic_id)}
             >
               <CardHeader className="pb-3">
                 <div className="flex items-start justify-between">
@@ -123,7 +150,7 @@ export function ClinicSelector() {
                     </Badge>
                     {!clinic.is_owner && (
                       <span className="text-xs text-muted-foreground capitalize">
-                        {clinic.role === 'admin' ? 'Administrador' : 
+                        {clinic.role === 'admin' ? 'Administrador' :
                          clinic.role === 'receptionist' ? 'Recepcionista' :
                          clinic.role === 'seller' ? 'Vendedor' : 'Profissional'}
                       </span>

@@ -30,6 +30,7 @@ import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
 import { useClinic, useClinics } from '@/hooks/useClinic';
 import { useAuth } from '@/hooks/useAuth';
+import { parsePlanFeatures } from '@/lib/planFeatures';
 import {
   SYSTEM_ROLES,
   ROLE_LABELS,
@@ -157,7 +158,7 @@ export function PermissionsManagement() {
   const clinicOptions = useMemo(() => {
     return (clinicsList?.length ? clinicsList : clinic ? [clinic] : []) as { id: string; name?: string; unit_name?: string }[];
   }, [clinicsList, clinic]);
-  const effectiveClinicId = selectedClinicId || clinicId || clinicOptions[0]?.id || null;
+  const effectiveClinicId = selectedClinicId || clinicId || null;
 
   /** Linhas raiz: módulos que não são filhos de outro (filhos aparecem sob o pai) */
   const buildRows = useMemo((): ModuleRowDef[] => {
@@ -257,11 +258,8 @@ export function PermissionsManagement() {
       supabase.from('subscriptions').select('plans(features)').eq('clinic_id', targetClinicId).maybeSingle(),
     ]);
 
-    const planFeatures = (subRes.data as any)?.plans?.features;
-    let raw: string[] = [];
-    if (Array.isArray(planFeatures)) raw = planFeatures;
-    else if (typeof planFeatures === 'string') try { raw = JSON.parse(planFeatures); } catch { raw = []; }
-    setPlanFeatureIds(expandPlanFeatures(raw));
+    const planFeatures = (subRes.data as { plans?: { features?: unknown } | null })?.plans?.features;
+    setPlanFeatureIds(expandPlanFeatures(parsePlanFeatures(planFeatures)));
 
     const byRole: Record<SystemRole, Record<string, Record<ActionKey, boolean>>> = {
       admin: {},
@@ -371,11 +369,13 @@ export function PermissionsManagement() {
     }
   };
 
-  if (!effectiveClinicId && clinicOptions.length === 0) {
+  if (!effectiveClinicId) {
     return (
       <Card>
         <CardContent className="pt-6">
-          <p className="text-muted-foreground">Selecione uma clínica para gerenciar permissões.</p>
+          <p className="text-muted-foreground">
+            Selecione uma clínica no menu lateral (ou no filtro acima) para gerenciar permissões.
+          </p>
         </CardContent>
       </Card>
     );

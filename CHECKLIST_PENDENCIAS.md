@@ -13,7 +13,7 @@
 - [ ] Migration `20260220000000_commissions_beneficiary_name.sql`
 - [ ] Migration `20260219000000_commissions_rls_clinic_members.sql`
 - [ ] Configurar **Authentication > URL Configuration** com URL do app em produção
-- [ ] Configurar **Edge Functions Secrets** (MP_ACCESS_TOKEN, MP_WEBHOOK_SECRET, INIT_SECRET, CRON_SECRET)
+- [ ] Configurar **Edge Functions Secrets** (INIT_SECRET, CRON_SECRET)
 
 ### Hospedagem
 - [ ] Escolher provedor (Vercel ou Netlify)
@@ -35,14 +35,11 @@
 - [ ] `VITE_SUPABASE_ANON_KEY`
 
 ### Opcionais (Frontend)
-- [ ] `VITE_MERCADOPAGO_PUBLIC_KEY` (para pagamentos)
 - [ ] `VITE_SUPPORT_EMAIL` (tela "Clínica pendente de ativação")
 - [ ] `VITE_SUPPORT_WHATSAPP` (tela "Clínica pendente de ativação")
 
 ### Supabase Edge Functions (Secrets)
 - [ ] `SUPABASE_SERVICE_ROLE_KEY`
-- [ ] `MP_ACCESS_TOKEN`
-- [ ] `MP_WEBHOOK_SECRET`
 - [ ] `INIT_SECRET`
 - [ ] `CRON_SECRET`
 

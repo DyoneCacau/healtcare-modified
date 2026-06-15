@@ -28,13 +28,12 @@ Crie `.env` na raiz (ou configure no painel da hospedagem):
 ```env
 VITE_SUPABASE_URL=https://seu-projeto.supabase.co
 VITE_SUPABASE_ANON_KEY=eyJhbGciOiJIUzI1NiIs...
-VITE_MERCADOPAGO_PUBLIC_KEY=APP_USR-xxx  # opcional, para pagamentos
+VITE_SUPPORT_EMAIL=suporte@healthcare.com.br
+VITE_SUPPORT_WHATSAPP=5511999999999
 ```
 
 **No Supabase Dashboard** (Edge Functions Secrets):
 - `SUPABASE_SERVICE_ROLE_KEY`
-- `MP_ACCESS_TOKEN` (Mercado Pago)
-- `MP_WEBHOOK_SECRET`
 - `INIT_SECRET` (para init superadmin)
 - `CRON_SECRET` (para check-subscriptions)
 

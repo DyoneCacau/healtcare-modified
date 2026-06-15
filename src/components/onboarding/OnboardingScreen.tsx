@@ -10,6 +10,7 @@ import {
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useOnboarding } from '@/hooks/useOnboarding';
+import { toast } from 'sonner';
 
 const steps = [
   {
@@ -40,16 +41,24 @@ export function OnboardingScreen() {
   const currentStep = steps[step];
   const Icon = currentStep.icon;
 
-  const handleNext = () => {
-    if (step < steps.length - 1) {
-      setStep(step + 1);
-    } else {
-      completeOnboarding();
+  const handleComplete = async () => {
+    try {
+      await completeOnboarding();
+    } catch {
+      toast.error('Não foi possível salvar o onboarding, mas você já pode usar o sistema.');
     }
   };
 
-  const handleSkip = () => {
-    completeOnboarding();
+  const handleNext = async () => {
+    if (step < steps.length - 1) {
+      setStep(step + 1);
+    } else {
+      await handleComplete();
+    }
+  };
+
+  const handleSkip = async () => {
+    await handleComplete();
   };
 
   return (

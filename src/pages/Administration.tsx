@@ -501,21 +501,27 @@ export default function Administration() {
 
           {/* Minhas Clínicas Tab */}
           <TabsContent value="clinics">
-            <MyClinicsContent />
+            <ErrorBoundary>
+              <MyClinicsContent />
+            </ErrorBoundary>
           </TabsContent>
 
           {/* Corrections Tab */}
           <TabsContent value="corrections">
-            <PendingCorrections
-              corrections={pendingCorrections}
-              onApprove={handleApproveCorrection}
-              onReject={handleRejectCorrection}
-            />
+            <ErrorBoundary>
+              <PendingCorrections
+                corrections={pendingCorrections}
+                onApprove={handleApproveCorrection}
+                onReject={handleRejectCorrection}
+              />
+            </ErrorBoundary>
           </TabsContent>
 
           {/* Users Tab */}
           <TabsContent value="users">
-            <UserManagement users={users} onRefresh={fetchData} isSuperAdmin={isSuperAdmin} />
+            <ErrorBoundary>
+              <UserManagement users={users} onRefresh={fetchData} isSuperAdmin={isSuperAdmin} />
+            </ErrorBoundary>
           </TabsContent>
 
           {/* Permissions Tab */}
@@ -527,6 +533,7 @@ export default function Administration() {
 
           {/* Timesheet Tab */}
           <TabsContent value="timesheet" className="space-y-4">
+            <ErrorBoundary>
             {/* Filters */}
             <Card>
               <CardContent className="pt-6">
@@ -665,6 +672,7 @@ export default function Administration() {
                 </Table>
               </CardContent>
             </Card>
+            </ErrorBoundary>
           </TabsContent>
 
           {/* Settings Tab */}
@@ -712,6 +720,7 @@ export default function Administration() {
 
           {/* Audit Tab */}
           <TabsContent value="audit" className="space-y-4">
+            <ErrorBoundary>
             {!auditUnlocked ? (
               <Card>
                 <CardHeader>
@@ -807,6 +816,7 @@ export default function Administration() {
                 </CardContent>
               </Card>
             )}
+            </ErrorBoundary>
           </TabsContent>
         </Tabs>
       </div>

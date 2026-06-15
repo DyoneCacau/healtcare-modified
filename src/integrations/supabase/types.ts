@@ -383,6 +383,277 @@ export type Database = {
           },
         ]
       }
+      chat_channels: {
+        Row: {
+          id: string
+          clinic_id: string
+          channel_type: string
+          display_name: string
+          phone_number: string | null
+          waba_id: string | null
+          phone_number_id: string | null
+          access_token: string | null
+          webhook_verify_token: string | null
+          status: string
+          metadata: Json
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          clinic_id: string
+          channel_type?: string
+          display_name: string
+          phone_number?: string | null
+          waba_id?: string | null
+          phone_number_id?: string | null
+          access_token?: string | null
+          webhook_verify_token?: string | null
+          status?: string
+          metadata?: Json
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          clinic_id?: string
+          channel_type?: string
+          display_name?: string
+          phone_number?: string | null
+          waba_id?: string | null
+          phone_number_id?: string | null
+          access_token?: string | null
+          webhook_verify_token?: string | null
+          status?: string
+          metadata?: Json
+          created_at?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "chat_channels_clinic_id_fkey"
+            columns: ["clinic_id"]
+            isOneToOne: false
+            referencedRelation: "clinics"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      chat_conversations: {
+        Row: {
+          id: string
+          clinic_id: string
+          channel_id: string
+          patient_id: string | null
+          flow_id: string | null
+          external_contact_id: string
+          contact_name: string | null
+          contact_phone: string
+          status: string
+          assigned_to: string | null
+          last_message_at: string
+          last_message_preview: string | null
+          unread_count: number
+          metadata: Json
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          clinic_id: string
+          channel_id: string
+          patient_id?: string | null
+          flow_id?: string | null
+          external_contact_id: string
+          contact_name?: string | null
+          contact_phone: string
+          status?: string
+          assigned_to?: string | null
+          last_message_at?: string
+          last_message_preview?: string | null
+          unread_count?: number
+          metadata?: Json
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          clinic_id?: string
+          channel_id?: string
+          patient_id?: string | null
+          flow_id?: string | null
+          external_contact_id?: string
+          contact_name?: string | null
+          contact_phone?: string
+          status?: string
+          assigned_to?: string | null
+          last_message_at?: string
+          last_message_preview?: string | null
+          unread_count?: number
+          metadata?: Json
+          created_at?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "chat_conversations_clinic_id_fkey"
+            columns: ["clinic_id"]
+            isOneToOne: false
+            referencedRelation: "clinics"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "chat_conversations_channel_id_fkey"
+            columns: ["channel_id"]
+            isOneToOne: false
+            referencedRelation: "chat_channels"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      chat_flow_sessions: {
+        Row: {
+          id: string
+          conversation_id: string
+          flow_id: string
+          current_node_id: string | null
+          variables: Json
+          is_active: boolean
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          conversation_id: string
+          flow_id: string
+          current_node_id?: string | null
+          variables?: Json
+          is_active?: boolean
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          conversation_id?: string
+          flow_id?: string
+          current_node_id?: string | null
+          variables?: Json
+          is_active?: boolean
+          created_at?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      chat_flows: {
+        Row: {
+          id: string
+          clinic_id: string
+          channel_id: string | null
+          name: string
+          description: string | null
+          is_active: boolean
+          is_default: boolean
+          trigger_type: string
+          definition: Json
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          clinic_id: string
+          channel_id?: string | null
+          name: string
+          description?: string | null
+          is_active?: boolean
+          is_default?: boolean
+          trigger_type?: string
+          definition?: Json
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          clinic_id?: string
+          channel_id?: string | null
+          name?: string
+          description?: string | null
+          is_active?: boolean
+          is_default?: boolean
+          trigger_type?: string
+          definition?: Json
+          created_at?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "chat_flows_clinic_id_fkey"
+            columns: ["clinic_id"]
+            isOneToOne: false
+            referencedRelation: "clinics"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      chat_messages: {
+        Row: {
+          id: string
+          conversation_id: string
+          clinic_id: string
+          direction: string
+          body: string
+          message_type: string
+          external_id: string | null
+          status: string
+          sent_by: string | null
+          error_message: string | null
+          metadata: Json
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          conversation_id: string
+          clinic_id: string
+          direction: string
+          body: string
+          message_type?: string
+          external_id?: string | null
+          status?: string
+          sent_by?: string | null
+          error_message?: string | null
+          metadata?: Json
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          conversation_id?: string
+          clinic_id?: string
+          direction?: string
+          body?: string
+          message_type?: string
+          external_id?: string | null
+          status?: string
+          sent_by?: string | null
+          error_message?: string | null
+          metadata?: Json
+          created_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "chat_messages_clinic_id_fkey"
+            columns: ["clinic_id"]
+            isOneToOne: false
+            referencedRelation: "clinics"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "chat_messages_conversation_id_fkey"
+            columns: ["conversation_id"]
+            isOneToOne: false
+            referencedRelation: "chat_conversations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       user_preferences: {
         Row: {
           id: string

@@ -23,6 +23,7 @@ import { useTransactionMutations } from '@/hooks/useFinancial';
 import { usePermissions } from '@/hooks/usePermissions';
 import { toast } from 'sonner';
 import { Skeleton } from '@/components/ui/skeleton';
+import { prepareAgendaWhatsAppMessage } from '@/utils/whatsapp';
 
 export default function Agenda() {
   const [searchParams, setSearchParams] = useSearchParams();
@@ -327,15 +328,15 @@ export default function Agenda() {
   };
 
   const handleWhatsApp = (appointment: AgendaAppointment) => {
-    const message = `Olá! Confirmando sua consulta:\n📅 Data: ${format(new Date(appointment.date), 'dd/MM/yyyy')}\n⏰ Horário: ${appointment.startTime}\n👨‍⚕️ Profissional: ${appointment.professional.name}\n📍 Local: ${appointment.clinic.name}\n\nPor favor, confirme sua presença respondendo esta mensagem.`;
-    const phoneDigits = (appointment.patientPhone || '').replace(/\D/g, '');
-    if (!phoneDigits) {
+    const prepared = prepareAgendaWhatsAppMessage(appointment);
+    if (!prepared) {
       toast.error('Paciente sem telefone cadastrado');
       return;
     }
-    const phone = phoneDigits.startsWith('55') ? phoneDigits : `55${phoneDigits}`;
-    const url = `https://wa.me/${phone}?text=${encodeURIComponent(message)}`;
-    window.open(url, '_blank');
+    window.open(prepared.whatsappUrl, '_blank');
+    toast.success('Abrindo WhatsApp...', {
+      description: `Mensagem preparada para ${appointment.patientName}`,
+    });
   };
 
   const handleSave = async (data: Partial<AgendaAppointment>) => {

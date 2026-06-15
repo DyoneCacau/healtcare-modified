@@ -25,8 +25,8 @@ interface FeatureBlockedScreenProps {
 
 /**
  * Tela de bloqueio exibida quando o usuário tenta acessar
- * uma funcionalidade não incluída no seu plano atual.
- * Permite solicitar upgrade manualmente.
+ * uma funcionalidade não incluída no plano contratado.
+ * Permite solicitar liberação manualmente à equipe comercial.
  */
 export function FeatureBlockedScreen({ featureName, planName }: FeatureBlockedScreenProps) {
   const navigate = useNavigate();
@@ -38,7 +38,7 @@ export function FeatureBlockedScreen({ featureName, planName }: FeatureBlockedSc
 
   async function handleRequestUpgrade() {
     if (!user) {
-      toast.error('Você precisa estar logado para solicitar upgrade');
+      toast.error('Você precisa estar logado para enviar a solicitação');
       return;
     }
 
@@ -84,7 +84,7 @@ export function FeatureBlockedScreen({ featureName, planName }: FeatureBlockedSc
         .from('admin_notifications')
         .insert({
           type: 'upgrade_request',
-          title: 'Nova solicitação de upgrade',
+          title: 'Nova solicitação de módulo',
           message: `Clínica solicitou acesso ao módulo "${featureName}"`,
           reference_type: 'upgrade_request',
           is_read: false,
@@ -116,8 +116,8 @@ export function FeatureBlockedScreen({ featureName, planName }: FeatureBlockedSc
                 Seu plano não inclui {featureName}
               </h1>
               <p className="text-muted-foreground text-base leading-relaxed">
-                Para acessar este módulo, solicite um upgrade do seu plano.
-                Nossa equipe entrará em contato para ajudá-lo.
+                Para acessar este módulo, envie uma solicitação à equipe comercial.
+                A liberação é feita manualmente após análise.
               </p>
             </div>
 
@@ -141,7 +141,7 @@ export function FeatureBlockedScreen({ featureName, planName }: FeatureBlockedSc
                 className="gap-2 w-full"
               >
                 <Sparkles className="h-5 w-5" />
-                Solicitar Upgrade
+                Solicitar módulo
                 <ArrowRight className="h-4 w-4" />
               </Button>
               
@@ -169,7 +169,7 @@ export function FeatureBlockedScreen({ featureName, planName }: FeatureBlockedSc
         <DialogContent>
           <DialogHeader>
             <DialogTitle>
-              {isSubmitted ? 'Solicitação Enviada!' : 'Solicitar Upgrade'}
+              {isSubmitted ? 'Solicitação Enviada!' : 'Solicitar módulo'}
             </DialogTitle>
             <DialogDescription>
               {isSubmitted 
@@ -185,7 +185,7 @@ export function FeatureBlockedScreen({ featureName, planName }: FeatureBlockedSc
                 <CheckCircle className="h-8 w-8 text-green-600" />
               </div>
               <p className="text-center text-muted-foreground">
-                Aguarde o contato da nossa equipe para finalizar o upgrade do seu plano.
+                Aguarde o contato da nossa equipe comercial para liberação do módulo.
               </p>
             </div>
           ) : (

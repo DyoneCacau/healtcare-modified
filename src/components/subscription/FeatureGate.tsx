@@ -41,10 +41,11 @@ export function FeatureGate({ feature, children, fallback }: FeatureGateProps) {
           </div>
           
           <div className="space-y-2">
-            <h2 className="text-xl font-semibold">Funcionalidade Bloqueada</h2>
+            <h2 className="text-xl font-semibold">Módulo não contratado</h2>
             <p className="text-muted-foreground text-sm">
-              Esta funcionalidade não está disponível no seu plano atual
-              {subscription?.plan?.name && ` (${subscription.plan.name})`}.
+              Esta funcionalidade não está incluída no seu plano
+              {subscription?.plan?.name && ` (${subscription.plan.name})`}. Solicite liberação
+              com a equipe comercial.
             </p>
           </div>
 
@@ -53,7 +54,7 @@ export function FeatureGate({ feature, children, fallback }: FeatureGateProps) {
             className="gap-2"
           >
             <Sparkles className="h-4 w-4" />
-            Fazer Upgrade
+            Ver plano e solicitar módulo
           </Button>
         </CardContent>
       </Card>

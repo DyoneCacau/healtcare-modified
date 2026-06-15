@@ -1,5 +1,6 @@
 import { Patient } from '@/types/patient';
 import { AppointmentWithClinic } from '@/types/clinic';
+import { AgendaAppointment } from '@/types/agenda';
 import { formatClinicAddress } from '@/lib/utils';
 import { format, parseISO } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
@@ -70,9 +71,59 @@ export const prepareWhatsAppMessage = (
   const message = generateConfirmationMessage(patient, appointment);
   const formattedPhone = formatPhoneForWhatsApp(patient.phone);
   const whatsappUrl = generateWhatsAppUrl(patient.phone, message);
-  
+
   return {
     phone: formattedPhone,
+    message,
+    whatsappUrl,
+  };
+};
+
+/** Mensagem de confirmação a partir de um agendamento da agenda */
+export const generateAgendaConfirmationMessage = (appointment: AgendaAppointment): string => {
+  let formattedDate = appointment.date;
+  try {
+    formattedDate = format(parseISO(appointment.date), "dd 'de' MMMM 'de' yyyy", {
+      locale: ptBR,
+    });
+  } catch {
+    formattedDate = appointment.date;
+  }
+  const firstName = appointment.patientName.split(' ')[0] || appointment.patientName;
+  const clinicPhone = appointment.clinic.phone || '';
+
+  return `Olá, ${firstName}!
+
+Gostaríamos de confirmar sua consulta agendada:
+
+*Data:* ${formattedDate}
+*Horário:* ${appointment.startTime}
+*Profissional:* ${appointment.professional.name}
+*Procedimento:* ${appointment.procedure}
+
+*Local:*
+${appointment.clinic.name}
+${formatClinicAddress(appointment.clinic) || appointment.clinic.address || ''}
+
+Por favor, confirme se você comparecerá à consulta respondendo:
+*SIM* - Confirmo minha presença
+*NÃO* - Não poderei comparecer
+
+Caso precise reagendar, entre em contato conosco${clinicPhone ? ` pelo telefone ${clinicPhone}` : ''}.
+
+Agradecemos a confirmação!`;
+};
+
+export const prepareAgendaWhatsAppMessage = (
+  appointment: AgendaAppointment
+): WhatsAppMessage | null => {
+  if (!appointment.patientPhone?.replace(/\D/g, '')) return null;
+
+  const message = generateAgendaConfirmationMessage(appointment);
+  const whatsappUrl = generateWhatsAppUrl(appointment.patientPhone, message);
+
+  return {
+    phone: formatPhoneForWhatsApp(appointment.patientPhone),
     message,
     whatsappUrl,
   };

@@ -1,38 +1,61 @@
-# Pendências de deploy (executar fora do ambiente corporativo)
+# Pendências de deploy
 
-> **Status:** Aguardando execução em ambiente com acesso liberado (máquina pessoal, etc.)
+> **Código:** pronto para vendas diretas B2B (sem Mercado Pago).  
+> **Infra:** executar no ambiente com Supabase CLI e acesso ao projeto.
 
 ---
 
-## 1. Deploy da Edge Function `check-subscriptions`
+## 1. Aplicar migrations no Supabase
 
-**Comando:**
 ```bash
-cd "caminho/do/projeto/healtcare-vendas-diretas-FINAL (1)"
-supabase functions deploy check-subscriptions
+cd "caminho/do/projeto/healtcare-modified"
+supabase login
+supabase link --project-ref SEU_PROJECT_REF
+supabase db push
 ```
 
-**Pré-requisitos:**
-- Supabase CLI instalado: `npm install -g supabase`
-- Login: `supabase login`
-- Projeto linkado (se necessário): `supabase link --project-ref SEU_PROJECT_REF`
+As migrations abaixo já estão em `supabase/migrations/` (não é necessário SQL manual separado):
+
+- `20260230000000_register_payment_period_and_notifications.sql` — `register_payment` com `p_next_due_date`
+- `20260230000001_vw_clients_status_due_dates.sql` — view `vw_clients_status`
+
+Se o banco foi criado antes dessas migrations, o `db push` aplica o que faltar.
 
 ---
 
-## 2. Configurar secret CRON_SECRET
+## 2. Deploy das Edge Functions
 
-Após o deploy:
+```bash
+supabase functions deploy check-subscriptions
+supabase functions deploy init-superadmin
+# opcional:
+supabase functions deploy reset-user-password
+supabase functions deploy delete-clinic-and-user
+```
 
-1. Acesse o [Supabase Dashboard](https://supabase.com/dashboard)
-2. Selecione o projeto
-3. Vá em **Edge Functions** → **check-subscriptions** → **Secrets**
-4. Adicione: `CRON_SECRET` = senha forte (ex.: gerada em random.org)
+Detalhes: [supabase/functions/README.md](supabase/functions/README.md)
 
 ---
 
-## 3. Configurar cron para rodar diariamente
+## 3. Secrets no Supabase Dashboard
 
-Use um serviço externo (EasyCron, GitHub Actions, Render Cron, etc.) para chamar:
+**Edge Functions → Secrets:**
+
+| Secret | Uso |
+|--------|-----|
+| `SUPABASE_SERVICE_ROLE_KEY` | Funções server-side |
+| `CRON_SECRET` | Protege `check-subscriptions` |
+| `INIT_SECRET` | Cria superadmin (uma vez) |
+
+---
+
+## 4. Cron diário
+
+**Opção A — GitHub Actions** (template em `.github/workflows/check-subscriptions-cron.yml`):
+
+Configure secrets `SUPABASE_PROJECT_URL` e `CRON_SECRET` no repositório.
+
+**Opção B — Serviço externo** (EasyCron, Render Cron, etc.):
 
 ```bash
 curl -X POST https://SEU-PROJETO.supabase.co/functions/v1/check-subscriptions \
@@ -40,38 +63,43 @@ curl -X POST https://SEU-PROJETO.supabase.co/functions/v1/check-subscriptions \
   -H "Content-Type: application/json"
 ```
 
-**Frequência sugerida:** 1x por dia (ex.: 6h da manhã)
+Frequência: **1x por dia** (ex.: 6h da manhã).
 
 ---
 
-## 4. Scripts SQL adicionais (executar no SQL Editor)
+## 5. Frontend (Vercel / Netlify)
 
-**Script A – Atualizar view vw_clients_status** (adiciona last_payment_at, current_period_end):
-```sql
--- Ver conteúdo em: supabase/migrations/20260230000001_vw_clients_status_due_dates.sql
+Variáveis obrigatórias — ver [.env.example](.env.example):
+
+- `VITE_SUPABASE_URL`
+- `VITE_SUPABASE_ANON_KEY`
+- `VITE_SUPPORT_EMAIL` (opcional)
+- `VITE_SUPPORT_WHATSAPP` (opcional)
+
+```bash
+npm run build
 ```
 
-**Script B – Atualizar register_payment** (adiciona parâmetro opcional p_next_due_date):
-```sql
--- Ver conteúdo em: supabase/migrations/20260230000000_register_payment_period_and_notifications.sql
--- (rodar novamente para incluir o parâmetro p_next_due_date)
-```
+---
+
+## Checklist
+
+- [ ] `supabase db push` executado
+- [ ] Edge Functions deployadas
+- [ ] Secrets configurados
+- [ ] Cron configurado
+- [ ] Superadmin criado (`init-superadmin`)
+- [ ] Deploy frontend com variáveis de ambiente
+- [ ] Remover funções MP antigas do Dashboard (se ainda existirem): `mp-*`, `mercadopago-*`, `create-payment-preference`
 
 ---
 
-## O que já foi feito
+## Já implementado no código
 
-- [x] Migration `register_payment` (Script 1) – executado
-- [x] Correção assinaturas antigas (Script 2) – executado
-- [x] Código da Edge Function `check-subscriptions` atualizado no projeto
-- [x] Fluxo manual: notificação no sino do cliente, "dias desde último pagamento" no dashboard SuperAdmin
-
----
-
-## O que falta
-
-- [ ] Executar Script A (vw_clients_status) no SQL Editor
-- [ ] Executar Script B (register_payment com p_next_due_date) no SQL Editor
-- [ ] Deploy da Edge Function
-- [ ] Configurar CRON_SECRET
-- [ ] Configurar cron externo
+- [x] Modelo vendas diretas (Settings, bloqueio de assinatura, sem checkout MP)
+- [x] Remoção Mercado Pago (Edge Functions + SDK frontend)
+- [x] Exportação CSV de comissões
+- [x] WhatsApp unificado na agenda
+- [x] Onboarding reativado
+- [x] Rota `/selecionar-clinica`
+- [x] `check-subscriptions` sem lógica de trial

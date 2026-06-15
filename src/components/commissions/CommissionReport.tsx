@@ -38,6 +38,7 @@ import {
 import { CommissionSummary, CommissionCalculation, beneficiaryTypeLabels, BeneficiaryType } from '@/types/commission';
 import { leadSourceLabels, LeadSource } from '@/types/agenda';
 import { generateCommissionSummary } from '@/hooks/useCommissions';
+import { toast } from 'sonner';
 import { CommissionReportFilters, type PeriodType } from './CommissionReportFilters';
 import { useClinics } from '@/hooks/useClinic';
 import { format, parseISO, isWithinInterval, startOfWeek, endOfWeek, startOfMonth, endOfMonth } from 'date-fns';
@@ -217,7 +218,63 @@ export function CommissionReport({ calculations, professionals = [] }: Commissio
   ];
 
   const handleExport = () => {
-    // TODO: implementar exportação de relatório
+    if (summary.length === 0) {
+      toast.error('Nenhum dado para exportar no período selecionado');
+      return;
+    }
+
+    const escapeCsv = (value: string | number) => {
+      const str = String(value);
+      if (/[",;\n]/.test(str)) {
+        return `"${str.replace(/"/g, '""')}"`;
+      }
+      return str;
+    };
+
+    const header = [
+      'Beneficiário',
+      'Tipo',
+      'Atendimentos',
+      'Receita',
+      'Comissão Total',
+      'Pendente',
+      'Pago',
+    ];
+
+    const rows = summary.map((s) => [
+      s.professionalName,
+      beneficiaryTypeLabels[s.beneficiaryType],
+      s.totalServices,
+      s.totalRevenue.toFixed(2),
+      s.totalCommission.toFixed(2),
+      s.pendingCommission.toFixed(2),
+      s.paidCommission.toFixed(2),
+    ]);
+
+    const totalsRow = [
+      'TOTAL',
+      '',
+      totals.totalServices,
+      totals.totalRevenue.toFixed(2),
+      totals.totalCommission.toFixed(2),
+      totals.pendingCommission.toFixed(2),
+      totals.paidCommission.toFixed(2),
+    ];
+
+    const csv = [
+      header.join(';'),
+      ...rows.map((row) => row.map(escapeCsv).join(';')),
+      totalsRow.map(escapeCsv).join(';'),
+    ].join('\n');
+
+    const blob = new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `comissoes_${startDate}_${endDate}.csv`;
+    link.click();
+    URL.revokeObjectURL(url);
+    toast.success('Relatório exportado com sucesso');
   };
 
   const renderBeneficiaryTable = (data: CommissionSummary[], title: string, icon: React.ReactNode) => (

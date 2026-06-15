@@ -21,12 +21,16 @@ export function usePermissions() {
       }
 
       // Verificar se tem função personalizada nesta clínica
-      const { data: customRoleRow } = await supabase
+      const { data: customRoleRow, error: customRoleError } = await supabase
         .from('user_clinic_custom_roles')
         .select('clinic_custom_role_id')
         .eq('user_id', user.id)
         .eq('clinic_id', clinicId)
         .maybeSingle();
+
+      if (customRoleError) {
+        console.warn('[usePermissions] custom role lookup failed:', customRoleError.message);
+      }
 
       if (customRoleRow?.clinic_custom_role_id) {
         const { data: perms } = await supabase

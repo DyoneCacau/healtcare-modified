@@ -207,6 +207,12 @@ export function UserManagement({ users, onRefresh, isSuperAdmin }: UserManagemen
         }
         toast.success('Usuário atualizado com sucesso!');
       } else {
+        if (!clinicId) {
+          toast.error('Selecione uma clínica no menu lateral antes de criar usuários.');
+          setIsLoading(false);
+          return;
+        }
+
         // Verificar se email já existe
         const { data: existingUser, error: checkError } = await supabase
           .from('profiles')
@@ -223,6 +229,8 @@ export function UserManagement({ users, onRefresh, isSuperAdmin }: UserManagemen
         }
 
         // Create new user (skip_auto_clinic: trigger não criará clínica nova; usuário entra na clínica atual)
+        const { data: { session: adminSession } } = await supabase.auth.getSession();
+
         const { data: authData, error: authError } = await supabase.auth.signUp({
           email: formData.email,
           password: formData.password,
@@ -274,6 +282,17 @@ export function UserManagement({ users, onRefresh, isSuperAdmin }: UserManagemen
 
           if (profileUpdateError) {
             console.error('Erro ao atualizar perfil:', profileUpdateError);
+          }
+        }
+
+        // signUp pode trocar a sessão para o usuário criado — restaurar admin
+        if (adminSession) {
+          const { data: { session: currentSession } } = await supabase.auth.getSession();
+          if (currentSession && currentSession.user.id !== adminSession.user.id) {
+            await supabase.auth.setSession({
+              access_token: adminSession.access_token,
+              refresh_token: adminSession.refresh_token,
+            });
           }
         }
 

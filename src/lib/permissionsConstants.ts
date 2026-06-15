@@ -19,6 +19,7 @@ export const PERMISSION_FEATURES = [
   { id: 'financeiro', label: 'Financeiro' },
   { id: 'comissoes', label: 'Comissões' },
   { id: 'estoque', label: 'Estoque' },
+  { id: 'atendimento', label: 'Atendimento' },
   { id: 'relatorios', label: 'Relatórios' },
   { id: 'ponto', label: 'Ponto' },
   { id: 'termos', label: 'Termos' },
@@ -114,6 +115,15 @@ export const PERMISSION_GROUPS: PermissionGroup[] = [
     ],
   },
   {
+    id: 'gr_atendimento',
+    label: 'Atendimento',
+    children: [
+      { feature: 'atendimento', label: 'Ver inbox', actions: ['can_view'] },
+      { feature: 'atendimento', label: 'Responder conversas', actions: ['can_create', 'can_edit'] },
+      { feature: 'atendimento', label: 'Configurar canais e fluxos', actions: ['can_edit', 'can_delete'] },
+    ],
+  },
+  {
     id: 'gr_relatorios',
     label: 'Relatórios',
     children: [{ feature: 'relatorios', label: 'Ver', actions: ['can_view'] }],
@@ -184,7 +194,7 @@ export function getDefaultPermissionsForRole(role: SystemRole): PermissionRow[] 
 
   const base = PERMISSION_FEATURES.map((f) => ({
     feature: f.id,
-    can_view: ['agenda', 'pacientes', 'dashboard', 'configuracoes'].includes(f.id),
+    can_view: ['agenda', 'pacientes', 'atendimento', 'dashboard', 'configuracoes'].includes(f.id),
     can_create: false,
     can_edit: false,
     can_delete: false,
@@ -192,7 +202,7 @@ export function getDefaultPermissionsForRole(role: SystemRole): PermissionRow[] 
 
   if (role === 'receptionist') {
     return base.map((p) =>
-      ['agenda', 'pacientes', 'dashboard', 'configuracoes'].includes(p.feature)
+      ['agenda', 'pacientes', 'atendimento', 'dashboard', 'configuracoes'].includes(p.feature)
         ? { ...p, can_view: true, can_create: true, can_edit: true, can_delete: false }
         : p
     );

@@ -97,9 +97,35 @@ export default function Reports() {
   });
 
   useEffect(() => {
-    if (clinicId) {
-      fetchReportData();
+    if (!clinicId) {
+      setIsLoading(false);
+      setFinancialData({
+        totalIncome: 0,
+        totalExpense: 0,
+        netBalance: 0,
+        byPaymentMethod: [],
+        byCategory: [],
+        byExpenseCategory: [],
+        dailyTrend: [],
+      });
+      setAppointmentData({
+        total: 0,
+        completed: 0,
+        cancelled: 0,
+        pending: 0,
+        byStatus: [],
+        byProfessional: [],
+      });
+      setPatientData({ total: 0, active: 0, inactive: 0, newThisMonth: 0 });
+      setBiData({
+        patients: { current: { newCount: 0, byLeadSource: [] }, prevMonth: { newCount: 0 }, prevYear: { newCount: 0 } },
+        appointments: { current: { total: 0, completed: 0, byLeadSource: [] }, prevMonth: { total: 0, completed: 0 }, prevYear: { total: 0, completed: 0 } },
+        sellers: [],
+        individualPerformance: null,
+      });
+      return;
     }
+    fetchReportData();
   }, [clinicId, startDate, endDate, selectedProfessional, selectedSeller]);
 
   const applyBiPeriod = (months: '3' | '6' | '12') => {
@@ -656,6 +682,16 @@ export default function Reports() {
         cnpj: clinic.cnpj || '',
       }]
     : [];
+
+  if (!clinicId) {
+    return (
+      <MainLayout>
+        <div className="rounded-lg border border-dashed p-12 text-center text-muted-foreground">
+          Selecione uma clínica no menu lateral para visualizar os relatórios.
+        </div>
+      </MainLayout>
+    );
+  }
 
   if (isLoading) {
     return (
