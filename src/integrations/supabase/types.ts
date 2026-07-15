@@ -47,8 +47,85 @@ export type Database = {
         }
         Relationships: []
       }
+      audit_events: {
+        Row: {
+          action: string
+          after: Json | null
+          before: Json | null
+          clinic_id: string
+          created_at: string | null
+          entity_id: string
+          entity_type: string
+          id: string
+          reason: string | null
+          user_id: string
+        }
+        Insert: {
+          action: string
+          after?: Json | null
+          before?: Json | null
+          clinic_id: string
+          created_at?: string | null
+          entity_id: string
+          entity_type: string
+          id?: string
+          reason?: string | null
+          user_id: string
+        }
+        Update: {
+          action?: string
+          after?: Json | null
+          before?: Json | null
+          clinic_id?: string
+          created_at?: string | null
+          entity_id?: string
+          entity_type?: string
+          id?: string
+          reason?: string | null
+          user_id?: string
+        }
+        Relationships: []
+      }
+      billing_webhook_events: {
+        Row: {
+          event_id: string
+          event_type: string
+          last_error: string | null
+          payload: Json
+          payment_id: string | null
+          processed_at: string | null
+          processing_attempts: number
+          provider: string
+          received_at: string
+        }
+        Insert: {
+          event_id: string
+          event_type: string
+          last_error?: string | null
+          payload: Json
+          payment_id?: string | null
+          processed_at?: string | null
+          processing_attempts?: number
+          provider?: string
+          received_at?: string
+        }
+        Update: {
+          event_id?: string
+          event_type?: string
+          last_error?: string | null
+          payload?: Json
+          payment_id?: string | null
+          processed_at?: string | null
+          processing_attempts?: number
+          provider?: string
+          received_at?: string
+        }
+        Relationships: []
+      }
       appointments: {
         Row: {
+          booking_fee: number | null
+          booking_fee_payment_method: string | null
           clinic_id: string
           created_at: string
           date: string
@@ -60,12 +137,16 @@ export type Database = {
           payment_status: string
           procedure: string
           professional_id: string
+          referral_name: string | null
+          return_contacted_at: string | null
           seller_id: string | null
           start_time: string
           status: string
           updated_at: string
         }
         Insert: {
+          booking_fee?: number | null
+          booking_fee_payment_method?: string | null
           clinic_id: string
           created_at?: string
           date: string
@@ -77,12 +158,16 @@ export type Database = {
           payment_status?: string
           procedure: string
           professional_id: string
+          referral_name?: string | null
+          return_contacted_at?: string | null
           seller_id?: string | null
           start_time: string
           status?: string
           updated_at?: string
         }
         Update: {
+          booking_fee?: number | null
+          booking_fee_payment_method?: string | null
           clinic_id?: string
           created_at?: string
           date?: string
@@ -94,6 +179,8 @@ export type Database = {
           payment_status?: string
           procedure?: string
           professional_id?: string
+          referral_name?: string | null
+          return_contacted_at?: string | null
           seller_id?: string | null
           start_time?: string
           status?: string
@@ -119,6 +206,228 @@ export type Database = {
             columns: ["professional_id"]
             isOneToOne: false
             referencedRelation: "professionals"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      cash_closings: {
+        Row: {
+          clinic_id: string
+          closed_at: string
+          closed_by: string | null
+          closing_date: string
+          id: string
+        }
+        Insert: {
+          clinic_id: string
+          closed_at?: string
+          closed_by?: string | null
+          closing_date: string
+          id?: string
+        }
+        Update: {
+          clinic_id?: string
+          closed_at?: string
+          closed_by?: string | null
+          closing_date?: string
+          id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "cash_closings_clinic_id_fkey"
+            columns: ["clinic_id"]
+            isOneToOne: false
+            referencedRelation: "clinics"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      clinic_custom_features: {
+        Row: {
+          clinic_id: string
+          created_at: string
+          id: string
+          name: string
+        }
+        Insert: {
+          clinic_id: string
+          created_at?: string
+          id?: string
+          name: string
+        }
+        Update: {
+          clinic_id?: string
+          created_at?: string
+          id?: string
+          name?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "clinic_custom_features_clinic_id_fkey"
+            columns: ["clinic_id"]
+            isOneToOne: false
+            referencedRelation: "clinics"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      clinic_custom_role_permissions: {
+        Row: {
+          can_create: boolean
+          can_delete: boolean
+          can_edit: boolean
+          can_view: boolean
+          clinic_custom_role_id: string
+          created_at: string
+          feature: string
+          id: string
+        }
+        Insert: {
+          can_create?: boolean
+          can_delete?: boolean
+          can_edit?: boolean
+          can_view?: boolean
+          clinic_custom_role_id: string
+          created_at?: string
+          feature: string
+          id?: string
+        }
+        Update: {
+          can_create?: boolean
+          can_delete?: boolean
+          can_edit?: boolean
+          can_view?: boolean
+          clinic_custom_role_id?: string
+          created_at?: string
+          feature?: string
+          id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "clinic_custom_role_permissions_clinic_custom_role_id_fkey"
+            columns: ["clinic_custom_role_id"]
+            isOneToOne: false
+            referencedRelation: "clinic_custom_roles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      clinic_custom_roles: {
+        Row: {
+          clinic_id: string
+          created_at: string
+          id: string
+          name: string
+        }
+        Insert: {
+          clinic_id: string
+          created_at?: string
+          id?: string
+          name: string
+        }
+        Update: {
+          clinic_id?: string
+          created_at?: string
+          id?: string
+          name?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "clinic_custom_roles_clinic_id_fkey"
+            columns: ["clinic_id"]
+            isOneToOne: false
+            referencedRelation: "clinics"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      clinic_documents: {
+        Row: {
+          clinic_id: string
+          content: string | null
+          created_at: string
+          file_url: string | null
+          id: string
+          is_upload: boolean
+          name: string
+          type: string
+          updated_at: string
+        }
+        Insert: {
+          clinic_id: string
+          content?: string | null
+          created_at?: string
+          file_url?: string | null
+          id?: string
+          is_upload?: boolean
+          name: string
+          type: string
+          updated_at?: string
+        }
+        Update: {
+          clinic_id?: string
+          content?: string | null
+          created_at?: string
+          file_url?: string | null
+          id?: string
+          is_upload?: boolean
+          name?: string
+          type?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "clinic_documents_clinic_id_fkey"
+            columns: ["clinic_id"]
+            isOneToOne: false
+            referencedRelation: "clinics"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      clinic_role_permissions: {
+        Row: {
+          can_create: boolean
+          can_delete: boolean
+          can_edit: boolean
+          can_view: boolean
+          clinic_id: string
+          created_at: string
+          feature: string
+          id: string
+          role: string
+          updated_at: string
+        }
+        Insert: {
+          can_create?: boolean
+          can_delete?: boolean
+          can_edit?: boolean
+          can_view?: boolean
+          clinic_id: string
+          created_at?: string
+          feature: string
+          id?: string
+          role: string
+          updated_at?: string
+        }
+        Update: {
+          can_create?: boolean
+          can_delete?: boolean
+          can_edit?: boolean
+          can_view?: boolean
+          clinic_id?: string
+          created_at?: string
+          feature?: string
+          id?: string
+          role?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "clinic_role_permissions_clinic_id_fkey"
+            columns: ["clinic_id"]
+            isOneToOne: false
+            referencedRelation: "clinics"
             referencedColumns: ["id"]
           },
         ]
@@ -159,6 +468,7 @@ export type Database = {
         Row: {
           address: string | null
           address_number: string | null
+          asaas_customer_id: string | null
           city: string | null
           cnpj: string | null
           created_at: string
@@ -180,6 +490,7 @@ export type Database = {
         Insert: {
           address?: string | null
           address_number?: string | null
+          asaas_customer_id?: string | null
           city?: string | null
           cnpj?: string | null
           created_at?: string
@@ -201,6 +512,7 @@ export type Database = {
         Update: {
           address?: string | null
           address_number?: string | null
+          asaas_customer_id?: string | null
           city?: string | null
           cnpj?: string | null
           created_at?: string
@@ -218,6 +530,48 @@ export type Database = {
           unit_name?: string | null
           updated_at?: string
           zip_code?: string | null
+        }
+        Relationships: []
+      }
+      contact_requests: {
+        Row: {
+          contacted_at: string | null
+          contacted_by: string | null
+          created_at: string
+          email: string
+          id: string
+          message: string | null
+          name: string
+          notes: string | null
+          phone: string
+          status: string
+          updated_at: string
+        }
+        Insert: {
+          contacted_at?: string | null
+          contacted_by?: string | null
+          created_at?: string
+          email: string
+          id?: string
+          message?: string | null
+          name: string
+          notes?: string | null
+          phone: string
+          status?: string
+          updated_at?: string
+        }
+        Update: {
+          contacted_at?: string | null
+          contacted_by?: string | null
+          created_at?: string
+          email?: string
+          id?: string
+          message?: string | null
+          name?: string
+          notes?: string | null
+          phone?: string
+          status?: string
+          updated_at?: string
         }
         Relationships: []
       }
@@ -745,42 +1099,66 @@ export type Database = {
           category: string | null
           clinic_id: string
           created_at: string
+          deleted_at: string | null
+          deleted_by: string | null
           description: string | null
           id: string
+          notes: string | null
+          patient_id: string | null
           payment_method: string | null
+          payment_split: Json | null
           reference_id: string | null
           reference_type: string | null
+          refunded_at: string | null
+          refunded_by: string | null
           type: string
           updated_at: string
           user_id: string
+          voucher_discount: number | null
         }
         Insert: {
           amount: number
           category?: string | null
           clinic_id: string
           created_at?: string
+          deleted_at?: string | null
+          deleted_by?: string | null
           description?: string | null
           id?: string
+          notes?: string | null
+          patient_id?: string | null
           payment_method?: string | null
+          payment_split?: Json | null
           reference_id?: string | null
           reference_type?: string | null
+          refunded_at?: string | null
+          refunded_by?: string | null
           type: string
           updated_at?: string
           user_id: string
+          voucher_discount?: number | null
         }
         Update: {
           amount?: number
           category?: string | null
           clinic_id?: string
           created_at?: string
+          deleted_at?: string | null
+          deleted_by?: string | null
           description?: string | null
           id?: string
+          notes?: string | null
+          patient_id?: string | null
           payment_method?: string | null
+          payment_split?: Json | null
           reference_id?: string | null
           reference_type?: string | null
+          refunded_at?: string | null
+          refunded_by?: string | null
           type?: string
           updated_at?: string
           user_id?: string
+          voucher_discount?: number | null
         }
         Relationships: [
           {
@@ -791,6 +1169,42 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      financial_audit: {
+        Row: {
+          action: string
+          after: Json | null
+          before: Json | null
+          clinic_id: string
+          created_at: string | null
+          id: string
+          reason: string | null
+          transaction_id: string
+          user_id: string
+        }
+        Insert: {
+          action: string
+          after?: Json | null
+          before?: Json | null
+          clinic_id: string
+          created_at?: string | null
+          id?: string
+          reason?: string | null
+          transaction_id: string
+          user_id: string
+        }
+        Update: {
+          action?: string
+          after?: Json | null
+          before?: Json | null
+          clinic_id?: string
+          created_at?: string | null
+          id?: string
+          reason?: string | null
+          transaction_id?: string
+          user_id?: string
+        }
+        Relationships: []
       }
       inventory_movements: {
         Row: {
@@ -967,45 +1381,87 @@ export type Database = {
       payment_history: {
         Row: {
           amount: number
+          asaas_payment_id: string | null
+          asaas_status: string | null
+          asaas_subscription_id: string | null
+          bank_slip_url: string | null
+          billing_type: string | null
+          charge_kind: string
           clinic_id: string | null
           confirmed_at: string | null
           confirmed_by: string | null
           created_at: string
+          created_by: string | null
+          description: string | null
+          due_date: string | null
+          external_reference: string | null
           id: string
+          invoice_url: string | null
           notes: string | null
+          paid_at: string | null
           payment_method: string | null
           payment_proof_url: string | null
+          provider_payload: Json | null
           requested_plan_id: string | null
           status: string
           subscription_id: string
+          updated_at: string | null
         }
         Insert: {
           amount: number
+          asaas_payment_id?: string | null
+          asaas_status?: string | null
+          asaas_subscription_id?: string | null
+          bank_slip_url?: string | null
+          billing_type?: string | null
+          charge_kind?: string
           clinic_id?: string | null
           confirmed_at?: string | null
           confirmed_by?: string | null
           created_at?: string
+          created_by?: string | null
+          description?: string | null
+          due_date?: string | null
+          external_reference?: string | null
           id?: string
+          invoice_url?: string | null
           notes?: string | null
+          paid_at?: string | null
           payment_method?: string | null
           payment_proof_url?: string | null
+          provider_payload?: Json | null
           requested_plan_id?: string | null
           status?: string
           subscription_id: string
+          updated_at?: string | null
         }
         Update: {
           amount?: number
+          asaas_payment_id?: string | null
+          asaas_status?: string | null
+          asaas_subscription_id?: string | null
+          bank_slip_url?: string | null
+          billing_type?: string | null
+          charge_kind?: string
           clinic_id?: string | null
           confirmed_at?: string | null
           confirmed_by?: string | null
           created_at?: string
+          created_by?: string | null
+          description?: string | null
+          due_date?: string | null
+          external_reference?: string | null
           id?: string
+          invoice_url?: string | null
           notes?: string | null
+          paid_at?: string | null
           payment_method?: string | null
           payment_proof_url?: string | null
+          provider_payload?: Json | null
           requested_plan_id?: string | null
           status?: string
           subscription_id?: string
+          updated_at?: string | null
         }
         Relationships: [
           {
@@ -1067,42 +1523,57 @@ export type Database = {
         Row: {
           created_at: string
           description: string | null
+          discount_pix_percent: number | null
           features: Json | null
           id: string
           is_active: boolean | null
+          max_clinics: number | null
           max_patients: number | null
           max_users: number | null
           name: string
           price_monthly: number
           price_yearly: number | null
+          promo_active: boolean | null
+          promo_label: string | null
+          promo_price_monthly: number | null
           slug: string
           updated_at: string
         }
         Insert: {
           created_at?: string
           description?: string | null
+          discount_pix_percent?: number | null
           features?: Json | null
           id?: string
           is_active?: boolean | null
+          max_clinics?: number | null
           max_patients?: number | null
           max_users?: number | null
           name: string
           price_monthly?: number
           price_yearly?: number | null
+          promo_active?: boolean | null
+          promo_label?: string | null
+          promo_price_monthly?: number | null
           slug: string
           updated_at?: string
         }
         Update: {
           created_at?: string
           description?: string | null
+          discount_pix_percent?: number | null
           features?: Json | null
           id?: string
           is_active?: boolean | null
+          max_clinics?: number | null
           max_patients?: number | null
           max_users?: number | null
           name?: string
           price_monthly?: number
           price_yearly?: number | null
+          promo_active?: boolean | null
+          promo_label?: string | null
+          promo_price_monthly?: number | null
           slug?: string
           updated_at?: string
         }
@@ -1110,6 +1581,7 @@ export type Database = {
       }
       professionals: {
         Row: {
+          clinic_id: string | null
           created_at: string
           cro: string
           email: string | null
@@ -1123,6 +1595,7 @@ export type Database = {
           user_id: string | null
         }
         Insert: {
+          clinic_id?: string | null
           created_at?: string
           cro: string
           email?: string | null
@@ -1136,6 +1609,7 @@ export type Database = {
           user_id?: string | null
         }
         Update: {
+          clinic_id?: string | null
           created_at?: string
           cro?: string
           email?: string | null
@@ -1148,7 +1622,15 @@ export type Database = {
           updated_at?: string
           user_id?: string | null
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "professionals_clinic_id_fkey"
+            columns: ["clinic_id"]
+            isOneToOne: false
+            referencedRelation: "clinics"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       profiles: {
         Row: {
@@ -1158,6 +1640,7 @@ export type Database = {
           is_active: boolean | null
           name: string
           phone: string | null
+          preferred_clinic_id: string | null
           updated_at: string
           user_id: string
         }
@@ -1168,6 +1651,7 @@ export type Database = {
           is_active?: boolean | null
           name: string
           phone?: string | null
+          preferred_clinic_id?: string | null
           updated_at?: string
           user_id: string
         }
@@ -1178,10 +1662,19 @@ export type Database = {
           is_active?: boolean | null
           name?: string
           phone?: string | null
+          preferred_clinic_id?: string | null
           updated_at?: string
           user_id?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "profiles_preferred_clinic_id_fkey"
+            columns: ["preferred_clinic_id"]
+            isOneToOne: false
+            referencedRelation: "clinics"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       signed_terms: {
         Row: {
@@ -1225,45 +1718,143 @@ export type Database = {
           },
         ]
       }
+      support_tickets: {
+        Row: {
+          admin_replied_at: string | null
+          admin_replied_by: string | null
+          admin_reply: string | null
+          attachments: Json | null
+          clinic_id: string
+          created_at: string
+          id: string
+          message: string
+          priority: string
+          status: string
+          subject: string
+          type: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          admin_replied_at?: string | null
+          admin_replied_by?: string | null
+          admin_reply?: string | null
+          attachments?: Json | null
+          clinic_id: string
+          created_at?: string
+          id?: string
+          message: string
+          priority?: string
+          status?: string
+          subject: string
+          type?: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          admin_replied_at?: string | null
+          admin_replied_by?: string | null
+          admin_reply?: string | null
+          attachments?: Json | null
+          clinic_id?: string
+          created_at?: string
+          id?: string
+          message?: string
+          priority?: string
+          status?: string
+          subject?: string
+          type?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "support_tickets_clinic_id_fkey"
+            columns: ["clinic_id"]
+            isOneToOne: false
+            referencedRelation: "clinics"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       subscriptions: {
         Row: {
+          admin_notes: string | null
+          asaas_last_synced_at: string | null
+          asaas_next_due_date: string | null
+          asaas_subscription_id: string | null
+          billing_mode: string
+          billing_status: string | null
           clinic_id: string
           created_at: string
           current_period_end: string | null
           current_period_start: string | null
           id: string
           last_payment_at: string | null
+          monthly_fee: number | null
+          mp_payment_id: string | null
+          mp_preapproval_id: string | null
           notes: string | null
+          external_reference: string | null
+          payment_method: string | null
+          payment_provider: string | null
           payment_status: string | null
           plan_id: string | null
+          setup_fee: number | null
           status: string
           trial_ends_at: string | null
           updated_at: string
         }
         Insert: {
+          admin_notes?: string | null
+          asaas_last_synced_at?: string | null
+          asaas_next_due_date?: string | null
+          asaas_subscription_id?: string | null
+          billing_mode?: string
+          billing_status?: string | null
           clinic_id: string
           created_at?: string
           current_period_end?: string | null
           current_period_start?: string | null
           id?: string
           last_payment_at?: string | null
+          monthly_fee?: number | null
+          mp_payment_id?: string | null
+          mp_preapproval_id?: string | null
           notes?: string | null
+          external_reference?: string | null
+          payment_method?: string | null
+          payment_provider?: string | null
           payment_status?: string | null
           plan_id?: string | null
+          setup_fee?: number | null
           status?: string
           trial_ends_at?: string | null
           updated_at?: string
         }
         Update: {
+          admin_notes?: string | null
+          asaas_last_synced_at?: string | null
+          asaas_next_due_date?: string | null
+          asaas_subscription_id?: string | null
+          billing_mode?: string
+          billing_status?: string | null
           clinic_id?: string
           created_at?: string
           current_period_end?: string | null
           current_period_start?: string | null
           id?: string
           last_payment_at?: string | null
+          monthly_fee?: number | null
+          mp_payment_id?: string | null
+          mp_preapproval_id?: string | null
           notes?: string | null
+          external_reference?: string | null
+          payment_method?: string | null
+          payment_provider?: string | null
           payment_status?: string | null
           plan_id?: string | null
+          setup_fee?: number | null
           status?: string
           trial_ends_at?: string | null
           updated_at?: string
@@ -1445,6 +2036,89 @@ export type Database = {
           },
         ]
       }
+      user_clinic_custom_roles: {
+        Row: {
+          clinic_custom_role_id: string
+          clinic_id: string
+          created_at: string
+          id: string
+          user_id: string
+        }
+        Insert: {
+          clinic_custom_role_id: string
+          clinic_id: string
+          created_at?: string
+          id?: string
+          user_id: string
+        }
+        Update: {
+          clinic_custom_role_id?: string
+          clinic_id?: string
+          created_at?: string
+          id?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "user_clinic_custom_roles_clinic_custom_role_id_fkey"
+            columns: ["clinic_custom_role_id"]
+            isOneToOne: false
+            referencedRelation: "clinic_custom_roles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "user_clinic_custom_roles_clinic_id_fkey"
+            columns: ["clinic_id"]
+            isOneToOne: false
+            referencedRelation: "clinics"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      user_notifications: {
+        Row: {
+          clinic_id: string | null
+          created_at: string | null
+          id: string
+          is_read: boolean | null
+          message: string | null
+          reference_id: string | null
+          title: string
+          type: string
+          user_id: string
+        }
+        Insert: {
+          clinic_id?: string | null
+          created_at?: string | null
+          id?: string
+          is_read?: boolean | null
+          message?: string | null
+          reference_id?: string | null
+          title: string
+          type?: string
+          user_id: string
+        }
+        Update: {
+          clinic_id?: string | null
+          created_at?: string | null
+          id?: string
+          is_read?: boolean | null
+          message?: string | null
+          reference_id?: string | null
+          title?: string
+          type?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "user_notifications_clinic_id_fkey"
+            columns: ["clinic_id"]
+            isOneToOne: false
+            referencedRelation: "clinics"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       user_roles: {
         Row: {
           id: string
@@ -1465,10 +2139,136 @@ export type Database = {
       }
     }
     Views: {
-      [_ in never]: never
+      vw_clients_status: {
+        Row: {
+          admin_email: string | null
+          admin_name: string | null
+          billing_status: string | null
+          clinic_email: string | null
+          clinic_id: string | null
+          clinic_name: string | null
+          cnpj: string | null
+          current_period_end: string | null
+          last_payment_at: string | null
+          monthly_fee: number | null
+          plan_name: string | null
+          plan_slug: string | null
+          setup_fee: number | null
+          subscription_created_at: string | null
+          subscription_id: string | null
+          subscription_status: string | null
+          total_clinics_of_admin: number | null
+          total_paid: number | null
+        }
+        Relationships: []
+      }
+      vw_owner_clinics: {
+        Row: {
+          address: string | null
+          address_number: string | null
+          asaas_customer_id: string | null
+          city: string | null
+          cnpj: string | null
+          created_at: string | null
+          email: string | null
+          id: string | null
+          is_active: boolean | null
+          is_owner: boolean | null
+          logo_url: string | null
+          name: string | null
+          neighborhood: string | null
+          owner_user_id: string | null
+          phone: string | null
+          razao_social: string | null
+          role: string | null
+          slug: string | null
+          state: string | null
+          unit_name: string | null
+          updated_at: string | null
+          zip_code: string | null
+        }
+        Relationships: []
+      }
     }
     Functions: {
+      asaas_apply_payment_event: {
+        Args: { p_event_id: string }
+        Returns: Json
+      }
+      asaas_mark_event_error: {
+        Args: { p_error: string; p_event_id: string }
+        Returns: undefined
+      }
+      asaas_mark_subscription_cancelled: {
+        Args: { p_subscription_id: string }
+        Returns: undefined
+      }
+      asaas_persist_webhook_event: {
+        Args: { p_event_id: string; p_event_type: string; p_payload: Json }
+        Returns: boolean
+      }
+      asaas_store_billing_binding: {
+        Args: {
+          p_asaas_subscription_id: string
+          p_customer_id: string
+          p_next_due_date?: string
+          p_subscription_id: string
+        }
+        Returns: undefined
+      }
+      get_admin_by_email: {
+        Args: { p_email: string }
+        Returns: {
+          name: string
+          user_id: string
+        }[]
+      }
+      get_clinics_of_same_owner: {
+        Args: { p_user_id?: string }
+        Returns: {
+          address: string | null
+          address_number: string | null
+          asaas_customer_id: string | null
+          city: string | null
+          cnpj: string | null
+          created_at: string
+          email: string
+          id: string
+          is_active: boolean | null
+          logo_url: string | null
+          name: string
+          neighborhood: string | null
+          owner_user_id: string | null
+          phone: string | null
+          razao_social: string | null
+          slug: string | null
+          state: string | null
+          unit_name: string | null
+          updated_at: string
+          zip_code: string | null
+        }[]
+      }
+      get_superadmin_stats: { Args: never; Returns: Json }
       get_user_clinic_id: { Args: { _user_id: string }; Returns: string }
+      get_user_clinics: {
+        Args: { p_user_id?: string }
+        Returns: {
+          clinic_id: string
+          clinic_name: string
+          is_owner: boolean
+          is_preferred: boolean
+          role: string
+        }[]
+      }
+      get_user_current_clinic: {
+        Args: { p_user_id?: string }
+        Returns: {
+          clinic_id: string
+          clinic_name: string
+          is_owner: boolean
+          role: string
+        }[]
+      }
       get_user_subscription_status: {
         Args: { _user_id: string }
         Returns: string
@@ -1482,9 +2282,52 @@ export type Database = {
         Returns: boolean
       }
       is_admin: { Args: { _user_id: string }; Returns: boolean }
+      is_clinic_member: {
+        Args: { _clinic_id: string; _user_id: string }
+        Returns: boolean
+      }
       is_superadmin: { Args: { _user_id: string }; Returns: boolean }
+      is_user_admin: { Args: { p_user_id?: string }; Returns: boolean }
+      notify_clinic_users_on_appointment: {
+        Args: {
+          p_clinic_id: string
+          p_creator_id: string
+          p_message: string
+          p_reference_id: string
+          p_title: string
+        }
+        Returns: undefined
+      }
+      register_payment: {
+        Args: {
+          p_amount: number
+          p_created_by?: string
+          p_description?: string
+          p_next_due_date?: string
+          p_paid_at: string
+          p_payment_method?: string
+          p_subscription_id: string
+        }
+        Returns: string
+      }
+      update_billing_status: {
+        Args: { p_new_status: string; p_subscription_id: string }
+        Returns: undefined
+      }
+      user_belongs_to_clinic: {
+        Args: { p_clinic_id: string }
+        Returns: boolean
+      }
+      user_can_access_clinic: {
+        Args: { p_clinic_id: string; p_user_id: string }
+        Returns: boolean
+      }
       user_has_feature: {
         Args: { _feature: string; _user_id: string }
+        Returns: boolean
+      }
+      user_is_multi_clinic_owner: {
+        Args: { p_user_id: string }
         Returns: boolean
       }
     }

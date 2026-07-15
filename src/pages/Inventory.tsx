@@ -170,6 +170,8 @@ export default function Inventory() {
         category: productCategory || null,
         current_stock: parseInt(productCurrentStock) || 0,
         minimum_stock: parseInt(productMinimumStock) || 0,
+        cost_price: null,
+        sale_price: null,
         unit: productUnit || 'un',
         is_active: true,
       });

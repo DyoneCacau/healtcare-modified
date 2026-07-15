@@ -20,13 +20,21 @@ import { MainLayout } from '@/components/layout/MainLayout';
 import { CommissionRulesList } from '@/components/commissions/CommissionRulesList';
 import { CommissionRuleForm } from '@/components/commissions/CommissionRuleForm';
 import { CommissionReport } from '@/components/commissions/CommissionReport';
-import { CommissionRule } from '@/types/commission';
+import { BeneficiaryType, CommissionCalculation, CommissionRule } from '@/types/commission';
 import { useClinic, useClinics } from '@/hooks/useClinic';
 import { useCommissions, useCommissionRules, generateCommissionSummary } from '@/hooks/useCommissions';
 import { useProfessionals } from '@/hooks/useProfessionals';
 import { toast } from 'sonner';
 import { FeatureButton } from '@/components/subscription/FeatureButton';
 import { Skeleton } from '@/components/ui/skeleton';
+
+function toBeneficiaryType(value: string): BeneficiaryType {
+  return value === 'seller' || value === 'reception' ? value : 'professional';
+}
+
+function toCommissionStatus(value: string): CommissionCalculation['status'] {
+  return value === 'paid' || value === 'cancelled' ? value : 'pending';
+}
 
 export default function Commissions() {
   const { clinicId } = useClinic();
@@ -58,8 +66,8 @@ export default function Commissions() {
 
   // Convert commissions from database to CommissionCalculation format (com lead_source do appointment para relatório)
   const commissionCalculations = useMemo(() => {
-    return commissions.map((c: { id: string; beneficiary_id: string; beneficiary_type: string; beneficiary_name?: string; appointment_id?: string; clinic_id: string; base_value?: number; percentage?: number; amount: number; created_at: string; status: string; _lead_source?: string; _referral_name?: string }) => {
-      const beneficiaryName = c.beneficiary_name || professionalsByName.get(c.beneficiary_id) || 'Profissional';
+    return commissions.map((c): CommissionCalculation => {
+      const beneficiaryName = professionalsByName.get(c.beneficiary_id) || 'Profissional';
       const leadSource = c._lead_source ?? undefined;
       const referralName = c._referral_name ?? undefined;
       return {
@@ -67,7 +75,7 @@ export default function Commissions() {
         appointmentId: c.appointment_id || '',
         professionalId: c.beneficiary_id,
         professionalName: beneficiaryName,
-        beneficiaryType: c.beneficiary_type as 'professional' | 'seller' | 'reception',
+        beneficiaryType: toBeneficiaryType(c.beneficiary_type),
         beneficiaryId: c.beneficiary_id,
         beneficiaryName,
         clinicId: c.clinic_id,
@@ -81,7 +89,7 @@ export default function Commissions() {
         ruleValue: c.percentage || c.amount,
         commissionAmount: c.amount,
         date: c.created_at.split('T')[0],
-        status: c.status as 'pending' | 'paid',
+        status: toCommissionStatus(c.status),
         leadSource,
         referralName,
       };

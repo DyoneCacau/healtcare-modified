@@ -1,6 +1,7 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useEffect } from 'react';
 import { supabase } from '@/integrations/supabase/client';
+import type { Database, Json } from '@/integrations/supabase/types';
 import { useClinic } from './useClinic';
 import { useAuth } from './useAuth';
 import type {
@@ -14,6 +15,33 @@ import type {
 import { DEFAULT_WELCOME_FLOW } from '@/types/atendimento';
 import { toast } from 'sonner';
 
+type ChatFlowUpdate = Database['public']['Tables']['chat_flows']['Update'];
+
+function toJson(value: unknown): Json {
+  if (value === null) return null;
+  if (typeof value === 'string') return value;
+  if (typeof value === 'number') return value;
+  if (typeof value === 'boolean') return value;
+  if (Array.isArray(value)) return value.map(toJson);
+  if (typeof value === 'object') {
+    return Object.fromEntries(
+      Object.entries(value)
+        .filter(([, item]) => item !== undefined)
+        .map(([key, item]) => [key, toJson(item)])
+    );
+  }
+  return String(value);
+}
+
+function isChatFlowDefinition(value: Json): value is Json & ChatFlowDefinition {
+  if (!value || Array.isArray(value) || typeof value !== 'object') return false;
+  return typeof value.version === 'number' && Array.isArray(value.nodes) && Array.isArray(value.edges);
+}
+
+function isChatFlowTrigger(value: string): value is ChatFlow['trigger_type'] {
+  return value === 'incoming' || value === 'keyword' || value === 'manual';
+}
+
 export function useChatChannels() {
   const { clinicId } = useClinic();
 
@@ -23,17 +51,13 @@ export function useChatChannels() {
       if (!clinicId) return [];
       const { data, error } = await supabase
         .from('chat_channels')
-        .select('id, clinic_id, channel_type, display_name, phone_number, waba_id, phone_number_id, status, metadata, created_at, updated_at, access_token')
+        .select('id, clinic_id, channel_type, display_name, phone_number, waba_id, phone_number_id, status, metadata, created_at, updated_at')
         .eq('clinic_id', clinicId)
         .order('created_at', { ascending: false });
 
       if (error) throw error;
 
-      return (data || []).map((row) => ({
-        ...row,
-        access_token: undefined,
-        has_token: !!row.access_token,
-      })) as ChatChannel[];
+      return (data || []) as ChatChannel[];
     },
     enabled: !!clinicId,
   });
@@ -56,27 +80,20 @@ export function useChatChannelMutations() {
     }) => {
       if (!clinicId) throw new Error('Clínica não selecionada');
 
-      const row: Record<string, unknown> = {
-        clinic_id: clinicId,
-        channel_type: 'whatsapp',
-        display_name: payload.display_name,
-        phone_number: payload.phone_number.replace(/\D/g, ''),
-        phone_number_id: payload.phone_number_id,
-        waba_id: payload.waba_id || null,
-        status: payload.phone_number_id ? 'active' : 'pending',
-        updated_at: new Date().toISOString(),
-      };
-
-      if (payload.access_token) row.access_token = payload.access_token;
-
-      if (payload.id) {
-        const { error } = await supabase.from('chat_channels').update(row).eq('id', payload.id);
-        if (error) throw error;
-        return;
-      }
-
-      const { error } = await supabase.from('chat_channels').insert(row);
+      const { data, error } = await supabase.functions.invoke('meta-save-channel', {
+        body: {
+          id: payload.id,
+          clinic_id: clinicId,
+          display_name: payload.display_name,
+          phone_number: payload.phone_number,
+          phone_number_id: payload.phone_number_id,
+          waba_id: payload.waba_id,
+          access_token: payload.access_token,
+        },
+      });
       if (error) throw error;
+      if (data?.error) throw new Error(data.error);
+      return data?.channel as ChatChannel;
     },
     onSuccess: () => {
       invalidate();
@@ -101,7 +118,19 @@ export function useChatFlows() {
         .eq('clinic_id', clinicId)
         .order('created_at', { ascending: false });
       if (error) throw error;
-      return (data || []) as ChatFlow[];
+      return (data || []).map((row): ChatFlow => {
+        if (!isChatFlowDefinition(row.definition)) {
+          throw new Error(`Definição inválida no fluxo ${row.id}`);
+        }
+        if (!isChatFlowTrigger(row.trigger_type)) {
+          throw new Error(`Tipo de gatilho inválido no fluxo ${row.id}`);
+        }
+        return {
+          ...row,
+          definition: row.definition,
+          trigger_type: row.trigger_type,
+        };
+      });
     },
     enabled: !!clinicId,
   });
@@ -120,7 +149,7 @@ export function useChatFlowMutations() {
         description: payload.description || null,
         is_default: payload.is_default ?? false,
         is_active: false,
-        definition: DEFAULT_WELCOME_FLOW,
+        definition: toJson(DEFAULT_WELCOME_FLOW),
       });
       if (error) throw error;
     },
@@ -141,9 +170,14 @@ export function useChatFlowMutations() {
       definition?: ChatFlowDefinition;
     }) => {
       const { id, ...rest } = payload;
+      const update: ChatFlowUpdate = {
+        ...rest,
+        definition: rest.definition ? toJson(rest.definition) : undefined,
+        updated_at: new Date().toISOString(),
+      };
       const { error } = await supabase
         .from('chat_flows')
-        .update({ ...rest, updated_at: new Date().toISOString() })
+        .update(update)
         .eq('id', id);
       if (error) throw error;
     },

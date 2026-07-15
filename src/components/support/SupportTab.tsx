@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
 import { useClinic } from '@/hooks/useClinic';
+import type { Json } from '@/integrations/supabase/types';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -45,7 +46,8 @@ import { cn } from '@/lib/utils';
 
 interface Attachment {
   name: string;
-  url: string;
+  path?: string;
+  url?: string;
   type: string;
   size: number;
 }
@@ -96,6 +98,33 @@ const PRIORITY_COLORS: Record<string, string> = {
 const ALLOWED_TYPES = ['image/jpeg', 'image/jpg', 'image/png', 'image/gif', 'image/webp', 'application/pdf', 'video/mp4', 'video/quicktime'];
 const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB
 const MAX_FILES = 5;
+const SUPPORT_ATTACHMENTS_BUCKET = 'support-attachments';
+
+function getAttachmentPath(att: Attachment): string | null {
+  if (att.path) return att.path.replace(/^\/+/, '');
+  if (!att.url) return null;
+
+  const publicMarker = `/storage/v1/object/public/${SUPPORT_ATTACHMENTS_BUCKET}/`;
+  const signedMarker = `/storage/v1/object/sign/${SUPPORT_ATTACHMENTS_BUCKET}/`;
+  const marker = att.url.includes(publicMarker) ? publicMarker : signedMarker;
+  const markerIndex = att.url.indexOf(marker);
+  if (markerIndex < 0) return null;
+  return decodeURIComponent(att.url.slice(markerIndex + marker.length).split('?')[0]);
+}
+
+function parseAttachments(value: unknown): Attachment[] {
+  if (!Array.isArray(value)) return [];
+  return value.filter((item): item is Attachment => {
+    if (!item || typeof item !== 'object' || Array.isArray(item)) return false;
+    const attachment = item as Record<string, unknown>;
+    return (
+      typeof attachment.name === 'string'
+      && typeof attachment.type === 'string'
+      && typeof attachment.size === 'number'
+      && (typeof attachment.path === 'string' || typeof attachment.url === 'string')
+    );
+  });
+}
 
 function getFileIcon(mimeType: string) {
   if (mimeType.startsWith('image/')) return <Image className="h-4 w-4" />;
@@ -165,7 +194,7 @@ export function SupportTab() {
       if (error) throw error;
       setTickets((data || []).map(t => ({
         ...t,
-        attachments: Array.isArray(t.attachments) ? t.attachments : [],
+        attachments: parseAttachments(t.attachments),
       })));
     } catch (err) {
       console.error('Error loading tickets:', err);
@@ -221,13 +250,9 @@ export function SupportTab() {
           continue;
         }
 
-        const { data: urlData } = supabase.storage
-          .from('support-attachments')
-          .getPublicUrl(path);
-
         uploaded.push({
           name: file.name,
-          url: urlData.publicUrl,
+          path,
           type: file.type,
           size: file.size,
         });
@@ -269,7 +294,7 @@ export function SupportTab() {
         subject: form.subject.trim(),
         message: form.message.trim(),
         priority: form.priority,
-        attachments,
+        attachments: attachments as unknown as Json,
         status: 'open',
       });
 
@@ -307,8 +332,25 @@ export function SupportTab() {
     setIsDetailOpen(true);
   };
 
-  const openAttachment = (att: Attachment) => {
-    window.open(att.url, '_blank', 'noopener,noreferrer');
+  const openAttachment = async (att: Attachment) => {
+    const path = getAttachmentPath(att);
+    if (!path) {
+      toast.error('Anexo legado sem caminho de armazenamento válido.');
+      return;
+    }
+
+    const popup = window.open('about:blank', '_blank');
+    if (popup) popup.opener = null;
+    const { data, error } = await supabase.storage
+      .from(SUPPORT_ATTACHMENTS_BUCKET)
+      .createSignedUrl(path, 60 * 10);
+    if (error || !data?.signedUrl) {
+      popup?.close();
+      toast.error('Não foi possível abrir o anexo.');
+      return;
+    }
+    if (popup) popup.location.href = data.signedUrl;
+    else window.open(data.signedUrl, '_blank', 'noopener,noreferrer');
   };
 
   if (isLoading) {

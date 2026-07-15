@@ -35,9 +35,10 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
-import { Search, CreditCard, MoreHorizontal, CheckCircle, XCircle, Clock, Play, Pause, Trash2, Copy } from "lucide-react";
+import { Search, CreditCard, MoreHorizontal, CheckCircle, XCircle, Clock, Play, Pause, Trash2, Copy, RefreshCw } from "lucide-react";
 import { format, formatDistanceToNow, isPast } from "date-fns";
 import { ptBR } from "date-fns/locale";
+import { asaasBillingService, type BillingMethod, type BillingProvider } from "@/services/asaasBillingService";
 
 interface Plan {
   id: string;
@@ -57,6 +58,8 @@ interface Subscription {
   last_payment_at: string | null;
   notes: string | null;
   created_at: string;
+  billing_provider: BillingProvider;
+  payment_method: BillingMethod | null;
   clinic: {
     name: string;
     email: string;
@@ -71,6 +74,7 @@ export function SubscriptionsManagement() {
   const [searchTerm, setSearchTerm] = useState("");
   const [filterStatus, setFilterStatus] = useState("all");
   const [filterPayment, setFilterPayment] = useState("all");
+  const [filterProvider, setFilterProvider] = useState("all");
   const [selectedSubscription, setSelectedSubscription] = useState<Subscription | null>(null);
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
   const [subscriptionToDelete, setSubscriptionToDelete] = useState<Subscription | null>(null);
@@ -100,11 +104,27 @@ export function SubscriptionsManagement() {
       if (subsResult.error) throw subsResult.error;
       if (plansResult.error) throw plansResult.error;
 
-      setSubscriptions(subsResult.data.map(s => ({
-        ...s,
-        clinic: s.clinics as any,
-        plan: s.plans as any,
-      })));
+      setSubscriptions(subsResult.data.map(s => {
+        const row = s as unknown as typeof s & {
+          billing_mode?: BillingProvider | null;
+          payment_provider?: string | null;
+          asaas_subscription_id?: string | null;
+          payment_method?: BillingMethod | null;
+          clinics?: { name: string; email: string };
+          plans?: Plan;
+        };
+        return {
+          ...s,
+          billing_provider: row.billing_mode === "asaas"
+            || row.payment_provider === "asaas"
+            || Boolean(row.asaas_subscription_id)
+            ? "asaas"
+            : "manual",
+          payment_method: row.payment_method ?? null,
+          clinic: row.clinics,
+          plan: row.plans,
+        } as Subscription;
+      }));
       setPlans(plansResult.data);
     } catch (error) {
       console.error('Error fetching data:', error);
@@ -217,12 +237,45 @@ export function SubscriptionsManagement() {
     }
   }
 
+  async function syncAsaas(subscription: Subscription) {
+    try {
+      await asaasBillingService.listPayments(subscription.id, 1);
+      toast.success("Cobranças do Asaas atualizadas.");
+      fetchData();
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Erro ao sincronizar com o Asaas.");
+    }
+  }
+
+  async function enableAsaas(subscription: Subscription) {
+    if (!window.confirm(`Ativar cobrança Asaas para ${subscription.clinic?.name}?`)) return;
+    try {
+      await asaasBillingService.createCheckout(subscription.id, false);
+      toast.success("Cobrança Asaas ativada.");
+      fetchData();
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Erro ao ativar cobrança Asaas.");
+    }
+  }
+
+  async function cancelAsaas(subscription: Subscription) {
+    if (!window.confirm(`Cancelar a recorrência Asaas de ${subscription.clinic?.name}?`)) return;
+    try {
+      await asaasBillingService.cancelSubscription(subscription.id);
+      toast.success("Recorrência Asaas cancelada.");
+      fetchData();
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Erro ao cancelar recorrência.");
+    }
+  }
+
   const filteredSubscriptions = subscriptions.filter(sub => {
     const matchesSearch = sub.clinic?.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
       sub.clinic?.email?.toLowerCase().includes(searchTerm.toLowerCase());
     const matchesStatus = filterStatus === 'all' || sub.status === filterStatus;
     const matchesPayment = filterPayment === 'all' || sub.payment_status === filterPayment;
-    return matchesSearch && matchesStatus && matchesPayment;
+    const matchesProvider = filterProvider === 'all' || sub.billing_provider === filterProvider;
+    return matchesSearch && matchesStatus && matchesPayment && matchesProvider;
   });
 
   const getStatusBadge = (status: string) => {
@@ -305,6 +358,14 @@ export function SubscriptionsManagement() {
               <SelectItem value="overdue">Atrasado</SelectItem>
             </SelectContent>
           </Select>
+          <Select value={filterProvider} onValueChange={setFilterProvider}>
+            <SelectTrigger className="w-[180px]"><SelectValue placeholder="Origem" /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">Todas as origens</SelectItem>
+              <SelectItem value="manual">Manual</SelectItem>
+              <SelectItem value="asaas">Asaas</SelectItem>
+            </SelectContent>
+          </Select>
         </div>
 
         <div className="rounded-md border">
@@ -313,6 +374,7 @@ export function SubscriptionsManagement() {
               <TableRow>
                 <TableHead>Clínica</TableHead>
                 <TableHead>Plano</TableHead>
+                <TableHead>Origem</TableHead>
                 <TableHead>Status</TableHead>
                 <TableHead>Pagamento</TableHead>
                 <TableHead>Período</TableHead>
@@ -322,7 +384,7 @@ export function SubscriptionsManagement() {
             <TableBody>
               {filteredSubscriptions.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={6} className="text-center text-muted-foreground py-8">
+                  <TableCell colSpan={7} className="text-center text-muted-foreground py-8">
                     Nenhuma assinatura encontrada
                   </TableCell>
                 </TableRow>
@@ -336,6 +398,12 @@ export function SubscriptionsManagement() {
                       </div>
                     </TableCell>
                     <TableCell>{sub.plan?.name || '-'}</TableCell>
+                    <TableCell>
+                      <Badge variant={sub.billing_provider === "asaas" ? "default" : "outline"}>
+                        {sub.billing_provider === "asaas" ? "Asaas" : "Manual"}
+                      </Badge>
+                      {sub.payment_method && <p className="text-xs text-muted-foreground mt-1">{sub.payment_method}</p>}
+                    </TableCell>
                     <TableCell>
                       <div className="space-y-1">
                         {getStatusBadge(sub.status)}
@@ -373,19 +441,37 @@ export function SubscriptionsManagement() {
                           <DropdownMenuItem onClick={() => openEditDialog(sub)}>
                             Editar
                           </DropdownMenuItem>
-                          {sub.payment_status !== 'paid' && (
+                          {sub.billing_provider === "asaas" && (
+                            <DropdownMenuItem onClick={() => syncAsaas(sub)}>
+                              <RefreshCw className="h-4 w-4 mr-2" />
+                              Atualizar cobranças
+                            </DropdownMenuItem>
+                          )}
+                          {sub.billing_provider === "asaas" && sub.status !== "cancelled" && (
+                            <DropdownMenuItem className="text-destructive" onClick={() => cancelAsaas(sub)}>
+                              <XCircle className="h-4 w-4 mr-2" />
+                              Cancelar recorrência
+                            </DropdownMenuItem>
+                          )}
+                          {sub.billing_provider === "manual" && (
+                            <DropdownMenuItem onClick={() => enableAsaas(sub)}>
+                              <CreditCard className="h-4 w-4 mr-2" />
+                              Ativar cobrança Asaas
+                            </DropdownMenuItem>
+                          )}
+                          {sub.billing_provider === "manual" && sub.payment_status !== 'paid' && (
                             <DropdownMenuItem onClick={() => markPaymentPaid(sub)}>
                               <CheckCircle className="h-4 w-4 mr-2" />
                               Confirmar Pagamento
                             </DropdownMenuItem>
                           )}
-                          {sub.status !== 'active' && (
+                          {sub.billing_provider === "manual" && sub.status !== 'active' && (
                             <DropdownMenuItem onClick={() => activateSubscription(sub)}>
                               <Play className="h-4 w-4 mr-2" />
                               Ativar
                             </DropdownMenuItem>
                           )}
-                          {sub.status === 'active' && (
+                          {sub.billing_provider === "manual" && sub.status === 'active' && (
                             <DropdownMenuItem onClick={() => suspendSubscription(sub)}>
                               <Pause className="h-4 w-4 mr-2" />
                               Suspender
@@ -576,8 +662,8 @@ END $$;`;
                 setIsDeleteDialogOpen(false);
                 setSubscriptionToDelete(null);
                 fetchData();
-              } catch (e: any) {
-                const msg = e?.message || '';
+              } catch (e: unknown) {
+                const msg = e instanceof Error ? e.message : '';
                 if (msg.includes('Edge Function') || msg.includes('Failed to send')) {
                   toast.error('Função de exclusão não está publicada no Supabase. Publique com: supabase functions deploy delete-clinic-and-user');
                 } else {

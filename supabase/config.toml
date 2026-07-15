@@ -1,1 +1,22 @@
 project_id = "jahjwuydesfytlmjwucx"
+
+[functions.asaas-webhook]
+verify_jwt = false
+
+[functions.asaas-reconcile]
+verify_jwt = false
+
+[functions.asaas-create-checkout]
+verify_jwt = true
+
+[functions.asaas-list-payments]
+verify_jwt = true
+
+[functions.asaas-cancel-subscription]
+verify_jwt = true
+
+[functions.meta-save-channel]
+verify_jwt = true
+
+[functions.create-complete-client]
+verify_jwt = true

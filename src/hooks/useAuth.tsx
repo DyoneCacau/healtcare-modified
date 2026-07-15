@@ -37,6 +37,16 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 // source of truth, enforced by RLS on the server.
 const SUPERADMIN_EMAILS: string[] = [];
 
+const logAuthError = (operation: string, error: unknown) => {
+  const safeError = error && typeof error === 'object'
+    ? {
+        name: 'name' in error ? String(error.name) : 'Error',
+        code: 'code' in error ? String(error.code) : undefined,
+      }
+    : { name: 'Error' };
+  console.error(`[useAuth] ${operation} falhou.`, safeError);
+};
+
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [session, setSession] = useState<Session | null>(null);
@@ -44,28 +54,34 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [roles, setRoles] = useState<AppRole[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
-  const fetchProfile = async (userId: string, email?: string | null) => {
+  const fetchProfile = async (userId: string) => {
     try {
-      const { data: profileData } = await supabase
+      const { data: profileData, error: profileError } = await supabase
         .from('profiles')
         .select('*')
         .eq('user_id', userId)
         .maybeSingle();
 
+      if (profileError) throw profileError;
       if (profileData) {
         setProfile(profileData as Profile);
+      } else {
+        setProfile(null);
       }
 
-      const { data: rolesData } = await supabase
+      const { data: rolesData, error: rolesError } = await supabase
         .from('user_roles')
         .select('role')
         .eq('user_id', userId);
 
+      if (rolesError) throw rolesError;
       // SECURITY: Role determined exclusively by database — no client-side bypass
       const rolesFromDb = rolesData ? rolesData.map(r => r.role as AppRole) : [];
       setRoles(rolesFromDb);
     } catch (error) {
-      console.error('Error fetching profile:', error);
+      setProfile(null);
+      setRoles([]);
+      logAuthError('Busca de perfil e permissões', error);
     }
   };
 
@@ -74,7 +90,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const refreshProfile = async () => {
     if (user) {
-      await fetchProfile(user.id, user.email);
+      await fetchProfile(user.id);
     }
   };
 
@@ -85,7 +101,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setUser(session?.user ?? null);
 
         if (session?.user) {
-          setTimeout(() => fetchProfile(session.user.id, session.user.email), 0);
+          setTimeout(() => fetchProfile(session.user.id), 0);
         } else {
           setProfile(null);
           setRoles([]);
@@ -94,14 +110,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
     );
 
-    supabase.auth.getSession().then(({ data: { session } }) => {
+    supabase.auth.getSession().then(({ data: { session }, error }) => {
+      if (error) throw error;
       setSession(session);
       setUser(session?.user ?? null);
       if (session?.user) {
-        fetchProfile(session.user.id, session.user.email);
+        void fetchProfile(session.user.id);
       }
       setIsLoading(false);
-    }).catch(() => {
+    }).catch((error) => {
+      logAuthError('Restauração da sessão', error);
       setIsLoading(false);
     });
 
@@ -131,7 +149,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   const signOut = async () => {
-    await supabase.auth.signOut();
+    const { error } = await supabase.auth.signOut();
+    if (error) {
+      logAuthError('Saída da sessão', error);
+      throw error;
+    }
     setProfile(null);
     setRoles([]);
   };

@@ -11,34 +11,36 @@ import { ContactAdminScreen } from "@/components/subscription/ContactAdminScreen
 import { RequireFeature } from "@/components/subscription/RequireFeature";
 import { OnboardingScreen } from "@/components/onboarding/OnboardingScreen";
 import { useOnboarding } from "@/hooks/useOnboarding";
-import Index from "./pages/Index";
-import Login from "./pages/Login";
-import ForgotPassword from "./pages/ForgotPassword";
-import ResetPassword from "./pages/ResetPassword";
-import Patients from "./pages/Patients";
-import Agenda from "./pages/Agenda";
-import Financial from "./pages/Financial";
-import Terms from "./pages/Terms";
-import Reports from "./pages/Reports";
-import Commissions from "./pages/Commissions";
-import Inventory from "./pages/Inventory";
-import Professionals from "./pages/Professionals";
-import TimeClock from "./pages/TimeClock";
-import Administration from "./pages/Administration";
-import SuperAdmin from "./pages/SuperAdmin";
-import Settings from "./pages/Settings";
+const Index = React.lazy(() => import("./pages/Index"));
+const Login = React.lazy(() => import("./pages/Login"));
+const ForgotPassword = React.lazy(() => import("./pages/ForgotPassword"));
+const ResetPassword = React.lazy(() => import("./pages/ResetPassword"));
+const Patients = React.lazy(() => import("./pages/Patients"));
+const Agenda = React.lazy(() => import("./pages/Agenda"));
+const Financial = React.lazy(() => import("./pages/Financial"));
+const Terms = React.lazy(() => import("./pages/Terms"));
+const Reports = React.lazy(() => import("./pages/Reports"));
+const Commissions = React.lazy(() => import("./pages/Commissions"));
+const Inventory = React.lazy(() => import("./pages/Inventory"));
+const Professionals = React.lazy(() => import("./pages/Professionals"));
+const TimeClock = React.lazy(() => import("./pages/TimeClock"));
+const Administration = React.lazy(() => import("./pages/Administration"));
+const SuperAdmin = React.lazy(() => import("./pages/SuperAdmin"));
+const Settings = React.lazy(() => import("./pages/Settings"));
 // TODO(go-live): reativar módulo Atendimento omnichannel (Meta WhatsApp)
 // import Atendimento from "./pages/Atendimento";
-import Privacy from "./pages/Privacy";
-import SelectClinic from "./pages/SelectClinic";
-import NotFound from "./pages/NotFound";
+const Privacy = React.lazy(() => import("./pages/Privacy"));
+const SelectClinic = React.lazy(() => import("./pages/SelectClinic"));
+const NotFound = React.lazy(() => import("./pages/NotFound"));
+const Billing = React.lazy(() => import("./pages/Billing"));
 
 const queryClient = new QueryClient();
 
 function LoadingScreen() {
   return (
-    <div className="flex min-h-screen items-center justify-center">
-      <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary" />
+    <div className="flex min-h-screen items-center justify-center" role="status" aria-live="polite">
+      <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary" aria-hidden="true" />
+      <span className="sr-only">Carregando...</span>
     </div>
   );
 }
@@ -133,7 +135,8 @@ function AuthenticatedAppLayout() {
 
 function AppRoutes() {
   return (
-    <Routes>
+    <React.Suspense fallback={<LoadingScreen />}>
+      <Routes>
       <Route path="/login" element={<Login />} />
       <Route path="/privacidade" element={<Privacy />} />
       <Route path="/forgot-password" element={<ForgotPassword />} />
@@ -243,12 +246,20 @@ function AppRoutes() {
           }
         />
 
-        <Route path="/billing" element={<Navigate to="/configuracoes" replace />} />
-
         <Route path="/selecionar-clinica" element={<SelectClinic />} />
 
         <Route path="/configuracoes" element={<Settings />} />
       </Route>
+
+      {/* Cobrança permanece acessível mesmo quando a assinatura está bloqueada. */}
+      <Route
+        path="/billing"
+        element={
+          <ProtectedRoute>
+            <Billing />
+          </ProtectedRoute>
+        }
+      />
 
       {/* SuperAdmin — fora dos gates de assinatura/onboarding */}
       <Route
@@ -263,7 +274,8 @@ function AppRoutes() {
       <Route path="/minhas-clinicas" element={<Navigate to="/administracao?tab=clinics" replace />} />
 
       <Route path="*" element={<NotFound />} />
-    </Routes>
+      </Routes>
+    </React.Suspense>
   );
 }
 

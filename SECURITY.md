@@ -14,6 +14,11 @@ Acesse: **Supabase Dashboard → Edge Functions → Manage Secrets**
 | `CRON_SECRET` | Protege o endpoint de cron | Gere uma senha aleatória forte |
 | `APP_URL` | URL da sua aplicação | Ex: `https://seuapp.com.br` |
 | `SUPABASE_SERVICE_ROLE_KEY` | Chave service role | Supabase Dashboard → Settings → API |
+| `ASAAS_API_KEY` | Chave privada do gateway | Gere no ambiente Sandbox/Produção correspondente |
+| `ASAAS_API_BASE_URL` | URL da API Asaas | Sandbox: `https://api-sandbox.asaas.com/v3` |
+| `ASAAS_WEBHOOK_TOKEN` | Autentica webhooks Asaas | Token aleatório de 32–255 caracteres, diferente da API key |
+| `ASAAS_ENV` | Impede mistura de ambientes | `sandbox` durante toda a homologação |
+| `META_APP_SECRET` | Valida HMAC dos webhooks Meta | Segredo do aplicativo no Meta Developers |
 
 ---
 
@@ -68,6 +73,16 @@ VITE_SUPPORT_WHATSAPP=5511999999999
 - [ ] Email de superadmin não óbvio (evite admin@, root@)
 - [ ] Supabase Auth → Email confirmação habilitado
 - [ ] Supabase Auth → Rate limiting habilitado (padrão já vem ativo)
+- [ ] Signup público desabilitado no Supabase Auth
+- [ ] `supabase/PRODUCAO_01_SECURITY_HARDENING.sql` revisado e executado
+- [ ] Buckets de documentos privados e URLs assinadas validadas
+- [ ] RLS testada com usuários de duas clínicas diferentes
+- [ ] Chaves Asaas somente nos Secrets; nenhuma chave no frontend ou histórico git
+- [ ] Webhooks Asaas e Meta rejeitam tokens/assinaturas inválidos
+- [ ] CSP e demais headers validados no domínio final
+
+Consulte também `docs/ASAAS_SANDBOX_E_PRODUCAO.md`. Se uma chave for exposta,
+revogue-a imediatamente; removê-la do arquivo não invalida a credencial.
 
 ---
 

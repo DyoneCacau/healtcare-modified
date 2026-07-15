@@ -103,3 +103,21 @@ npm run build
 - [x] Onboarding reativado
 - [x] Rota `/selecionar-clinica`
 - [x] `check-subscriptions` sem lógica de trial
+
+---
+
+## Asaas e hardening de produção
+
+Não use a chave de produção antes de concluir o Sandbox:
+
+- [ ] Revogar qualquer chave Asaas anteriormente exposta
+- [ ] Confirmar projeto Supabase e criar backup
+- [ ] Revisar e executar manualmente `supabase/PRODUCAO_01_SECURITY_HARDENING.sql`
+- [ ] Revisar e executar manualmente `supabase/PRODUCAO_02_ASAAS_BILLING.sql`
+- [ ] Configurar secrets Sandbox conforme `docs/ASAAS_SANDBOX_E_PRODUCAO.md`
+- [ ] Fazer deploy das funções `asaas-*`
+- [ ] Cadastrar webhook Sandbox com token próprio
+- [ ] Concluir `docs/ASAAS_MATRIZ_HOMOLOGACAO.md`
+- [ ] Solicitar ao Asaas habilitação de cartão/tokenização para produção
+- [ ] Gerar chave e token de webhook novos para produção
+- [ ] Testar cobrança real controlada antes da liberação gradual

@@ -42,6 +42,16 @@ interface NotificationBellProps {
   collapsed?: boolean;
 }
 
+const logNotificationError = (operation: string, error: unknown) => {
+  const safeError = error && typeof error === "object"
+    ? {
+        name: "name" in error ? String(error.name) : "Error",
+        code: "code" in error ? String(error.code) : undefined,
+      }
+    : { name: "Error" };
+  console.error(`[NotificationBell] ${operation} falhou.`, safeError);
+};
+
 export function NotificationBell({ collapsed }: NotificationBellProps) {
   const { user, isSuperAdmin, isAdmin } = useAuth();
   const navigate = useNavigate();
@@ -67,22 +77,30 @@ export function NotificationBell({ collapsed }: NotificationBellProps) {
 
   const fetchNotifications = useCallback(async () => {
     if (!user?.id) return;
-    const { data } = await supabase
+    const { data, error } = await supabase
       .from("user_notifications")
       .select("id, type, title, message, reference_id, clinic_id, is_read, created_at")
       .eq("user_id", user.id)
       .order("created_at", { ascending: false })
       .limit(30);
+    if (error) {
+      logNotificationError("Busca de notificações", error);
+      return;
+    }
     setNotifications((data as UserNotification[]) || []);
   }, [user?.id]);
 
   const fetchAdminNotifications = useCallback(async () => {
     if (!isSuperAdmin) return [];
-    const { data } = await supabase
+    const { data, error } = await supabase
       .from("admin_notifications")
       .select("id, title, message, created_at, is_read, type")
       .order("created_at", { ascending: false })
       .limit(5);
+    if (error) {
+      logNotificationError("Busca de notificações administrativas", error);
+      return [];
+    }
     const parsed = (data || []) as AdminNotification[];
     setAdminNotifications(parsed);
     return parsed;
@@ -90,19 +108,23 @@ export function NotificationBell({ collapsed }: NotificationBellProps) {
 
   const fetchPendingContacts = useCallback(async () => {
     if (!isSuperAdmin) return 0;
-    const { count } = await supabase
+    const { count, error } = await supabase
       .from("contact_requests")
       .select("*", { count: "exact", head: true })
       .eq("status", "pending");
+    if (error) {
+      logNotificationError("Contagem de contatos pendentes", error);
+      return 0;
+    }
     setPendingContacts(count ?? 0);
     return count ?? 0;
   }, [isSuperAdmin]);
 
   useEffect(() => {
-    fetchNotifications();
+    void fetchNotifications();
     if (isSuperAdmin) {
-      fetchAdminNotifications();
-      fetchPendingContacts();
+      void fetchAdminNotifications();
+      void fetchPendingContacts();
     }
   }, [fetchNotifications, fetchAdminNotifications, fetchPendingContacts, isSuperAdmin]);
 
@@ -112,7 +134,9 @@ export function NotificationBell({ collapsed }: NotificationBellProps) {
       .channel("notification-bell-contact-requests")
       .on("postgres_changes", { event: "*", schema: "public", table: "contact_requests" }, fetchPendingContacts)
       .subscribe();
-    return () => supabase.removeChannel(channel);
+    return () => {
+      void supabase.removeChannel(channel);
+    };
   }, [isSuperAdmin, fetchPendingContacts]);
 
   useEffect(() => {
@@ -121,7 +145,9 @@ export function NotificationBell({ collapsed }: NotificationBellProps) {
       .channel("user-notifications-bell")
       .on("postgres_changes", { event: "INSERT", schema: "public", table: "user_notifications", filter: `user_id=eq.${user.id}` }, fetchNotifications)
       .subscribe();
-    return () => supabase.removeChannel(channel);
+    return () => {
+      void supabase.removeChannel(channel);
+    };
   }, [user?.id, fetchNotifications]);
 
   const unreadUserCount = useMemo(() => notifications.filter((n) => !n.is_read).length, [notifications]);
@@ -137,20 +163,28 @@ export function NotificationBell({ collapsed }: NotificationBellProps) {
   const markAllUserAsRead = async () => {
     if (!user?.id || unreadUserCount === 0) return;
     const unreadIds = notifications.filter((n) => !n.is_read).map((n) => n.id);
-    await supabase.from("user_notifications").update({ is_read: true }).in("id", unreadIds);
+    const { error } = await supabase.from("user_notifications").update({ is_read: true }).in("id", unreadIds);
+    if (error) {
+      logNotificationError("Marcação de notificações como lidas", error);
+      return;
+    }
     setNotifications((prev) => prev.map((n) => (unreadIds.includes(n.id) ? { ...n, is_read: true } : n)));
   };
 
   const handleOpenChange = async (isOpen: boolean) => {
     setOpen(isOpen);
     if (isOpen) {
-      fetchNotifications();
+      void fetchNotifications();
       if (isSuperAdmin) {
         const current = await fetchAdminNotifications();
         await fetchPendingContacts();
         const unreadIds = current.filter((n) => !n.is_read).map((n) => n.id);
         if (unreadIds.length > 0) {
-          await supabase.from("admin_notifications").update({ is_read: true }).in("id", unreadIds);
+          const { error } = await supabase.from("admin_notifications").update({ is_read: true }).in("id", unreadIds);
+          if (error) {
+            logNotificationError("Marcação de notificações administrativas", error);
+            return;
+          }
           await fetchAdminNotifications();
         }
       }
@@ -171,8 +205,9 @@ export function NotificationBell({ collapsed }: NotificationBellProps) {
           variant="ghost"
           size="icon"
           className="relative h-9 w-9 text-sidebar-muted hover:bg-sidebar-accent hover:text-sidebar-foreground"
+          aria-label={badgeCount > 0 ? `Abrir notificações (${badgeCount} pendentes)` : "Abrir notificações"}
         >
-          <Bell className="h-4 w-4" />
+          <Bell className="h-4 w-4" aria-hidden="true" />
           {badgeCount > 0 && (
             <Badge className="absolute -right-1 -top-1 h-4 min-w-4 rounded-full p-0 text-[9px] bg-destructive text-destructive-foreground flex items-center justify-center">
               {badgeCount > 99 ? "99+" : badgeCount}

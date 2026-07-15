@@ -3,6 +3,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from './useAuth';
 import { useSelectedClinicId } from './useSelectedClinicId';
 import { parsePlanFeatures } from '@/lib/planFeatures';
+import type { BillingMethod, BillingProvider } from '@/services/asaasBillingService';
 
 interface Plan {
   id: string;
@@ -17,6 +18,16 @@ interface Subscription {
   status: string;
   trial_ends_at: string | null;
   current_period_end: string | null;
+  billing_provider: BillingProvider;
+  billing_status: string | null;
+  payment_method: BillingMethod | null;
+  monthly_fee: number | null;
+  next_due_date: string | null;
+  grace_period_ends_at: string | null;
+  hosted_payment_url: string | null;
+  can_pay: boolean;
+  can_regularize: boolean;
+  can_cancel: boolean;
   plan: Plan | null;
 }
 
@@ -105,26 +116,31 @@ export function SubscriptionProvider({ children }: { children: ReactNode }) {
 
     try {
       let clinicId: string | null = null;
+      let isClinicOwner = false;
 
       if (selectedClinicId) {
-        const { data: cu } = await supabase
+        const { data: cu, error: clinicAccessError } = await supabase
           .from('clinic_users')
-          .select('clinic_id')
+          .select('clinic_id, is_owner')
           .eq('user_id', user.id)
           .eq('clinic_id', selectedClinicId)
           .maybeSingle();
+        if (clinicAccessError) throw clinicAccessError;
         clinicId = cu?.clinic_id ?? null;
+        isClinicOwner = cu?.is_owner === true;
       }
 
       if (!clinicId) {
-        const { data: clinicUser } = await supabase
+        const { data: clinicUser, error: clinicUserError } = await supabase
           .from('clinic_users')
-          .select('clinic_id')
+          .select('clinic_id, is_owner')
           .eq('user_id', user.id)
           .order('is_owner', { ascending: false })
           .limit(1)
           .maybeSingle();
+        if (clinicUserError) throw clinicUserError;
         clinicId = clinicUser?.clinic_id ?? null;
+        isClinicOwner = clinicUser?.is_owner === true;
       }
 
       if (!clinicId) {
@@ -143,6 +159,12 @@ export function SubscriptionProvider({ children }: { children: ReactNode }) {
           status,
           trial_ends_at,
           current_period_end,
+          billing_status,
+          payment_status,
+          payment_provider,
+          payment_method,
+          monthly_fee,
+          asaas_next_due_date,
           plans (
             id,
             name,
@@ -154,16 +176,28 @@ export function SubscriptionProvider({ children }: { children: ReactNode }) {
         .maybeSingle();
 
       if (subError) {
-        console.error('[useSubscription] Erro ao buscar assinatura:', subError.message, 'code:', subError.code);
+        throw subError;
       }
 
       if (subData) {
         const plan = subData.plans as unknown as Plan | null;
+        const provider: BillingProvider = subData.payment_provider === 'asaas' ? 'asaas' : 'manual';
+        const billingStatus = subData.billing_status ?? subData.payment_status ?? null;
         setSubscription({
           id: subData.id,
           status: subData.status,
           trial_ends_at: subData.trial_ends_at,
           current_period_end: subData.current_period_end ?? null,
+          billing_provider: provider,
+          billing_status: billingStatus,
+          payment_method: subData.payment_method as BillingMethod | null,
+          monthly_fee: subData.monthly_fee ?? null,
+          next_due_date: subData.asaas_next_due_date ?? subData.current_period_end ?? null,
+          grace_period_ends_at: null,
+          hosted_payment_url: null,
+          can_pay: provider === 'asaas' && billingStatus !== 'paid',
+          can_regularize: provider === 'asaas' && billingStatus === 'overdue',
+          can_cancel: provider === 'asaas' && isClinicOwner && subData.status !== 'cancelled',
           plan: plan ? {
             ...plan,
             features: parsePlanFeatures(plan.features),
@@ -214,13 +248,25 @@ export function SubscriptionProvider({ children }: { children: ReactNode }) {
   // Clínica sem assinatura: usuário vinculado a clínica mas sem registro em subscriptions
   const needsActivation = !isSuperAdmin && hasClinic && subscription === null;
 
-  // Bloqueado: assinatura suspensa, bloqueada ou cancelada
+  // Inadimplência tem tolerância de 7 dias antes do bloqueio.
+  const dueDate = subscription?.next_due_date ?? subscription?.current_period_end;
+  const fallbackGraceEnd = dueDate
+    ? new Date(new Date(dueDate).getTime() + 7 * 24 * 60 * 60 * 1000)
+    : null;
+  const graceEnd = subscription?.grace_period_ends_at
+    ? new Date(subscription.grace_period_ends_at)
+    : fallbackGraceEnd;
+  const isWithinGracePeriod = Boolean(
+    graceEnd && !Number.isNaN(graceEnd.getTime()) && Date.now() <= graceEnd.getTime(),
+  );
+
+  // Cancelamento/bloqueio explícito é imediato; suspensão por cobrança respeita a tolerância.
   const isBlocked = 
     !isSuperAdmin && 
     subscription !== null && 
-    (subscription.status === 'suspended' || 
-     subscription.status === 'blocked' ||
-     subscription.status === 'cancelled');
+    (subscription.status === 'blocked' ||
+     subscription.status === 'cancelled' ||
+     (subscription.status === 'suspended' && !isWithinGracePeriod));
 
   const expandFeatures = (features: string[]) => {
     const expanded = new Set<string>(features);

@@ -1,14 +1,15 @@
-import { AlertTriangle, LogOut, Mail, Phone, RefreshCw } from 'lucide-react';
+import { AlertTriangle, CreditCard, LogOut, Mail, Phone, RefreshCw } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useAuth } from '@/hooks/useAuth';
 import { useSubscription } from '@/hooks/useSubscription';
+import { Link } from 'react-router-dom';
 
 const supportEmail = import.meta.env.VITE_SUPPORT_EMAIL || 'suporte@octupuzz.com.br';
 const supportWhatsApp = (import.meta.env.VITE_SUPPORT_WHATSAPP || '5511999999999').replace(/\D/g, '');
 
 /**
  * Tela exibida quando a assinatura está suspensa, bloqueada ou cancelada.
- * Modelo vendas diretas: contato com o administrador, sem checkout automático.
+ * A cobrança automática usa somente links hospedados pelo Asaas.
  */
 export function SubscriptionBlockedScreen() {
   const { signOut } = useAuth();
@@ -36,8 +37,8 @@ export function SubscriptionBlockedScreen() {
             <div>
               <h1 className="text-lg font-semibold text-destructive">Acesso suspenso</h1>
               <p className="text-sm text-muted-foreground mt-1">
-                Sua assinatura está suspensa, bloqueada ou cancelada. Entre em contato com nossa
-                equipe comercial para regularizar sua situação.
+                O acesso é bloqueado somente após 7 dias de tolerância do vencimento. Regularize
+                a cobrança online ou fale com nossa equipe.
               </p>
             </div>
           </div>
@@ -51,6 +52,12 @@ export function SubscriptionBlockedScreen() {
             </ul>
 
             <div className="flex flex-col sm:flex-row gap-2 pt-2">
+              <Button className="flex-1" asChild>
+                <Link to="/billing">
+                  <CreditCard className="mr-2 h-4 w-4" />
+                  Regularizar agora
+                </Link>
+              </Button>
               <Button variant="outline" className="flex-1" asChild>
                 <a href={`mailto:${supportEmail}`}>
                   <Mail className="mr-2 h-4 w-4" />

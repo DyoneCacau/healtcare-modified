@@ -3,7 +3,7 @@
 // Arquivo: src/components/superadmin/CreateCompleteClient.tsx
 // ============================================================================
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -15,6 +15,10 @@ import { Separator } from "@/components/ui/separator";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { Plus, Trash2, Building2 } from "lucide-react";
+import {
+  asaasBillingService,
+  type BillingProvider,
+} from "@/services/asaasBillingService";
 
 // Lista completa de módulos disponíveis
 const AVAILABLE_MODULES = [
@@ -61,12 +65,38 @@ interface CreateClientData {
   monthlyFee: number;
   setupFee: number;
   adminNotes: string;
+  billingProvider: BillingProvider;
+}
+
+interface PlanOption {
+  id: string;
+  name: string;
+}
+
+interface CreateCompleteClientResult {
+  user_id: string;
+  clinics: Array<{
+    clinic_id: string;
+    subscription_id: string;
+  }>;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null;
+}
+
+async function getFunctionErrorMessage(error: unknown): Promise<string> {
+  if (isRecord(error) && error.context instanceof Response) {
+    const payload: unknown = await error.context.clone().json().catch(() => null);
+    if (isRecord(payload) && typeof payload.error === "string") return payload.error;
+  }
+  return "Não foi possível criar o cliente";
 }
 
 export function CreateCompleteClient() {
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
-  const [plans, setPlans] = useState<any[]>([]);
+  const [plans, setPlans] = useState<PlanOption[]>([]);
   
   const [formData, setFormData] = useState<CreateClientData>({
     adminName: "",
@@ -90,12 +120,13 @@ export function CreateCompleteClient() {
     modules: ['dashboard'], // Dashboard sempre incluído
     monthlyFee: 0,
     setupFee: 0,
-    adminNotes: ""
+    adminNotes: "",
+    billingProvider: "manual",
   });
 
   // Carregar planos disponíveis
-  useState(() => {
-    loadPlans();
+  useEffect(() => {
+    void loadPlans();
   }, []);
 
   async function loadPlans() {
@@ -109,6 +140,10 @@ export function CreateCompleteClient() {
 
   // Adicionar nova clínica
   function addClinic() {
+    if (formData.clinics.length >= 20) {
+      toast.error("É permitido cadastrar no máximo 20 clínicas");
+      return;
+    }
     setFormData(prev => ({
       ...prev,
       clinics: [...prev.clinics, {
@@ -190,89 +225,47 @@ export function CreateCompleteClient() {
         throw new Error("Selecione pelo menos um módulo");
       }
 
-      // 2. Criar usuário Admin no Supabase Auth
-      const { data: authUser, error: authError } = await supabase.auth.admin.createUser({
-        email: formData.adminEmail,
-        password: formData.adminPassword,
-        email_confirm: true,
-        user_metadata: {
-          name: formData.adminName,
-          phone: formData.adminPhone
-        }
-      });
+      // A Edge Function valida o superadmin e executa toda a criação com service role.
+      const { data, error } = await supabase.functions.invoke<CreateCompleteClientResult>(
+        "create-complete-client",
+        {
+          body: {
+            adminName: formData.adminName,
+            adminEmail: formData.adminEmail,
+            adminPassword: formData.adminPassword,
+            adminPhone: formData.adminPhone,
+            clinics: formData.clinics,
+            planId: formData.planId,
+            modules: formData.modules,
+            monthlyFee: formData.monthlyFee,
+            setupFee: formData.setupFee,
+            adminNotes: formData.adminNotes,
+          },
+        },
+      );
 
-      if (authError) throw authError;
-
-      if (!authUser.user) {
-        throw new Error("Erro ao criar usuário");
+      if (error) throw new Error(await getFunctionErrorMessage(error));
+      if (!data || !Array.isArray(data.clinics)) {
+        throw new Error("Resposta inválida ao criar o cliente");
       }
 
-      // 3. Inserir registro em public.users
-      const { error: userError } = await supabase
-        .from('users')
-        .insert({
-          id: authUser.user.id,
-          email: formData.adminEmail,
-          name: formData.adminName,
-          role: 'admin',
-          is_superadmin: false
-        });
-
-      if (userError) throw userError;
-
-      // 4. Criar clínicas e assinaturas
-      for (const clinic of formData.clinics) {
-        // Criar clínica
-        const { data: newClinic, error: clinicError } = await supabase
-          .from('clinics')
-          .insert({
-            name: clinic.name,
-            unit_name: clinic.unit_name || null,
-            cnpj: clinic.cnpj,
-            address: clinic.address || null,
-            address_number: clinic.address_number || null,
-            neighborhood: clinic.neighborhood || null,
-            city: clinic.city || null,
-            state: clinic.state || null,
-            zip_code: clinic.zipcode || null,
-            phone: clinic.phone || null,
-            email: clinic.email || (clinic.name ? `${clinic.name.toLowerCase().replace(/\s/g, '')}@clinica.local` : 'contato@clinica.local')
-          })
-          .select()
-          .single();
-
-        if (clinicError) throw clinicError;
-
-        // Vincular admin à clínica (is_owner = true para o dono/administrador)
-        const { error: linkError } = await supabase
-          .from('clinic_users')
-          .insert({
-            user_id: authUser.user.id,
-            clinic_id: newClinic.id,
-            is_owner: true
-          });
-
-        if (linkError) throw linkError;
-
-        // Criar assinatura
-        const { error: subError } = await supabase
-          .from('subscriptions')
-          .insert({
-            clinic_id: newClinic.id,
-            plan_id: formData.planId,
-            status: 'pending', // Aguardando primeiro pagamento
-            billing_status: 'pending',
-            features_override: formData.modules,
-            monthly_fee: formData.monthlyFee,
-            setup_fee: formData.setupFee,
-            admin_notes: formData.adminNotes
-          });
-
-        if (subError) throw subError;
+      let failedCheckouts = 0;
+      if (formData.billingProvider === "asaas") {
+        const checkoutResults = await Promise.allSettled(
+          data.clinics.map(({ subscription_id }) =>
+            asaasBillingService.createCheckout(subscription_id, formData.setupFee > 0)
+          ),
+        );
+        failedCheckouts = checkoutResults.filter(result => result.status === "rejected").length;
       }
 
-      // 5. Sucesso!
       toast.success(`Cliente criado com sucesso! ${formData.clinics.length} clínica(s) cadastrada(s).`);
+      if (failedCheckouts > 0) {
+        toast.warning(
+          `Cliente mantido pendente: não foi possível iniciar a cobrança Asaas de ${failedCheckouts} assinatura(s). Você pode ativá-la depois em Gestão de Assinaturas.`,
+          { duration: 12000 },
+        );
+      }
       
       // Resetar formulário
       setFormData({
@@ -297,7 +290,8 @@ export function CreateCompleteClient() {
         modules: ['dashboard'],
         monthlyFee: 0,
         setupFee: 0,
-        adminNotes: ""
+        adminNotes: "",
+        billingProvider: "manual",
       });
       
       setOpen(false);
@@ -305,9 +299,9 @@ export function CreateCompleteClient() {
       // Opcional: Enviar email com credenciais
       // await sendWelcomeEmail(formData.adminEmail, formData.adminPassword);
 
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error("Erro ao criar cliente:", error);
-      toast.error(error.message || "Erro ao criar cliente");
+      toast.error(error instanceof Error ? error.message : "Erro ao criar cliente");
     } finally {
       setLoading(false);
     }
@@ -377,7 +371,9 @@ export function CreateCompleteClient() {
                     type="text"
                     value={formData.adminPassword}
                     onChange={(e) => setFormData(prev => ({ ...prev, adminPassword: e.target.value }))}
-                    placeholder="Senha123!"
+                    placeholder="Mínimo de 12 caracteres"
+                    minLength={12}
+                    maxLength={128}
                     required
                   />
                 </div>
@@ -600,6 +596,32 @@ export function CreateCompleteClient() {
                   ))}
                 </div>
               </div>
+
+              <Separator />
+
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label>Modo de cobrança</Label>
+                  <Select
+                    value={formData.billingProvider}
+                    onValueChange={(value: BillingProvider) => setFormData(prev => ({ ...prev, billingProvider: value }))}
+                  >
+                    <SelectTrigger><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="manual">Manual</SelectItem>
+                      <SelectItem value="asaas">Asaas</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                {formData.billingProvider === "asaas" && (
+                  <div className="rounded-md border bg-muted/50 p-3 text-sm text-muted-foreground">
+                    O cliente escolherá PIX, boleto ou cartão diretamente na página hospedada do Asaas.
+                  </div>
+                )}
+              </div>
+              <p className="text-xs text-muted-foreground">
+                Dados de cartão nunca são solicitados nesta tela; o cliente usa o ambiente hospedado do Asaas.
+              </p>
 
               <Separator />
 

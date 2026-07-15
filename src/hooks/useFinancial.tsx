@@ -1,29 +1,28 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
+import type { Database, Json } from '@/integrations/supabase/types';
 import { useClinic } from './useClinic';
 import { useAuth } from './useAuth';
 import { toast } from 'sonner';
 import { AuditEvent } from '@/types/audit';
 
-export interface TransactionData {
-  id: string;
-  clinic_id: string;
-  user_id: string;
-  type: string;
-  amount: number;
-  description: string | null;
-  category: string | null;
-  payment_method: string | null;
-  reference_type: string | null;
-  reference_id: string | null;
-  patient_id?: string | null;
-  notes?: string | null;
-  voucher_discount?: number | null;
-  payment_split?: Record<string, unknown> | null;
-  deleted_at?: string | null;
-  deleted_by?: string | null;
-  created_at: string;
-  updated_at: string;
+export type TransactionData = Database['public']['Tables']['financial_transactions']['Row'];
+type FinancialTransactionInsert = Database['public']['Tables']['financial_transactions']['Insert'];
+
+function toJson(value: unknown): Json {
+  if (value === null) return null;
+  if (typeof value === 'string') return value;
+  if (typeof value === 'number') return value;
+  if (typeof value === 'boolean') return value;
+  if (Array.isArray(value)) return value.map(toJson);
+  if (typeof value === 'object') {
+    return Object.fromEntries(
+      Object.entries(value)
+        .filter(([, item]) => item !== undefined)
+        .map(([key, item]) => [key, toJson(item)])
+    );
+  }
+  return String(value);
 }
 
 export function useTransactions(dateFilter?: string) {
@@ -122,7 +121,15 @@ export function useFinancialSummary() {
         return query;
       };
 
-      let { data, error } = await runSummaryQuery(true);
+      const { data, error: summaryError } = await runSummaryQuery(true);
+      let error = summaryError;
+      let transactions: Array<{
+        type: string;
+        amount: number;
+        payment_method: string | null;
+        category: string | null;
+        refunded_at?: string | null;
+      }> = data || [];
       if (error && (error as { code?: string }).code === '42703') {
         const fallbackQuery = supabase
           .from('financial_transactions')
@@ -132,12 +139,11 @@ export function useFinancialSummary() {
           .lte('created_at', endOfDay)
           .is('deleted_at', null);
         const res = await fallbackQuery;
-        data = res.data;
+        transactions = res.data || [];
         error = res.error;
       }
       if (error) throw error;
 
-      const transactions = data || [];
       const CATEGORY_ESTORNO = 'Estorno';
 
       let totalIncome = 0;
@@ -310,7 +316,7 @@ export function useTransactionMutations() {
       // Evita depender de RLS de SELECT no retorno do INSERT (insert(...).select().single()).
       const transactionId = crypto.randomUUID();
 
-      const basePayload = {
+      const basePayload: FinancialTransactionInsert = {
         id: transactionId,
         type: data.type,
         amount: data.amount,
@@ -325,7 +331,7 @@ export function useTransactionMutations() {
 
       // Usar basePayload quando nao ha campos opcionais (evita 400 se colunas nao existirem)
       const hasOptionalFields = data.patient_id != null || data.notes != null || data.voucher_discount != null || data.payment_split != null;
-      const payload = hasOptionalFields
+      const payload: FinancialTransactionInsert = hasOptionalFields
         ? { ...basePayload, patient_id: data.patient_id ?? null, notes: data.notes ?? null, voucher_discount: data.voucher_discount ?? null, payment_split: data.payment_split ?? null }
         : basePayload;
 
@@ -408,8 +414,8 @@ export function useTransactionMutations() {
           clinic_id: clinicId,
           transaction_id: id,
           action: 'update',
-          before: previous,
-          after: transaction,
+          before: toJson(previous),
+          after: toJson(transaction),
           reason: reason || null,
           user_id: user.id,
         });
@@ -423,8 +429,8 @@ export function useTransactionMutations() {
           entity_type: 'financial',
           entity_id: id,
           action: 'update',
-          before: previous,
-          after: transaction,
+          before: toJson(previous),
+          after: toJson(transaction),
           reason: reason || null,
           user_id: user.id,
         });
@@ -481,7 +487,7 @@ export function useTransactionMutations() {
         clinic_id: clinicId,
         transaction_id: id,
         action: 'delete',
-        before: previous,
+        before: toJson(previous),
         after: null,
         reason,
         user_id: user.id,
@@ -496,7 +502,7 @@ export function useTransactionMutations() {
         entity_type: 'financial',
         entity_id: id,
         action: 'cancel',
-        before: previous,
+        before: toJson(previous),
         after: null,
         reason,
         user_id: user.id,
@@ -543,13 +549,12 @@ export function useTransactionMutations() {
       if (error) throw error;
 
       if (clinicId && user?.id && reason) {
-        const refundedRow = data as Record<string, unknown>;
         const { error: auditError } = await supabase.from('financial_audit').insert({
           clinic_id: clinicId,
           transaction_id: id,
           action: 'update',
-          before: previous || null,
-          after: refundedRow,
+          before: previous ? toJson(previous) : null,
+          after: toJson(data),
           reason: `Estorno: ${reason}`,
           user_id: user.id,
         });
@@ -671,7 +676,7 @@ export function useCashRegisterStatus() {
           opened_at: now,
           closed_at: null,
         },
-        { onConflict: ['clinic_id', 'status_date'] }
+        { onConflict: 'clinic_id,status_date' }
       );
       if (error) throw error;
     },
@@ -693,7 +698,7 @@ export function useCashRegisterStatus() {
           opened_at: null,
           closed_at: now,
         },
-        { onConflict: ['clinic_id', 'status_date'] }
+        { onConflict: 'clinic_id,status_date' }
       );
       if (error) throw error;
     },
@@ -751,7 +756,7 @@ export function useRegisterCashClosing() {
             closed_at: new Date().toISOString(),
             closed_by: user.id,
           },
-          { onConflict: ['clinic_id', 'closing_date'] }
+          { onConflict: 'clinic_id,closing_date' }
         );
         if (error) throw error;
       }

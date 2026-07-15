@@ -88,3 +88,23 @@ Atualize no Supabase: **Authentication > URL Configuration** com a URL final.
 
 - **Supabase:** Dashboard > Database > Backups (automático no plano Pro)
 - Configure backups manuais se necessário
+
+---
+
+## 8. Segurança e Asaas
+
+Antes do primeiro deploy público:
+
+1. Faça backup e execute manualmente no SQL Editor, nesta ordem:
+   - `supabase/PRODUCAO_01_SECURITY_HARDENING.sql`
+   - `supabase/PRODUCAO_02_ASAAS_BILLING.sql`
+2. Configure `APP_URL`, `CRON_SECRET`, `ASAAS_ENV`, `ASAAS_API_BASE_URL`,
+   `ASAAS_API_KEY` e `ASAAS_WEBHOOK_TOKEN` nos Secrets das Edge Functions.
+3. Use apenas a conta Sandbox durante a homologação.
+4. Publique as funções Asaas descritas em
+   `docs/ASAAS_SANDBOX_E_PRODUCAO.md`.
+5. Conclua `docs/ASAAS_MATRIZ_HOMOLOGACAO.md`.
+
+A chave Asaas nunca deve usar prefixo `VITE_`, ser enviada ao navegador ou
+aparecer no repositório. A troca para produção só ocorre após a homologação,
+com uma chave nova configurada diretamente no Supabase.

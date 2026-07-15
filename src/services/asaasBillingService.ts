@@ -1,0 +1,130 @@
+import { supabase } from "@/integrations/supabase/client";
+
+export type BillingProvider = "manual" | "asaas";
+export type BillingMethod = "PIX" | "BOLETO" | "CREDIT_CARD" | "UNDEFINED";
+
+export interface AsaasInvoice {
+  id: string;
+  status: string;
+  value: number;
+  dueDate: string;
+  description: string | null;
+  billingType: BillingMethod;
+  invoiceUrl: string | null;
+  bankSlipUrl: string | null;
+  paymentDate: string | null;
+  canPay: boolean;
+}
+
+export interface AsaasPaymentsPage {
+  invoices: AsaasInvoice[];
+  hasMore: boolean;
+  totalCount: number;
+}
+
+export interface AsaasCheckout {
+  subscriptionId: string;
+  asaasSubscriptionId: string;
+  billingType: "UNDEFINED";
+  recurringPaymentUrl: string | null;
+  setupPaymentUrl: string | null;
+}
+
+interface FunctionError {
+  error?: string;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null;
+}
+
+function trustedPaymentUrl(value?: string): string | null {
+  if (!value) return null;
+  try {
+    const url = new URL(value);
+    const host = url.hostname.toLowerCase();
+    return url.protocol === "https:" && (host === "asaas.com" || host.endsWith(".asaas.com"))
+      ? url.toString()
+      : null;
+  } catch {
+    return null;
+  }
+}
+
+async function invokeAsaas<T>(functionName: string, body: Record<string, unknown>): Promise<T> {
+  const { data, error } = await supabase.functions.invoke<T | FunctionError>(functionName, { body });
+
+  if (error) throw new Error(error.message);
+  if (isRecord(data) && typeof data.error === "string") {
+    throw new Error(data.error);
+  }
+  return data as T;
+}
+
+export const asaasBillingService = {
+  async listPayments(subscriptionId: string, limit = 50, offset = 0): Promise<AsaasPaymentsPage> {
+    const result = await invokeAsaas<{
+      data: Array<{
+        id: string;
+        status: string;
+        value: number;
+        billing_type?: BillingMethod;
+        due_date?: string;
+        payment_date?: string;
+        invoice_url?: string;
+        bank_slip_url?: string;
+      }>;
+      has_more: boolean;
+      total_count: number;
+    }>("asaas-list-payments", {
+      subscription_id: subscriptionId,
+      limit,
+      offset,
+    });
+
+    return {
+      invoices: result.data.map((payment) => ({
+        id: payment.id,
+        status: payment.status,
+        value: payment.value,
+        dueDate: payment.due_date ?? "",
+        description: null,
+        billingType: payment.billing_type ?? "UNDEFINED",
+        invoiceUrl: trustedPaymentUrl(payment.invoice_url),
+        bankSlipUrl: trustedPaymentUrl(payment.bank_slip_url),
+        paymentDate: payment.payment_date ?? null,
+        canPay: !["RECEIVED", "CONFIRMED", "REFUNDED", "CANCELLED"].includes(payment.status),
+      })),
+      hasMore: result.has_more,
+      totalCount: result.total_count,
+    };
+  },
+
+  cancelSubscription(subscriptionId: string) {
+    return invokeAsaas<{ cancelled: true; duplicate?: boolean }>("asaas-cancel-subscription", {
+      subscription_id: subscriptionId,
+    });
+  },
+
+  async createCheckout(subscriptionId: string, includeSetupFee: boolean): Promise<AsaasCheckout> {
+    const result = await invokeAsaas<{
+      subscription_id: string;
+      asaas_subscription_id: string;
+      billing_type: "UNDEFINED";
+      recurring_payment?: { invoice_url?: string; bank_slip_url?: string } | null;
+      setup_payment?: { invoice_url?: string; bank_slip_url?: string } | null;
+    }>("asaas-create-checkout", {
+      subscription_id: subscriptionId,
+      include_setup_fee: includeSetupFee,
+    });
+    return {
+      subscriptionId: result.subscription_id,
+      asaasSubscriptionId: result.asaas_subscription_id,
+      billingType: result.billing_type,
+      recurringPaymentUrl: trustedPaymentUrl(result.recurring_payment?.invoice_url)
+        ?? trustedPaymentUrl(result.recurring_payment?.bank_slip_url),
+      setupPaymentUrl: trustedPaymentUrl(result.setup_payment?.invoice_url)
+        ?? trustedPaymentUrl(result.setup_payment?.bank_slip_url),
+    };
+  },
+};

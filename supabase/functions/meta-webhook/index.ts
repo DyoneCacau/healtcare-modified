@@ -2,8 +2,46 @@ import { serve } from 'https://deno.land/std@0.168.0/http/server.ts'
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 
 const corsHeaders = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+  'Access-Control-Allow-Origin': Deno.env.get('APP_URL') || 'null',
+  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, x-hub-signature-256',
+}
+
+function hexToBytes(hex: string): Uint8Array {
+  const bytes = new Uint8Array(hex.length / 2)
+  for (let index = 0; index < bytes.length; index++) {
+    bytes[index] = Number.parseInt(hex.slice(index * 2, index * 2 + 2), 16)
+  }
+  return bytes
+}
+
+function constantTimeEqual(left: Uint8Array, right: Uint8Array): boolean {
+  let difference = left.length ^ right.length
+  const length = Math.max(left.length, right.length)
+  for (let index = 0; index < length; index++) {
+    difference |= (left[index] || 0) ^ (right[index] || 0)
+  }
+  return difference === 0
+}
+
+async function hasValidMetaSignature(
+  rawBody: string,
+  signatureHeader: string | null,
+  appSecret: string
+): Promise<boolean> {
+  const match = signatureHeader?.match(/^sha256=([a-f0-9]{64})$/i)
+  if (!match) return false
+
+  const key = await crypto.subtle.importKey(
+    'raw',
+    new TextEncoder().encode(appSecret),
+    { name: 'HMAC', hash: 'SHA-256' },
+    false,
+    ['sign']
+  )
+  const digest = new Uint8Array(
+    await crypto.subtle.sign('HMAC', key, new TextEncoder().encode(rawBody))
+  )
+  return constantTimeEqual(digest, hexToBytes(match[1]))
 }
 
 interface FlowNode {
@@ -48,7 +86,7 @@ async function sendWhatsAppText(
   })
   const json = await res.json()
   if (!res.ok) {
-    console.error('Meta send error:', json)
+    console.error('Meta send error', { status: res.status })
     return null
   }
   return json.messages?.[0]?.id || null
@@ -77,12 +115,35 @@ serve(async (req) => {
   }
 
   try {
+    const appSecret = Deno.env.get('META_APP_SECRET')
+    if (!appSecret) {
+      console.error('[SECURITY] META_APP_SECRET is not configured')
+      return new Response(JSON.stringify({ error: 'Service unavailable' }), {
+        status: 503,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      })
+    }
+
+    const rawBody = await req.text()
+    const signatureIsValid = await hasValidMetaSignature(
+      rawBody,
+      req.headers.get('x-hub-signature-256'),
+      appSecret
+    )
+    if (!signatureIsValid) {
+      console.warn('[SECURITY] Invalid Meta webhook signature')
+      return new Response(JSON.stringify({ error: 'Invalid signature' }), {
+        status: 401,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      })
+    }
+
     const supabase = createClient(
       Deno.env.get('SUPABASE_URL')!,
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
     )
 
-    const payload = await req.json()
+    const payload = JSON.parse(rawBody)
     if (payload.object !== 'whatsapp_business_account') {
       return new Response(JSON.stringify({ ok: true }), {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },

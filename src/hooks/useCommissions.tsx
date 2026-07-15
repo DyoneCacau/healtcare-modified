@@ -1,8 +1,24 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
+import type { Database } from '@/integrations/supabase/types';
 import { useClinic } from './useClinic';
 import { toast } from 'sonner';
 import { CommissionRule, CommissionCalculation, CommissionSummary } from '@/types/commission';
+import type { LeadSource } from '@/types/agenda';
+
+type CommissionRow = Database['public']['Tables']['commissions']['Row'];
+export type CommissionWithLeadSource = CommissionRow & {
+  _lead_source?: LeadSource;
+  _referral_name?: string;
+};
+
+function isLeadSource(value: string | null): value is LeadSource {
+  return value === 'instagram' ||
+    value === 'whatsapp' ||
+    value === 'referral' ||
+    value === 'paid_traffic' ||
+    value === 'other';
+}
 
 type DbRow = {
   id: string;
@@ -180,25 +196,30 @@ export function useCommissions() {
       if (error) throw error;
       const commissions = commissionsData || [];
 
-      const appointmentIds = [...new Set(commissions.map((c: { appointment_id?: string }) => c.appointment_id).filter(Boolean))] as string[];
-      let appointmentMeta: Record<string, { lead_source?: string; referral_name?: string }> = {};
+      const appointmentIds = [
+        ...new Set(commissions.map((commission) => commission.appointment_id).filter((id): id is string => Boolean(id))),
+      ];
+      let appointmentMeta: Record<string, { lead_source?: LeadSource; referral_name?: string }> = {};
       if (appointmentIds.length > 0) {
         const { data: aptData } = await supabase
           .from('appointments')
           .select('id, lead_source, referral_name')
           .in('id', appointmentIds);
         appointmentMeta = Object.fromEntries(
-          (aptData || []).map((a: { id: string; lead_source?: string; referral_name?: string }) => [
-            a.id,
-            { lead_source: a.lead_source || '', referral_name: a.referral_name || undefined },
+          (aptData || []).map((appointment) => [
+            appointment.id,
+            {
+              lead_source: isLeadSource(appointment.lead_source) ? appointment.lead_source : undefined,
+              referral_name: appointment.referral_name || undefined,
+            },
           ])
         );
       }
 
-      return commissions.map((c: { appointment_id?: string }) => {
-        const meta = c.appointment_id ? appointmentMeta[c.appointment_id] : undefined;
+      return commissions.map((commission): CommissionWithLeadSource => {
+        const meta = commission.appointment_id ? appointmentMeta[commission.appointment_id] : undefined;
         return {
-          ...c,
+          ...commission,
           _lead_source: meta?.lead_source,
           _referral_name: meta?.referral_name,
         };

@@ -139,13 +139,20 @@ export function useAppointmentMutations() {
       if (user?.id) {
         const dateStr = data.date || '';
         const timeStr = data.start_time || '';
-        supabase.rpc('notify_clinic_users_on_appointment', {
-          p_clinic_id: targetClinicId,
-          p_title: 'Novo agendamento',
-          p_message: `Novo agendamento em ${dateStr} às ${timeStr}`,
-          p_reference_id: appointmentId,
-          p_creator_id: user.id,
-        }).catch((err: unknown) => console.warn('Falha ao notificar clínica:', err));
+        void (async () => {
+          try {
+            const { error: notificationError } = await supabase.rpc('notify_clinic_users_on_appointment', {
+              p_clinic_id: targetClinicId,
+              p_title: 'Novo agendamento',
+              p_message: `Novo agendamento em ${dateStr} às ${timeStr}`,
+              p_reference_id: appointmentId,
+              p_creator_id: user.id,
+            });
+            if (notificationError) throw notificationError;
+          } catch (err: unknown) {
+            console.warn('Falha ao notificar clínica:', err);
+          }
+        })();
       }
 
       return appointmentPayload;

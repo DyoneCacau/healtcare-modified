@@ -2,7 +2,7 @@ import { serve } from 'https://deno.land/std@0.168.0/http/server.ts'
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 
 const corsHeaders = {
-  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Origin': Deno.env.get('APP_URL') || 'null',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 }
 
@@ -14,22 +14,42 @@ interface ProcessingResult {
   errors: string[]
 }
 
+function secretsMatch(provided: string, expected: string): boolean {
+  const encoder = new TextEncoder()
+  const providedBytes = encoder.encode(provided)
+  const expectedBytes = encoder.encode(expected)
+  let difference = providedBytes.length ^ expectedBytes.length
+  const length = Math.max(providedBytes.length, expectedBytes.length)
+
+  for (let index = 0; index < length; index++) {
+    difference |= (providedBytes[index] || 0) ^ (expectedBytes[index] || 0)
+  }
+
+  return difference === 0
+}
+
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: corsHeaders })
   }
 
   const cronSecret = Deno.env.get('CRON_SECRET')
-  if (cronSecret) {
-    const authHeader = req.headers.get('authorization') || ''
-    const provided = authHeader.replace('Bearer ', '').trim()
-    if (!provided || provided !== cronSecret) {
-      console.warn('[SECURITY] Unauthorized check-subscriptions attempt')
-      return new Response(JSON.stringify({ error: 'Unauthorized' }), {
-        status: 401,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      })
-    }
+  if (!cronSecret) {
+    console.error('[SECURITY] CRON_SECRET is not configured')
+    return new Response(JSON.stringify({ error: 'Service unavailable' }), {
+      status: 503,
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+    })
+  }
+
+  const authHeader = req.headers.get('authorization') || ''
+  const provided = authHeader.replace(/^Bearer\s+/i, '').trim()
+  if (!provided || !secretsMatch(provided, cronSecret)) {
+    console.warn('[SECURITY] Unauthorized check-subscriptions attempt')
+    return new Response(JSON.stringify({ error: 'Unauthorized' }), {
+      status: 401,
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+    })
   }
 
   try {

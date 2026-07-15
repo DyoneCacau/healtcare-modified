@@ -4,6 +4,41 @@ import { useClinic } from './useClinic';
 import { toast } from 'sonner';
 import { ConsentTerm, ClinicBranding, ClinicDocument, ClinicDocumentType } from '@/types/terms';
 
+const CLINIC_DOCUMENTS_BUCKET = 'clinic-documents';
+const SIGNED_URL_TTL_SECONDS = 60 * 60;
+
+function getStorageObjectPath(value: string | null | undefined, bucket: string): string | null {
+  if (!value) return null;
+
+  const marker = `/storage/v1/object/public/${bucket}/`;
+  const signedMarker = `/storage/v1/object/sign/${bucket}/`;
+  const markerIndex = value.indexOf(marker);
+  const signedMarkerIndex = value.indexOf(signedMarker);
+
+  if (markerIndex >= 0) {
+    return decodeURIComponent(value.slice(markerIndex + marker.length).split('?')[0]);
+  }
+  if (signedMarkerIndex >= 0) {
+    return decodeURIComponent(value.slice(signedMarkerIndex + signedMarker.length).split('?')[0]);
+  }
+  if (value.startsWith(`${bucket}/`)) return value.slice(bucket.length + 1);
+  if (!value.includes('://')) return value.replace(/^\/+/, '');
+  return null;
+}
+
+async function createClinicDocumentSignedUrl(
+  storedValue: string | null | undefined
+): Promise<string | null> {
+  const path = getStorageObjectPath(storedValue, CLINIC_DOCUMENTS_BUCKET);
+  if (!path) return storedValue || null;
+
+  const { data, error } = await supabase.storage
+    .from(CLINIC_DOCUMENTS_BUCKET)
+    .createSignedUrl(path, SIGNED_URL_TTL_SECONDS);
+  if (error) throw error;
+  return data.signedUrl;
+}
+
 export function useTerms() {
   const { clinicId } = useClinic();
 
@@ -130,11 +165,19 @@ export function useTermMutations() {
 export function useClinicBranding() {
   const { clinic, clinicId } = useClinic();
   const queryClient = useQueryClient();
+  const storedLogo = clinic?.logo_url || null;
+  const { data: signedLogoUrl } = useQuery({
+    queryKey: ['clinic-logo-signed-url', clinicId, storedLogo],
+    queryFn: () => createClinicDocumentSignedUrl(storedLogo),
+    enabled: !!clinicId && !!storedLogo,
+    staleTime: (SIGNED_URL_TTL_SECONDS - 60) * 1000,
+    refetchInterval: (SIGNED_URL_TTL_SECONDS - 60) * 1000,
+  });
 
   const rawColor = (clinic as { primary_color?: string | null })?.primary_color;
   const branding: ClinicBranding = {
     clinicId: clinicId || '',
-    logo: clinic?.logo_url || undefined,
+    logo: signedLogoUrl || undefined,
     primaryColor: rawColor || '#000000',
     hasCustomColor: !!rawColor,
   };
@@ -171,20 +214,25 @@ export function useClinicBranding() {
     mutationFn: async (file: File) => {
       if (!clinicId) throw new Error('Clinic ID is required');
       const ext = (file.name.split('.').pop() || 'png').toLowerCase().replace(/[^a-z0-9]/g, '');
-      const allowed = ['png', 'jpg', 'jpeg', 'gif', 'webp', 'svg'];
-      if (!allowed.includes(ext)) throw new Error('Formato invalido. Use PNG, JPG, JPEG, GIF, WEBP ou SVG.');
+      const allowed = ['png', 'jpg', 'jpeg', 'webp'];
+      if (!allowed.includes(ext)) throw new Error('Formato inválido. Use PNG, JPG, JPEG ou WEBP.');
+      if (!['image/png', 'image/jpeg', 'image/webp'].includes(file.type)) {
+        throw new Error('O conteúdo do arquivo não corresponde a uma imagem permitida.');
+      }
+      if (file.size > 10 * 1024 * 1024) throw new Error('A imagem deve ter no máximo 10 MB.');
       const path = `${clinicId}/logo/logo-${Date.now()}.${ext}`;
       const { error: uploadError } = await supabase.storage
-        .from('clinic-documents')
+        .from(CLINIC_DOCUMENTS_BUCKET)
         .upload(path, file, { contentType: file.type, upsert: true });
       if (uploadError) throw new Error(uploadError.message);
-      const { data: urlData } = supabase.storage.from('clinic-documents').getPublicUrl(path);
       const { error: updateError } = await supabase
         .from('clinics')
-        .update({ logo_url: urlData.publicUrl, updated_at: new Date().toISOString() })
+        .update({ logo_url: path, updated_at: new Date().toISOString() })
         .eq('id', clinicId);
       if (updateError) throw new Error(updateError.message);
-      return urlData.publicUrl;
+      const signedUrl = await createClinicDocumentSignedUrl(path);
+      if (!signedUrl) throw new Error('Não foi possível gerar a URL assinada do logo');
+      return signedUrl;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['clinic'] });
@@ -210,40 +258,58 @@ export function useClinicDocuments() {
         .eq('clinic_id', clinicId)
         .order('created_at', { ascending: false });
       if (error) throw error;
-      return (data || []).map(rows => ({
-        id: rows.id,
-        clinicId: rows.clinic_id,
-        name: rows.name,
-        type: rows.type as ClinicDocumentType,
-        fileUrl: rows.file_url,
-        content: rows.content,
-        isUpload: rows.is_upload,
-        createdAt: rows.created_at,
-        updatedAt: rows.updated_at,
-      })) as ClinicDocument[];
+      return Promise.all((data || []).map(async rows => ({
+          id: rows.id,
+          clinicId: rows.clinic_id,
+          name: rows.name,
+          type: rows.type as ClinicDocumentType,
+          fileUrl: await createClinicDocumentSignedUrl(rows.file_url),
+          content: rows.content,
+          isUpload: rows.is_upload,
+          createdAt: rows.created_at,
+          updatedAt: rows.updated_at,
+        }))) as Promise<ClinicDocument[]>;
     },
     enabled: !!clinicId,
+    staleTime: (SIGNED_URL_TTL_SECONDS - 60) * 1000,
+    refetchInterval: (SIGNED_URL_TTL_SECONDS - 60) * 1000,
   });
 
   const uploadDocument = useMutation({
     mutationFn: async ({ file, name, type }: { file: File; name: string; type: ClinicDocumentType }) => {
       if (!clinicId) throw new Error('Clinic ID required');
+      const allowedMimeTypes = new Set([
+        'application/pdf',
+        'application/msword',
+        'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+        'image/jpeg',
+        'image/png',
+        'image/webp',
+      ]);
+      if (!allowedMimeTypes.has(file.type)) {
+        throw new Error('Formato inválido. Use PDF, DOC, DOCX, JPG, PNG ou WEBP.');
+      }
+      if (file.size > 10 * 1024 * 1024) {
+        throw new Error('O arquivo deve ter no máximo 10 MB.');
+      }
       const ext = (file.name.split('.').pop() || 'pdf').toLowerCase().replace(/[^a-z0-9]/g, '');
       const safeName = (name || 'documento').replace(/[^a-zA-Z0-9-_]/g, '_').slice(0, 50) || 'doc';
       const path = `${clinicId}/${Date.now()}-${safeName}.${ext || 'pdf'}`;
       const { error: uploadError } = await supabase.storage
-        .from('clinic-documents')
+        .from(CLINIC_DOCUMENTS_BUCKET)
         .upload(path, file, { contentType: file.type, upsert: false });
       if (uploadError) throw new Error(uploadError.message);
-      const { data: urlData } = supabase.storage.from('clinic-documents').getPublicUrl(path);
       const { error: insertError } = await supabase.from('clinic_documents').insert({
         clinic_id: clinicId,
         name,
         type,
-        file_url: urlData.publicUrl,
+        file_url: path,
         is_upload: true,
       });
-      if (insertError) throw new Error(insertError.message);
+      if (insertError) {
+        await supabase.storage.from(CLINIC_DOCUMENTS_BUCKET).remove([path]);
+        throw new Error(insertError.message);
+      }
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['clinic-documents'] });
@@ -269,8 +335,21 @@ export function useClinicDocuments() {
 
   const deleteDocument = useMutation({
     mutationFn: async (id: string) => {
-      const { error } = await supabase.from('clinic_documents').delete().eq('id', id);
-      if (error) throw error;
+      const { data: document, error: lookupError } = await supabase
+        .from('clinic_documents')
+        .select('file_url')
+        .eq('id', id)
+        .single();
+      if (lookupError) throw lookupError;
+      const path = getStorageObjectPath(document.file_url, CLINIC_DOCUMENTS_BUCKET);
+      if (path) {
+        const { error: storageError } = await supabase.storage
+          .from(CLINIC_DOCUMENTS_BUCKET)
+          .remove([path]);
+        if (storageError) throw storageError;
+      }
+      const { error: deleteError } = await supabase.from('clinic_documents').delete().eq('id', id);
+      if (deleteError) throw deleteError;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['clinic-documents'] });

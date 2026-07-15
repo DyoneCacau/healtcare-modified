@@ -56,7 +56,11 @@ import {
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
+import type { Database } from '@/integrations/supabase/types';
 import { useClinic } from '@/hooks/useClinic';
+
+type UserRole = Database['public']['Enums']['app_role'];
+type AssignableSystemRole = Exclude<UserRole, 'superadmin'>;
 
 interface SystemUser {
   id: string;
@@ -148,7 +152,11 @@ export function UserManagement({ users, onRefresh, isSuperAdmin }: UserManagemen
     setDialogOpen(true);
   };
 
-  const isSystemRole = (v: string) => ['admin', 'receptionist', 'seller', 'professional'].includes(v);
+  const isSystemRole = (value: string): value is AssignableSystemRole =>
+    value === 'admin' ||
+    value === 'receptionist' ||
+    value === 'seller' ||
+    value === 'professional';
   const handleCreateNewRole = async () => {
     if (!clinicId || !newRoleName.trim()) {
       toast.error('Informe o nome da função');

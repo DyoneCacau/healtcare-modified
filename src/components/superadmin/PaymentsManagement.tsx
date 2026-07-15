@@ -29,6 +29,7 @@ import { Receipt, Search, CheckCircle, XCircle, ExternalLink, Trash2, Copy, Plus
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
+import type { BillingProvider } from "@/services/asaasBillingService";
 
 interface Payment {
   id: string;
@@ -36,11 +37,13 @@ interface Payment {
   amount: number;
   payment_method: string | null;
   payment_proof_url: string | null;
+  hosted_payment_url: string | null;
   status: string;
   confirmed_by: string | null;
   confirmed_at: string | null;
   notes: string | null;
   created_at: string;
+  origin: BillingProvider;
   subscription: {
     clinic: {
       name: string;
@@ -50,6 +53,19 @@ interface Payment {
       name: string;
     } | null;
   };
+}
+
+interface PaymentQueryRelations {
+  clinics?: { name: string; email: string };
+  plans?: { name: string };
+}
+
+interface PaymentQueryMetadata {
+  subscriptions?: PaymentQueryRelations;
+  billing_provider?: BillingProvider | null;
+  asaas_payment_id?: string | null;
+  invoice_url?: string | null;
+  bank_slip_url?: string | null;
 }
 
 export function PaymentsManagement() {
@@ -91,13 +107,18 @@ export function PaymentsManagement() {
 
       if (error) throw error;
 
-      setPayments(data.map(p => ({
-        ...p,
-        subscription: {
-          clinic: (p.subscriptions as any)?.clinics,
-          plan: (p.subscriptions as any)?.plans,
-        },
-      })));
+      setPayments(data.map(p => {
+        const metadata = p as unknown as PaymentQueryMetadata;
+        return {
+          ...p,
+          origin: metadata.billing_provider === "asaas" || metadata.asaas_payment_id ? "asaas" : "manual",
+          hosted_payment_url: metadata.invoice_url ?? metadata.bank_slip_url ?? null,
+          subscription: {
+            clinic: metadata.subscriptions?.clinics,
+            plan: metadata.subscriptions?.plans,
+          },
+        } as Payment;
+      }));
     } catch (error) {
       console.error('Error fetching payments:', error);
       toast.error('Erro ao carregar pagamentos');
@@ -177,12 +198,12 @@ export function PaymentsManagement() {
       if (error) throw error;
       toast.success('Registros rejeitados removidos.');
       fetchPayments();
-    } catch (e: any) {
+    } catch (e: unknown) {
       const sql = `-- Cole no SQL Editor do Supabase e execute.
 DELETE FROM payment_history WHERE status = 'rejected';`;
       navigator.clipboard.writeText(sql).then(() => {
         toast.error('Sem permissão para excluir daqui. Script SQL copiado — cole no SQL Editor do Supabase e execute.');
-      }).catch(() => toast.error(e?.message || 'Erro ao limpar.'));
+      }).catch(() => toast.error(e instanceof Error ? e.message : 'Erro ao limpar.'));
     } finally {
       setIsClearingRejected(false);
     }
@@ -201,11 +222,18 @@ DELETE FROM payment_history WHERE status = 'rejected';`;
       .select("id, clinics(name), plans(name)")
       .order("created_at", { ascending: false });
     setSubscriptionsList(
-      (data || []).map((s: any) => ({
-        id: s.id,
-        clinic_name: s.clinics?.name || "—",
-        plan_name: s.plans?.name || "—",
-      }))
+      (data || []).map((s) => {
+        const relations = s as unknown as {
+          id: string;
+          clinics?: { name: string };
+          plans?: { name: string };
+        };
+        return {
+          id: relations.id,
+          clinic_name: relations.clinics?.name || "—",
+          plan_name: relations.plans?.name || "—",
+        };
+      })
     );
     setRegSubscriptionId("");
     setRegAmount("");
@@ -239,8 +267,8 @@ DELETE FROM payment_history WHERE status = 'rejected';`;
       toast.success("Pagamento registrado e plano ativado.");
       setRegisterDialogOpen(false);
       fetchPayments();
-    } catch (err: any) {
-      toast.error(err?.message || "Erro ao registrar pagamento.");
+    } catch (err: unknown) {
+      toast.error(err instanceof Error ? err.message : "Erro ao registrar pagamento.");
     } finally {
       setRegLoading(false);
     }
@@ -284,8 +312,8 @@ DELETE FROM payment_history WHERE status = 'rejected';`;
       toast.success("Pagamento registrado e plano ativado.");
       setRegisterDialogOpen(false);
       fetchPayments();
-    } catch (e: any) {
-      toast.error(e?.message || "Erro ao registrar pagamento.");
+    } catch (e: unknown) {
+      toast.error(e instanceof Error ? e.message : "Erro ao registrar pagamento.");
     } finally {
       setRegLoading(false);
     }
@@ -322,7 +350,7 @@ DELETE FROM payment_history WHERE status = 'rejected';`;
           </CardTitle>
           <Button onClick={openRegisterDialog} className="gap-2">
             <Plus className="h-4 w-4" />
-            Registrar pagamento
+            Registrar pagamento manual
           </Button>
         </div>
         <p className="text-sm text-muted-foreground font-normal mt-1">
@@ -367,9 +395,10 @@ DELETE FROM payment_history WHERE status = 'rejected';`;
                   <TableHead>Clínica</TableHead>
                   <TableHead>Plano</TableHead>
                   <TableHead>Valor</TableHead>
-                  <TableHead>Status</TableHead>
+                <TableHead>Origem</TableHead>
+                <TableHead>Status</TableHead>
                   <TableHead>Data</TableHead>
-                  <TableHead>Comprovante</TableHead>
+                <TableHead>Documento / cobrança</TableHead>
                   <TableHead className="w-[150px]">Ações</TableHead>
                 </TableRow>
               </TableHeader>
@@ -384,16 +413,21 @@ DELETE FROM payment_history WHERE status = 'rejected';`;
                     </TableCell>
                     <TableCell>{payment.subscription?.plan?.name || '-'}</TableCell>
                     <TableCell>R$ {payment.amount.toFixed(2)}</TableCell>
+                    <TableCell>
+                      <Badge variant={payment.origin === "asaas" ? "default" : "outline"}>
+                        {payment.origin === "asaas" ? "Asaas" : "Manual"}
+                      </Badge>
+                    </TableCell>
                     <TableCell>{getStatusBadge(payment.status)}</TableCell>
                     <TableCell>
                       {format(new Date(payment.created_at), "dd/MM/yyyy HH:mm", { locale: ptBR })}
                     </TableCell>
                     <TableCell>
-                      {payment.payment_proof_url ? (
+                      {payment.hosted_payment_url || payment.payment_proof_url ? (
                         <Button variant="ghost" size="sm" asChild>
-                          <a href={payment.payment_proof_url} target="_blank" rel="noopener noreferrer">
+                          <a href={payment.hosted_payment_url ?? payment.payment_proof_url ?? "#"} target="_blank" rel="noopener noreferrer">
                             <ExternalLink className="h-4 w-4 mr-1" />
-                            Ver
+                            {payment.origin === "asaas" ? "Abrir cobrança" : "Ver comprovante"}
                           </a>
                         </Button>
                       ) : (
@@ -401,7 +435,7 @@ DELETE FROM payment_history WHERE status = 'rejected';`;
                       )}
                     </TableCell>
                     <TableCell>
-                      {payment.status === 'pending' && (
+                      {payment.status === 'pending' && payment.origin === "manual" && (
                         <div className="flex gap-2">
                           <Button
                             size="sm"
@@ -421,7 +455,7 @@ DELETE FROM payment_history WHERE status = 'rejected';`;
                           </Button>
                         </div>
                       )}
-                      {payment.status !== 'pending' && payment.confirmed_at && (
+                      {(payment.status !== 'pending' || payment.origin === "asaas") && payment.confirmed_at && (
                         <span className="text-xs text-muted-foreground">
                           {format(new Date(payment.confirmed_at), "dd/MM/yyyy", { locale: ptBR })}
                         </span>

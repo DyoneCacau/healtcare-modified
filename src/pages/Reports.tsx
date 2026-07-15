@@ -400,7 +400,7 @@ export default function Reports() {
         }
       });
       const sellerIds = Array.from(bySeller.keys());
-      let sellerNames: Record<string, string> = {};
+      const sellerNames: Record<string, string> = {};
       if (sellerIds.length > 0) {
         const { data: profiles } = await supabase.from('profiles').select('user_id, name').in('user_id', sellerIds);
         (profiles || []).forEach((p: any) => { sellerNames[p.user_id] = p.name || 'Vendedor'; });
@@ -696,8 +696,9 @@ export default function Reports() {
   if (isLoading) {
     return (
       <MainLayout>
-        <div className="flex items-center justify-center h-96">
-          <Loader2 className="h-8 w-8 animate-spin text-primary" />
+        <div className="flex items-center justify-center h-96" role="status" aria-live="polite">
+          <Loader2 className="h-8 w-8 animate-spin text-primary" aria-hidden="true" />
+          <span className="sr-only">Carregando relatórios...</span>
         </div>
       </MainLayout>
     );

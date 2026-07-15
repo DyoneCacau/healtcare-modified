@@ -36,11 +36,16 @@ import {
 } from '@/components/ui/tooltip';
 import { cn } from '@/lib/utils';
 import { AgendaAppointment, Professional, LeadSource, leadSourceLabels } from '@/types/agenda';
-import { PaymentMethod } from '@/types/financial';
 import { Clinic } from '@/types/clinic';
 import { usePatients } from '@/hooks/usePatients';
 import { PROCEDURE_OPTIONS } from '@/lib/procedures';
 import { toast } from 'sonner';
+
+type BookingFeePaymentMethod = NonNullable<AgendaAppointment['bookingFeePaymentMethod']>;
+
+function isBookingFeePaymentMethod(value: string): value is BookingFeePaymentMethod {
+  return value === 'cash' || value === 'credit' || value === 'debit' || value === 'pix';
+}
 
 function add30Min(time: string): string {
   const [h, m] = time.split(':').map(Number);
@@ -97,7 +102,7 @@ export function AppointmentFormDialog({
   const [referralName, setReferralName] = useState('');
   const [customProcedure, setCustomProcedure] = useState('');
   const [bookingFee, setBookingFee] = useState<number | null>(null);
-  const [bookingFeePaymentMethod, setBookingFeePaymentMethod] = useState<PaymentMethod | null>(null);
+  const [bookingFeePaymentMethod, setBookingFeePaymentMethod] = useState<BookingFeePaymentMethod | null>(null);
 
   const { patients } = usePatients();
 
@@ -496,7 +501,9 @@ export function AppointmentFormDialog({
                 <Label className="text-xs text-muted-foreground">Forma de pagamento da taxa</Label>
                 <Select
                   value={bookingFeePaymentMethod ?? 'pix'}
-                  onValueChange={(v) => setBookingFeePaymentMethod(v as PaymentMethod)}
+                  onValueChange={(value) => {
+                    if (isBookingFeePaymentMethod(value)) setBookingFeePaymentMethod(value);
+                  }}
                 >
                   <SelectTrigger className="h-9">
                     <SelectValue placeholder="Selecione" />

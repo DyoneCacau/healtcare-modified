@@ -22,7 +22,7 @@ import { PaymentForm } from '@/components/financial/PaymentForm';
 import { TransactionsList } from '@/components/financial/TransactionsList';
 import { CashClosingDialog } from '@/components/financial/CashClosingDialog';
 import { SangriaDialog, CATEGORY_SANGRIA } from '@/components/financial/SangriaDialog';
-import { CashRegister, CashSummary, Transaction } from '@/types/financial';
+import { CashRegister, CashSummary, PaymentMethod, PaymentSplit, Transaction } from '@/types/financial';
 import { useTodayTransactions, useFinancialSummary, useTransactionMutations, useRegisterCashClosing, useCashRegisterStatus } from '@/hooks/useFinancial';
 import { useAppointmentMutations } from '@/hooks/useAppointments';
 import { useAuth } from '@/hooks/useAuth';
@@ -41,6 +41,48 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
+import type { Json } from '@/integrations/supabase/types';
+
+function isPaymentMethod(value: string | null): value is PaymentMethod {
+  return value === 'cash' ||
+    value === 'credit' ||
+    value === 'debit' ||
+    value === 'pix' ||
+    value === 'voucher' ||
+    value === 'split';
+}
+
+function isSplitMethod(value: unknown): value is PaymentSplit['method1'] {
+  return typeof value === 'string' && isPaymentMethod(value) && value !== 'split';
+}
+
+function parsePaymentSplit(value: Json | null): PaymentSplit | undefined {
+  if (!value || Array.isArray(value) || typeof value !== 'object') return undefined;
+  if (
+    !isSplitMethod(value.method1) ||
+    typeof value.amount1 !== 'number' ||
+    !isSplitMethod(value.method2) ||
+    typeof value.amount2 !== 'number'
+  ) {
+    return undefined;
+  }
+  return {
+    method1: value.method1,
+    amount1: value.amount1,
+    method2: value.method2,
+    amount2: value.amount2,
+  };
+}
+
+function serializePaymentSplit(value: PaymentSplit | undefined): Json | null {
+  if (!value) return null;
+  return {
+    method1: value.method1,
+    amount1: value.amount1,
+    method2: value.method2,
+    amount2: value.amount2,
+  };
+}
 
 export default function Financial() {
   const [initialBalance, setInitialBalance] = useState(0);
@@ -68,16 +110,16 @@ export default function Financial() {
   const { isOpen: isCashOpen, openedAt: statusOpenedAt, setOpen, setClosed } = useCashRegisterStatus();
 
   const rawById = useMemo(() => {
-    return new Map<string, any>(rawTransactions.map((t: any) => [t.id, t]));
+    return new Map(rawTransactions.map((transaction) => [transaction.id, transaction] as const));
   }, [rawTransactions]);
 
   const transactions: Transaction[] = useMemo(() => {
-    return rawTransactions.map((t: any) => ({
+    return rawTransactions.map((t): Transaction => ({
       id: t.id,
       type: t.type as 'income' | 'expense',
       description: t.description || '',
       amount: Number(t.amount),
-      paymentMethod: t.payment_method as any,
+      paymentMethod: isPaymentMethod(t.payment_method) ? t.payment_method : 'cash',
       category: t.category || '',
       date: t.created_at.split('T')[0],
       time: format(new Date(t.created_at), 'HH:mm'),
@@ -87,7 +129,7 @@ export default function Financial() {
       patientName: t.patient_name || undefined,
       notes: t.notes || undefined,
       voucherDiscount: t.voucher_discount || undefined,
-      paymentSplit: t.payment_split || undefined,
+      paymentSplit: parsePaymentSplit(t.payment_split),
       referenceType: t.reference_type || undefined,
       referenceId: t.reference_id || undefined,
       appointmentId: t.reference_type === 'appointment' ? t.reference_id : undefined,
@@ -140,7 +182,7 @@ export default function Financial() {
       patient_id: transaction.patientId || null,
       notes: transaction.notes || null,
       voucher_discount: transaction.voucherDiscount || null,
-      payment_split: transaction.paymentSplit || null,
+      payment_split: serializePaymentSplit(transaction.paymentSplit),
     });
   };
 
@@ -172,7 +214,7 @@ export default function Financial() {
       patient_id: transaction.patientId || null,
       notes: transaction.notes || null,
       voucher_discount: transaction.voucherDiscount || null,
-      payment_split: transaction.paymentSplit || null,
+      payment_split: serializePaymentSplit(transaction.paymentSplit),
       updated_at: new Date().toISOString(),
     });
 
@@ -215,8 +257,8 @@ export default function Financial() {
           payment_method: transaction.paymentMethod,
           patient_id: transaction.patientId || null,
           notes: transaction.notes ? `Estorno de: ${transaction.notes}. Justificativa: ${refundReason.trim()}` : `Estorno de receita. Justificativa: ${refundReason.trim()}`,
-          voucherDiscount: null,
-          paymentSplit: null,
+          voucher_discount: null,
+          payment_split: null,
           reference_type: transaction.referenceType || null,
           reference_id: transaction.referenceId || null,
         });
@@ -298,8 +340,8 @@ export default function Financial() {
       payment_method: 'cash',
       patient_id: null,
       notes: notes || null,
-      voucherDiscount: null,
-      paymentSplit: null,
+      voucher_discount: null,
+      payment_split: null,
     });
     toast.success('Sangria registrada. Valor recolhido para o cofre.');
   };

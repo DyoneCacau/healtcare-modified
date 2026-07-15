@@ -43,7 +43,8 @@ import { cn } from '@/lib/utils';
 
 interface Attachment {
   name: string;
-  url: string;
+  path?: string;
+  url?: string;
   type: string;
   size: number;
 }
@@ -101,6 +102,34 @@ const PRIORITY_COLORS: Record<string, string> = {
   urgent: 'text-red-600 font-bold',
 };
 
+const SUPPORT_ATTACHMENTS_BUCKET = 'support-attachments';
+
+function getAttachmentPath(att: Attachment): string | null {
+  if (att.path) return att.path.replace(/^\/+/, '');
+  if (!att.url) return null;
+
+  const publicMarker = `/storage/v1/object/public/${SUPPORT_ATTACHMENTS_BUCKET}/`;
+  const signedMarker = `/storage/v1/object/sign/${SUPPORT_ATTACHMENTS_BUCKET}/`;
+  const marker = att.url.includes(publicMarker) ? publicMarker : signedMarker;
+  const markerIndex = att.url.indexOf(marker);
+  if (markerIndex < 0) return null;
+  return decodeURIComponent(att.url.slice(markerIndex + marker.length).split('?')[0]);
+}
+
+function parseAttachments(value: unknown): Attachment[] {
+  if (!Array.isArray(value)) return [];
+  return value.filter((item): item is Attachment => {
+    if (!item || typeof item !== 'object' || Array.isArray(item)) return false;
+    const attachment = item as Record<string, unknown>;
+    return (
+      typeof attachment.name === 'string'
+      && typeof attachment.type === 'string'
+      && typeof attachment.size === 'number'
+      && (typeof attachment.path === 'string' || typeof attachment.url === 'string')
+    );
+  });
+}
+
 function formatBytes(bytes: number) {
   if (bytes < 1024) return `${bytes} B`;
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
@@ -155,7 +184,7 @@ export function SupportManagement() {
 
       setTickets((data || []).map(t => ({
         ...t,
-        attachments: Array.isArray(t.attachments) ? t.attachments : [],
+        attachments: parseAttachments(t.attachments),
       })));
     } catch (err) {
       console.error('Error fetching tickets:', err);
@@ -170,6 +199,27 @@ export function SupportManagement() {
     setReply(ticket.admin_reply || '');
     setNewStatus(ticket.status);
     setIsDetailOpen(true);
+  };
+
+  const openAttachment = async (att: Attachment) => {
+    const path = getAttachmentPath(att);
+    if (!path) {
+      toast.error('Anexo legado sem caminho de armazenamento válido.');
+      return;
+    }
+
+    const popup = window.open('about:blank', '_blank');
+    if (popup) popup.opener = null;
+    const { data, error } = await supabase.storage
+      .from(SUPPORT_ATTACHMENTS_BUCKET)
+      .createSignedUrl(path, 60 * 10);
+    if (error || !data?.signedUrl) {
+      popup?.close();
+      toast.error('Não foi possível abrir o anexo.');
+      return;
+    }
+    if (popup) popup.location.href = data.signedUrl;
+    else window.open(data.signedUrl, '_blank', 'noopener,noreferrer');
   };
 
   const handleSaveReply = async () => {
@@ -390,7 +440,7 @@ export function SupportManagement() {
                       <div
                         key={i}
                         className="flex items-center gap-2 rounded-lg border p-2 cursor-pointer hover:bg-muted/30"
-                        onClick={() => window.open(att.url, '_blank', 'noopener,noreferrer')}
+                        onClick={() => openAttachment(att)}
                       >
                         <span className="text-muted-foreground">{getFileIcon(att.type)}</span>
                         <span className="flex-1 text-sm truncate">{att.name}</span>

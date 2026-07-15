@@ -506,7 +506,11 @@ export function PermissionsManagement() {
                               <span className="w-5 shrink-0" />
                             )}
                             {!inPlan && (
-                              <Lock className="h-4 w-4 text-muted-foreground shrink-0" title="Módulo fora do plano da clínica" />
+                              <Lock
+                                className="h-4 w-4 text-muted-foreground shrink-0"
+                                role="img"
+                                aria-label="Módulo fora do plano da clínica"
+                              />
                             )}
                             {row.featureLabel}
                           </span>
@@ -521,7 +525,7 @@ export function PermissionsManagement() {
                             />
                           ) : (
                             <span className="inline-flex items-center gap-1.5 text-muted-foreground text-sm">
-                              <Lock className="h-4 w-4 shrink-0" title="Sem este módulo no plano" />
+                              <Lock className="h-4 w-4 shrink-0" aria-hidden="true" />
                               Bloqueado
                             </span>
                           )}
@@ -540,7 +544,11 @@ export function PermissionsManagement() {
                                 <span className="flex items-center gap-2">
                                   <span className="w-5 shrink-0" />
                                   {!childInPlan && (
-                                    <Lock className="h-4 w-4 text-muted-foreground shrink-0" title="Módulo fora do plano da clínica" />
+                                    <Lock
+                                      className="h-4 w-4 text-muted-foreground shrink-0"
+                                      role="img"
+                                      aria-label="Módulo fora do plano da clínica"
+                                    />
                                   )}
                                   {child.featureLabel}
                                 </span>
@@ -555,7 +563,7 @@ export function PermissionsManagement() {
                                   />
                                 ) : (
                                   <span className="inline-flex items-center gap-1.5 text-muted-foreground text-sm">
-                                    <Lock className="h-4 w-4 shrink-0" title="Sem este módulo no plano" />
+                                    <Lock className="h-4 w-4 shrink-0" aria-hidden="true" />
                                     Bloqueado
                                   </span>
                                 )}

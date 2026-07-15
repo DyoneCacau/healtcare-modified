@@ -23,8 +23,10 @@ import {
   MoreVertical,
   DollarSign,
   Ban,
-  Play
+  Play,
+  RefreshCw
 } from "lucide-react";
+import { asaasBillingService, type BillingProvider } from "@/services/asaasBillingService";
 
 interface ClientStatus {
   clinic_id: string;
@@ -43,12 +45,19 @@ interface ClientStatus {
   total_paid: number;
   last_payment_at?: string | null;
   current_period_end?: string | null;
+  billing_provider: BillingProvider;
+  asaas_subscription_id?: string | null;
+}
+
+interface DashboardStats {
+  total_clients?: number;
+  total_mrr?: number;
 }
 
 export function ClientsStatusDashboard() {
   const [clients, setClients] = useState<ClientStatus[]>([]);
   const [loading, setLoading] = useState(true);
-  const [stats, setStats] = useState<any>(null);
+  const [stats, setStats] = useState<DashboardStats | null>(null);
 
   useEffect(() => {
     loadData();
@@ -67,18 +76,34 @@ export function ClientsStatusDashboard() {
     setLoading(true);
     
     try {
-      // Carregar estatísticas
-      const { data: statsData } = await supabase.rpc('get_superadmin_stats');
-      setStats(statsData);
+      const [statsResult, clientsResult, providersResult] = await Promise.all([
+        supabase.rpc('get_superadmin_stats'),
+        supabase.from('vw_clients_status').select('*').order('clinic_name'),
+        supabase.from('subscriptions').select('id, payment_provider'),
+      ]);
+      const statsData = statsResult.data;
+      setStats(statsData as DashboardStats | null);
 
-      // Carregar lista de clientes via view
-      const { data: clientsData } = await supabase
-        .from('vw_clients_status')
-        .select('*')
-        .order('clinic_name');
+      const clientsData = clientsResult.data;
+      const providerBySubscription = new Map(
+        (providersResult.data ?? []).map((item) => [
+          item.id,
+          item.payment_provider === "asaas" ? "asaas" : "manual",
+        ] as const),
+      );
 
       if (clientsData) {
-        setClients(clientsData as any);
+        setClients(clientsData.map((item) => {
+          const row = item as unknown as Omit<ClientStatus, "billing_provider"> & {
+            billing_provider?: BillingProvider | null;
+            asaas_subscription_id?: string | null;
+          };
+          return {
+            ...row,
+            billing_provider: providerBySubscription.get(row.subscription_id)
+              ?? (row.billing_provider === "asaas" || row.asaas_subscription_id ? "asaas" : "manual"),
+          };
+        }));
       }
     } catch (error) {
       console.error('Erro ao carregar dados:', error);
@@ -99,9 +124,9 @@ export function ClientsStatusDashboard() {
 
       toast.success('Status atualizado com sucesso!');
       loadData();
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('Erro ao atualizar status:', error);
-      toast.error(error.message || 'Erro ao atualizar status');
+      toast.error(error instanceof Error ? error.message : 'Erro ao atualizar status');
     }
   }
 
@@ -116,9 +141,9 @@ export function ClientsStatusDashboard() {
 
       toast.warning('Cliente suspenso');
       loadData();
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('Erro ao suspender:', error);
-      toast.error(error.message || 'Erro ao suspender cliente');
+      toast.error(error instanceof Error ? error.message : 'Erro ao suspender cliente');
     }
   }
 
@@ -133,9 +158,19 @@ export function ClientsStatusDashboard() {
 
       toast.success('Cliente ativado');
       loadData();
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('Erro ao ativar:', error);
-      toast.error(error.message || 'Erro ao ativar cliente');
+      toast.error(error instanceof Error ? error.message : 'Erro ao ativar cliente');
+    }
+  }
+
+  async function syncAsaas(subscriptionId: string) {
+    try {
+      await asaasBillingService.listPayments(subscriptionId, 1);
+      toast.success("Cobranças do Asaas atualizadas.");
+      loadData();
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Erro ao sincronizar cobrança.");
     }
   }
 
@@ -331,6 +366,7 @@ export function ClientsStatusDashboard() {
                 <TableHead>Clínica</TableHead>
                 <TableHead>Admin</TableHead>
                 <TableHead>Plano</TableHead>
+                <TableHead>Origem</TableHead>
                 <TableHead>Módulos</TableHead>
                 <TableHead>Status Assinatura</TableHead>
                 <TableHead>Status Pagamento</TableHead>
@@ -366,6 +402,11 @@ export function ClientsStatusDashboard() {
                     </div>
                   </TableCell>
                   <TableCell>{client.plan_name || '-'}</TableCell>
+                  <TableCell>
+                    <Badge variant={client.billing_provider === "asaas" ? "default" : "outline"}>
+                      {client.billing_provider === "asaas" ? "Asaas" : "Manual"}
+                    </Badge>
+                  </TableCell>
                   <TableCell>
                     <div className="flex flex-wrap gap-1">
                       {client.modules?.slice(0, 3).map(module => (
@@ -414,7 +455,12 @@ export function ClientsStatusDashboard() {
                         </Button>
                       </DropdownMenuTrigger>
                       <DropdownMenuContent align="end">
-                        {client.subscription_status === 'suspended' ? (
+                        {client.billing_provider === "asaas" ? (
+                          <DropdownMenuItem onClick={() => syncAsaas(client.subscription_id)}>
+                            <RefreshCw className="mr-2 h-4 w-4" />
+                            Atualizar cobranças
+                          </DropdownMenuItem>
+                        ) : client.subscription_status === 'suspended' ? (
                           <DropdownMenuItem
                             onClick={() => activateClient(client.subscription_id)}
                             className="text-green-600"

@@ -54,7 +54,7 @@ export function useSelectedClinicId() {
               preference_value: value,
               updated_at: new Date().toISOString(),
             },
-            { onConflict: ['user_id', 'preference_key'] }
+            { onConflict: 'user_id,preference_key' }
           );
           if (error) throw error;
         } else {
