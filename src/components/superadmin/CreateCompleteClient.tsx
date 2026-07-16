@@ -19,20 +19,24 @@ import {
   asaasBillingService,
   type BillingProvider,
 } from "@/services/asaasBillingService";
+import { parsePlanFeatures } from "@/lib/planFeatures";
 
-// Lista completa de módulos disponíveis
+// Lista completa de módulos disponíveis (chaves alinhadas com PlansManagement)
 const AVAILABLE_MODULES = [
   { id: 'dashboard', name: 'Dashboard', description: 'Visão geral da clínica', always: true },
   { id: 'agenda', name: 'Agenda', description: 'Agendamento de consultas' },
   { id: 'pacientes', name: 'Pacientes', description: 'Cadastro e prontuários' },
+  { id: 'pacientes_basico', name: 'Pacientes (Básico)', description: 'Cadastro simplificado de pacientes' },
   { id: 'profissionais', name: 'Profissionais', description: 'Gestão de profissionais' },
   { id: 'financeiro', name: 'Financeiro', description: 'Controle financeiro completo' },
+  { id: 'financeiro_basico', name: 'Financeiro (Básico)', description: 'Controle financeiro simplificado' },
   { id: 'comissoes', name: 'Comissões', description: 'Cálculo de comissões' },
   { id: 'estoque', name: 'Estoque', description: 'Controle de materiais' },
   { id: 'relatorios', name: 'Relatórios', description: 'Relatórios gerenciais' },
   { id: 'ponto', name: 'Ponto', description: 'Controle de ponto eletrônico' },
   { id: 'administracao', name: 'Administração', description: 'Gestão de usuários' },
   { id: 'termos', name: 'Termos', description: 'Criação de termos e contratos' },
+  { id: 'multi_clinica', name: 'Multi-Clínica', description: 'Gestão de múltiplas unidades' },
 ];
 
 interface ClinicData {
@@ -74,6 +78,7 @@ interface PlanOption {
   price_monthly: number;
   promo_active: boolean | null;
   promo_price_monthly: number | null;
+  features: string[];
 }
 
 function planMonthlyPrice(plan: PlanOption): number {
@@ -82,6 +87,15 @@ function planMonthlyPrice(plan: PlanOption): number {
       ? plan.promo_price_monthly
       : plan.price_monthly,
   );
+}
+
+/** Módulos do plano + dashboard sempre incluso */
+function modulesFromPlan(plan: PlanOption | undefined): string[] {
+  const fromPlan = plan ? parsePlanFeatures(plan.features) : [];
+  const knownIds = new Set(AVAILABLE_MODULES.map((m) => m.id));
+  const selected = fromPlan.filter((id) => knownIds.has(id));
+  if (!selected.includes("dashboard")) selected.unshift("dashboard");
+  return Array.from(new Set(selected));
 }
 
 interface CreateCompleteClientResult {
@@ -146,7 +160,14 @@ export function CreateCompleteClient() {
       .select('*')
       .order('name');
     
-    if (data) setPlans(data);
+    if (data) {
+      setPlans(
+        data.map((plan) => ({
+          ...plan,
+          features: parsePlanFeatures(plan.features),
+        })),
+      );
+    }
   }
 
   // Adicionar nova clínica
@@ -574,6 +595,7 @@ export function CreateCompleteClient() {
                       ...prev,
                       planId: value,
                       monthlyFee: plan ? planMonthlyPrice(plan) : 0,
+                      modules: modulesFromPlan(plan),
                     }));
                   }}
                   required
@@ -594,7 +616,12 @@ export function CreateCompleteClient() {
               <Separator />
 
               <div className="space-y-3">
-                <Label>Módulos Contratados</Label>
+                <div className="space-y-1">
+                  <Label>Módulos Contratados</Label>
+                  <p className="text-xs text-muted-foreground">
+                    Preenchidos automaticamente pelo plano. Você pode liberar módulos extras nesta tela.
+                  </p>
+                </div>
                 <div className="grid grid-cols-2 gap-3">
                   {AVAILABLE_MODULES.map(module => (
                     <label

@@ -478,6 +478,7 @@ export type Database = {
           logo_url: string | null
           name: string
           neighborhood: string | null
+          organization_id: string | null
           owner_user_id: string | null
           phone: string | null
           razao_social: string | null
@@ -500,6 +501,7 @@ export type Database = {
           logo_url?: string | null
           name: string
           neighborhood?: string | null
+          organization_id?: string | null
           owner_user_id?: string | null
           phone?: string | null
           razao_social?: string | null
@@ -522,6 +524,7 @@ export type Database = {
           logo_url?: string | null
           name?: string
           neighborhood?: string | null
+          organization_id?: string | null
           owner_user_id?: string | null
           phone?: string | null
           razao_social?: string | null
@@ -530,6 +533,38 @@ export type Database = {
           unit_name?: string | null
           updated_at?: string
           zip_code?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "clinics_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      organizations: {
+        Row: {
+          created_at: string
+          id: string
+          name: string
+          owner_user_id: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          name: string
+          owner_user_id: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          name?: string
+          owner_user_id?: string
+          updated_at?: string
         }
         Relationships: []
       }
@@ -2215,6 +2250,10 @@ export type Database = {
           p_subscription_id: string
         }
         Returns: undefined
+      }
+      ensure_organization_for_owner: {
+        Args: { p_name?: string; p_owner_user_id: string }
+        Returns: string
       }
       get_admin_by_email: {
         Args: { p_email: string }

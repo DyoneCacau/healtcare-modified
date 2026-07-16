@@ -77,6 +77,9 @@ npm run dev
 - Autosserviço de faturas e regularização na tela de cobrança
 - Controles de assinatura e pagamentos para SuperAdmin
 - Criação segura de clientes pelo backend
+- Modelo multiunidade: 1 banco, grupo por dono (`organizations`), cobrança Asaas por unidade e limite `max_clinics`
+- Adicionar Unidade cria assinatura própria (não “incluída de graça” no contrato)
+- Dashboard SuperAdmin agrupado por dono/grupo, com ações distintas de suspender / cancelar Asaas / desativar clínica
 - RLS e buckets privados reforçados, credenciais Meta protegidas e CORS restrito
 - SQL de segurança e faturamento aplicado manualmente ao projeto Supabase
 - Edge Functions de cobrança publicadas e webhook Sandbox validado com HTTP 200
@@ -85,6 +88,7 @@ npm run dev
 
 ### Falta antes da produção
 
+- Executar manualmente `supabase/PRODUCAO_03_ORGANIZATIONS.sql` no SQL Editor (grupos de unidades) e publicar `add-clinic-unit`
 - Concluir todos os cenários de [homologação no Sandbox](docs/ASAAS_MATRIZ_HOMOLOGACAO.md), incluindo Pix, boleto, cartão, atraso, estorno, duplicidade e cancelamento
 - Publicar o frontend e substituir `APP_URL=http://localhost:8080` pela URL HTTPS definitiva
 - Configurar monitoramento, alertas e rotina confiável de backups; o plano Free do Supabase não oferece backup automático

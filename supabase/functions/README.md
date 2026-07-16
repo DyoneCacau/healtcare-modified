@@ -12,6 +12,7 @@ Asaas opcional por clínica. Mercado Pago permanece removido.
 | `reset-user-password` | Reset de senha administrativo | `SUPABASE_SERVICE_ROLE_KEY` |
 | `delete-clinic-and-user` | Exclusão de clínica e usuário | `SUPABASE_SERVICE_ROLE_KEY` |
 | `create-complete-client` | Criação segura de cliente completo por superadmin | `SUPABASE_SERVICE_ROLE_KEY`, `APP_URL` |
+| `add-clinic-unit` | Nova unidade no grupo do dono, com assinatura própria e limite do plano | `SUPABASE_SERVICE_ROLE_KEY`, `APP_URL` |
 | `meta-webhook` | Webhook Meta WhatsApp (receber mensagens + fluxo bot) | `META_WEBHOOK_VERIFY_TOKEN`, `SUPABASE_SERVICE_ROLE_KEY` |
 | `meta-send-message` | Enviar mensagem outbound via Cloud API | `SUPABASE_SERVICE_ROLE_KEY`, `SUPABASE_ANON_KEY` |
 | `meta-save-channel` | Salva credenciais Meta sem expô-las ao PostgREST | `SUPABASE_SERVICE_ROLE_KEY`, `APP_URL` |

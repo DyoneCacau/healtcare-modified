@@ -359,6 +359,11 @@ export function SubscriptionsManagement() {
           <CreditCard className="h-5 w-5" />
           Gestão de Assinaturas
         </CardTitle>
+        <p className="text-sm text-muted-foreground font-normal mt-1">
+          Cada linha é uma unidade com cobrança própria.
+          Suspender bloqueia o acesso; cancelar recorrência Asaas para a cobrança;
+          desativar a clínica fica na aba Clínicas.
+        </p>
       </CardHeader>
       <CardContent>
         <div className="flex flex-col md:flex-row gap-4 mb-6">
@@ -486,7 +491,7 @@ export function SubscriptionsManagement() {
                           {sub.billing_provider === "asaas" && sub.status !== "cancelled" && (
                             <DropdownMenuItem className="text-destructive" onClick={() => cancelAsaas(sub)}>
                               <XCircle className="h-4 w-4 mr-2" />
-                              Cancelar recorrência
+                              Cancelar recorrência Asaas
                             </DropdownMenuItem>
                           )}
                           {sub.billing_provider === "manual" && (
@@ -501,16 +506,16 @@ export function SubscriptionsManagement() {
                               Confirmar Pagamento
                             </DropdownMenuItem>
                           )}
-                          {sub.billing_provider === "manual" && sub.status !== 'active' && (
+                          {sub.status !== 'active' && (
                             <DropdownMenuItem onClick={() => activateSubscription(sub)}>
                               <Play className="h-4 w-4 mr-2" />
-                              Ativar
+                              Reativar acesso da unidade
                             </DropdownMenuItem>
                           )}
-                          {sub.billing_provider === "manual" && sub.status === 'active' && (
+                          {sub.status === 'active' && (
                             <DropdownMenuItem onClick={() => suspendSubscription(sub)}>
                               <Pause className="h-4 w-4 mr-2" />
-                              Suspender
+                              Suspender acesso da unidade
                             </DropdownMenuItem>
                           )}
                           <DropdownMenuItem

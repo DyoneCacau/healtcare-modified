@@ -130,7 +130,7 @@ export function ClientsStatusDashboard() {
     }
   }
 
-  async function suspendClient(subscriptionId: string) {
+  async function suspendUnit(subscriptionId: string) {
     try {
       const { error } = await supabase
         .from('subscriptions')
@@ -139,15 +139,15 @@ export function ClientsStatusDashboard() {
 
       if (error) throw error;
 
-      toast.warning('Cliente suspenso');
+      toast.warning('Unidade suspensa (acesso bloqueado). Cobrança Asaas, se existir, continua até cancelar a recorrência.');
       loadData();
     } catch (error: unknown) {
       console.error('Erro ao suspender:', error);
-      toast.error(error instanceof Error ? error.message : 'Erro ao suspender cliente');
+      toast.error(error instanceof Error ? error.message : 'Erro ao suspender unidade');
     }
   }
 
-  async function activateClient(subscriptionId: string) {
+  async function activateUnit(subscriptionId: string) {
     try {
       const { error } = await supabase
         .from('subscriptions')
@@ -156,11 +156,24 @@ export function ClientsStatusDashboard() {
 
       if (error) throw error;
 
-      toast.success('Cliente ativado');
+      toast.success('Unidade reativada');
       loadData();
     } catch (error: unknown) {
       console.error('Erro ao ativar:', error);
-      toast.error(error instanceof Error ? error.message : 'Erro ao ativar cliente');
+      toast.error(error instanceof Error ? error.message : 'Erro ao ativar unidade');
+    }
+  }
+
+  async function cancelAsaasUnit(subscriptionId: string) {
+    if (!window.confirm('Cancelar apenas a recorrência Asaas desta unidade? O acesso pode permanecer até você suspender a assinatura.')) {
+      return;
+    }
+    try {
+      await asaasBillingService.cancelSubscription(subscriptionId);
+      toast.success('Recorrência Asaas cancelada nesta unidade.');
+      loadData();
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Erro ao cancelar recorrência.');
     }
   }
 
@@ -253,6 +266,27 @@ export function ClientsStatusDashboard() {
   const pendentes = clients.filter(c => c.billing_status === 'pending');
   const atrasados = clients.filter(c => c.billing_status === 'overdue');
   const suspensos = clients.filter(c => c.subscription_status === 'suspended');
+
+  const groups = Object.values(
+    clients.reduce<Record<string, {
+      key: string;
+      admin_name: string;
+      admin_email: string;
+      units: ClientStatus[];
+    }>>((acc, client) => {
+      const key = client.admin_email || client.clinic_id;
+      if (!acc[key]) {
+        acc[key] = {
+          key,
+          admin_name: client.admin_name || "Sem admin",
+          admin_email: client.admin_email || "—",
+          units: [],
+        };
+      }
+      acc[key].units.push(client);
+      return acc;
+    }, {}),
+  ).sort((a, b) => a.admin_name.localeCompare(b.admin_name, "pt-BR"));
 
   if (loading) {
     return (
@@ -351,140 +385,139 @@ export function ClientsStatusDashboard() {
         </Button>
       </div>
 
-      {/* TABELA DE CLIENTES */}
+      {/* CLIENTES AGRUPADOS POR DONO/GRUPO */}
       <Card>
         <CardHeader>
-          <CardTitle>Clientes</CardTitle>
+          <CardTitle>Clientes e unidades</CardTitle>
           <p className="text-sm text-muted-foreground font-normal mt-1">
-            Para alterar plano ou módulos, use as abas <strong>Assinaturas</strong> e <strong>Planos</strong>. Para registrar pagamento e ativar plano, use a aba <strong>Pagamentos</strong>.
+            Agrupado por dono/grupo. Cada unidade tem cobrança própria.
+            <strong> Suspender unidade</strong> bloqueia o acesso;
+            <strong> Cancelar recorrência Asaas</strong> para a cobrança;
+            <strong> Desativar clínica</strong> fica na aba Clínicas.
           </p>
         </CardHeader>
-        <CardContent>
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Clínica</TableHead>
-                <TableHead>Admin</TableHead>
-                <TableHead>Plano</TableHead>
-                <TableHead>Origem</TableHead>
-                <TableHead>Módulos</TableHead>
-                <TableHead>Status Assinatura</TableHead>
-                <TableHead>Status Pagamento</TableHead>
-                <TableHead>Desde último pagamento</TableHead>
-                <TableHead>Próx. vencimento</TableHead>
-                <TableHead>Mensalidade</TableHead>
-                <TableHead>Total Pago</TableHead>
-                <TableHead className="text-right">Ações</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {clients.map((client) => (
-                <TableRow key={client.clinic_id} className={getRowClassName(client)}>
-                  <TableCell>
-                    <div>
-                      <div className="font-medium">{client.clinic_name}</div>
-                      <div className="text-xs text-muted-foreground">
-                        {client.cnpj}
-                      </div>
-                    </div>
-                  </TableCell>
-                  <TableCell>
-                    <div>
-                      <div className="text-sm">{client.admin_name}</div>
-                      <div className="text-xs text-muted-foreground">
-                        {client.admin_email}
-                      </div>
-                      {client.total_clinics_of_admin > 1 && (
-                        <Badge variant="outline" className="text-xs mt-1">
-                          {client.total_clinics_of_admin} clínicas
-                        </Badge>
-                      )}
-                    </div>
-                  </TableCell>
-                  <TableCell>{client.plan_name || '-'}</TableCell>
-                  <TableCell>
-                    <Badge variant={client.billing_provider === "asaas" ? "default" : "outline"}>
-                      {client.billing_provider === "asaas" ? "Asaas" : "Manual"}
+        <CardContent className="space-y-6">
+          {groups.map((group) => {
+            const groupMrr = group.units.reduce(
+              (sum, unit) => sum + (unit.subscription_status === "active" ? Number(unit.monthly_fee || 0) : 0),
+              0,
+            );
+            return (
+              <div key={group.key} className="rounded-lg border">
+                <div className="flex flex-wrap items-center justify-between gap-2 border-b bg-muted/40 px-4 py-3">
+                  <div>
+                    <p className="font-medium">{group.admin_name}</p>
+                    <p className="text-xs text-muted-foreground">{group.admin_email}</p>
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    <Badge variant="outline">
+                      {group.units.length} unidade{group.units.length !== 1 ? "s" : ""}
                     </Badge>
-                  </TableCell>
-                  <TableCell>
-                    <div className="flex flex-wrap gap-1">
-                      {client.modules?.slice(0, 3).map(module => (
-                        <Badge key={module} variant="secondary" className="text-xs">
-                          {module}
-                        </Badge>
-                      ))}
-                      {client.modules?.length > 3 && (
-                        <Badge variant="outline" className="text-xs">
-                          +{client.modules.length - 3}
-                        </Badge>
-                      )}
-                    </div>
-                  </TableCell>
-                  <TableCell>
-                    {getSubscriptionStatusBadge(client.subscription_status)}
-                  </TableCell>
-                  <TableCell>
-                    {getBillingStatusBadge(client.billing_status)}
-                  </TableCell>
-                  <TableCell>
-                    <span className={formatDaysInfo(client).className}>
-                      {formatDaysInfo(client).text}
-                    </span>
-                  </TableCell>
-                  <TableCell>
-                    {client.current_period_end ? (
-                      <span className={getDaysUntilDue(client) !== null && (getDaysUntilDue(client) ?? 0) <= 5 ? "text-amber-600 font-medium" : ""}>
-                        {new Date(client.current_period_end).toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit", year: "numeric" })}
-                      </span>
-                    ) : (
-                      <span className="text-muted-foreground">—</span>
-                    )}
-                  </TableCell>
-                  <TableCell>
-                    R$ {client.monthly_fee?.toFixed(2) || '0.00'}
-                  </TableCell>
-                  <TableCell>
-                    R$ {client.total_paid?.toFixed(2) || '0.00'}
-                  </TableCell>
-                  <TableCell className="text-right">
-                    <DropdownMenu>
-                      <DropdownMenuTrigger asChild>
-                        <Button variant="ghost" size="sm">
-                          <MoreVertical className="h-4 w-4" />
-                        </Button>
-                      </DropdownMenuTrigger>
-                      <DropdownMenuContent align="end">
-                        {client.billing_provider === "asaas" ? (
-                          <DropdownMenuItem onClick={() => syncAsaas(client.subscription_id)}>
-                            <RefreshCw className="mr-2 h-4 w-4" />
-                            Atualizar cobranças
-                          </DropdownMenuItem>
-                        ) : client.subscription_status === 'suspended' ? (
-                          <DropdownMenuItem
-                            onClick={() => activateClient(client.subscription_id)}
-                            className="text-green-600"
-                          >
-                            <Play className="mr-2 h-4 w-4" />
-                            Ativar Cliente
-                          </DropdownMenuItem>
-                        ) : (
-                          <DropdownMenuItem
-                            onClick={() => suspendClient(client.subscription_id)}
-                            className="text-red-600"
-                          >
-                            <Ban className="mr-2 h-4 w-4" />
-                            Suspender Cliente
-                          </DropdownMenuItem>
-                        )}
-
-                      </DropdownMenuContent>
-                    </DropdownMenu>
-                  </TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
+                    <Badge variant="secondary">
+                      MRR do grupo: R$ {groupMrr.toFixed(2)}
+                    </Badge>
+                  </div>
+                </div>
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Unidade</TableHead>
+                      <TableHead>Plano</TableHead>
+                      <TableHead>Origem</TableHead>
+                      <TableHead>Status Assinatura</TableHead>
+                      <TableHead>Status Pagamento</TableHead>
+                      <TableHead>Próx. vencimento</TableHead>
+                      <TableHead>Mensalidade</TableHead>
+                      <TableHead className="text-right">Ações</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {group.units.map((client) => (
+                      <TableRow key={client.clinic_id} className={getRowClassName(client)}>
+                        <TableCell>
+                          <div>
+                            <div className="font-medium">{client.clinic_name}</div>
+                            <div className="text-xs text-muted-foreground">{client.cnpj}</div>
+                          </div>
+                        </TableCell>
+                        <TableCell>{client.plan_name || "-"}</TableCell>
+                        <TableCell>
+                          <Badge variant={client.billing_provider === "asaas" ? "default" : "outline"}>
+                            {client.billing_provider === "asaas" ? "Asaas" : "Manual"}
+                          </Badge>
+                        </TableCell>
+                        <TableCell>
+                          {getSubscriptionStatusBadge(client.subscription_status)}
+                        </TableCell>
+                        <TableCell>
+                          {getBillingStatusBadge(client.billing_status)}
+                        </TableCell>
+                        <TableCell>
+                          {client.current_period_end ? (
+                            <span className={getDaysUntilDue(client) !== null && (getDaysUntilDue(client) ?? 0) <= 5 ? "text-amber-600 font-medium" : ""}>
+                              {new Date(client.current_period_end).toLocaleDateString("pt-BR", {
+                                day: "2-digit",
+                                month: "2-digit",
+                                year: "numeric",
+                              })}
+                            </span>
+                          ) : (
+                            <span className="text-muted-foreground">—</span>
+                          )}
+                        </TableCell>
+                        <TableCell>
+                          R$ {client.monthly_fee?.toFixed(2) || "0.00"}
+                        </TableCell>
+                        <TableCell className="text-right">
+                          <DropdownMenu>
+                            <DropdownMenuTrigger asChild>
+                              <Button variant="ghost" size="sm">
+                                <MoreVertical className="h-4 w-4" />
+                              </Button>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent align="end">
+                              {client.billing_provider === "asaas" && (
+                                <>
+                                  <DropdownMenuItem onClick={() => syncAsaas(client.subscription_id)}>
+                                    <RefreshCw className="mr-2 h-4 w-4" />
+                                    Atualizar cobranças
+                                  </DropdownMenuItem>
+                                  <DropdownMenuItem
+                                    className="text-destructive"
+                                    onClick={() => cancelAsaasUnit(client.subscription_id)}
+                                  >
+                                    <Ban className="mr-2 h-4 w-4" />
+                                    Cancelar recorrência Asaas
+                                  </DropdownMenuItem>
+                                </>
+                              )}
+                              {client.subscription_status === "suspended" ? (
+                                <DropdownMenuItem
+                                  onClick={() => activateUnit(client.subscription_id)}
+                                  className="text-green-600"
+                                >
+                                  <Play className="mr-2 h-4 w-4" />
+                                  Reativar acesso da unidade
+                                </DropdownMenuItem>
+                              ) : (
+                                <DropdownMenuItem
+                                  onClick={() => suspendUnit(client.subscription_id)}
+                                  className="text-red-600"
+                                >
+                                  <Ban className="mr-2 h-4 w-4" />
+                                  Suspender acesso da unidade
+                                </DropdownMenuItem>
+                              )}
+                            </DropdownMenuContent>
+                          </DropdownMenu>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
+            );
+          })}
         </CardContent>
       </Card>
 

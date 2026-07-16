@@ -174,7 +174,10 @@ export function ClinicsManagement() {
           Gestão de Clínicas
         </CardTitle>
         <p className="text-sm text-muted-foreground mt-1">
-          Para cadastrar novo cliente, use <strong>Criar Cliente Completo</strong> na aba Dashboard. Para adicionar uma nova unidade a um cliente existente, use <strong>Adicionar Unidade</strong>.
+          Para cadastrar novo cliente, use <strong>Criar Cliente Completo</strong> na aba Dashboard.
+          Para adicionar unidade com cobrança própria, use <strong>Adicionar Unidade</strong>.
+          <strong> Desativar</strong> tira a unidade do ar (operacional);
+          suspender acesso ou cancelar Asaas fica em Assinaturas/Dashboard.
         </p>
       </CardHeader>
       <CardContent>
@@ -281,12 +284,12 @@ export function ClinicsManagement() {
                             {clinic.is_active ? (
                               <>
                                 <PowerOff className="h-4 w-4 mr-2" />
-                                Desativar
+                                Desativar clínica (operacional)
                               </>
                             ) : (
                               <>
                                 <Power className="h-4 w-4 mr-2" />
-                                Ativar
+                                Reativar clínica (operacional)
                               </>
                             )}
                           </DropdownMenuItem>

@@ -55,7 +55,10 @@ function corsHeaders(req: Request): Record<string, string> {
   const requestOrigin = req.headers.get('origin')
   return {
     'Access-Control-Allow-Origin': requestOrigin === allowedOrigin ? allowedOrigin : 'null',
-    'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+    'Access-Control-Allow-Headers':
+      'authorization, x-client-info, apikey, content-type, '
+      + 'x-supabase-client-platform, x-supabase-client-platform-version, '
+      + 'x-supabase-client-runtime, x-supabase-client-runtime-version',
     'Access-Control-Allow-Methods': 'POST, OPTIONS',
     'Vary': 'Origin',
   }
@@ -289,7 +292,7 @@ Deno.serve(async (req) => {
 
     const { data: plan, error: planError } = await supabase
       .from('plans')
-      .select('id, price_monthly, promo_active, promo_price_monthly')
+      .select('id, name, price_monthly, promo_active, promo_price_monthly, max_clinics')
       .eq('id', input.planId)
       .maybeSingle()
     if (planError) throw new Error('Failed to validate plan')
@@ -301,6 +304,13 @@ Deno.serve(async (req) => {
     )
     if (!Number.isFinite(monthlyFee) || monthlyFee < 0) {
       throw new HttpError(409, 'Plano sem mensalidade válida')
+    }
+    const maxClinics = Number(plan.max_clinics ?? 999)
+    if (Number.isFinite(maxClinics) && maxClinics > 0 && input.clinics.length > maxClinics) {
+      throw new HttpError(
+        409,
+        `Este plano permite no máximo ${maxClinics} unidade(s)`,
+      )
     }
 
     const { data: existingProfile, error: profileLookupError } = await supabase
@@ -341,6 +351,15 @@ Deno.serve(async (req) => {
     }, { onConflict: 'user_id,role' })
     if (roleError) throw new Error('Failed to create role')
 
+    const { data: organizationId, error: orgError } = await supabase.rpc(
+      'ensure_organization_for_owner',
+      {
+        p_owner_user_id: createdUserId,
+        p_name: `${input.adminName} — Grupo`,
+      },
+    )
+    if (orgError || !organizationId) throw new Error('Failed to create organization')
+
     const created: Array<{ clinic_id: string; subscription_id: string }> = []
     for (const clinic of input.clinics) {
       const { data: clinicRow, error: clinicError } = await supabase.from('clinics').insert({
@@ -356,6 +375,7 @@ Deno.serve(async (req) => {
         phone: clinic.phone,
         email: clinic.email || input.adminEmail,
         owner_user_id: createdUserId,
+        organization_id: organizationId,
       }).select('id').single()
       if (clinicError || !clinicRow) throw new Error('Failed to create clinic')
       createdClinicIds.push(clinicRow.id)
@@ -385,6 +405,7 @@ Deno.serve(async (req) => {
 
     return json(req, {
       user_id: createdUserId,
+      organization_id: organizationId,
       clinics: created,
     }, 201)
   } catch (error) {
