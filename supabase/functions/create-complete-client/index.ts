@@ -30,7 +30,6 @@ interface ClientInput {
   clinics: ClinicInput[]
   planId: string
   modules: string[]
-  monthlyFee: number
   setupFee: number
   adminNotes: string | null
 }
@@ -209,7 +208,6 @@ function validatePayload(value: unknown): ClientInput {
     clinics,
     planId,
     modules,
-    monthlyFee: validMoney(body.monthlyFee, 'Mensalidade'),
     setupFee: validMoney(body.setupFee, 'Taxa de adesão'),
     adminNotes: optionalString(body.adminNotes, 'Notas administrativas', 2_000),
   }
@@ -291,11 +289,19 @@ Deno.serve(async (req) => {
 
     const { data: plan, error: planError } = await supabase
       .from('plans')
-      .select('id')
+      .select('id, price_monthly, promo_active, promo_price_monthly')
       .eq('id', input.planId)
       .maybeSingle()
     if (planError) throw new Error('Failed to validate plan')
     if (!plan) throw new HttpError(400, 'Plano não encontrado')
+    const monthlyFee = Number(
+      plan.promo_active && plan.promo_price_monthly != null
+        ? plan.promo_price_monthly
+        : plan.price_monthly,
+    )
+    if (!Number.isFinite(monthlyFee) || monthlyFee < 0) {
+      throw new HttpError(409, 'Plano sem mensalidade válida')
+    }
 
     const { data: existingProfile, error: profileLookupError } = await supabase
       .from('profiles')
@@ -369,7 +375,7 @@ Deno.serve(async (req) => {
         billing_status: 'pending',
         payment_status: 'pending',
         features_override: input.modules,
-        monthly_fee: input.monthlyFee,
+        monthly_fee: monthlyFee,
         setup_fee: input.setupFee,
         admin_notes: input.adminNotes,
       }).select('id').single()

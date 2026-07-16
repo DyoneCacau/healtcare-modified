@@ -28,6 +28,28 @@ interface Payment {
   bankSlipUrl?: string
 }
 
+function isValidCnpj(value: string): boolean {
+  const digits = value.replace(/\D/g, '')
+  if (digits.length !== 14 || /^(\d)\1+$/.test(digits)) return false
+  const calculateDigit = (base: string, weights: number[]) => {
+    const sum = base.split('').reduce(
+      (total, digit, index) => total + Number(digit) * weights[index],
+      0,
+    )
+    const remainder = sum % 11
+    return remainder < 2 ? 0 : 11 - remainder
+  }
+  const first = calculateDigit(
+    digits.slice(0, 12),
+    [5, 4, 3, 2, 9, 8, 7, 6, 5, 4, 3, 2],
+  )
+  const second = calculateDigit(
+    `${digits.slice(0, 12)}${first}`,
+    [6, 5, 4, 3, 2, 9, 8, 7, 6, 5, 4, 3, 2],
+  )
+  return digits.endsWith(`${first}${second}`)
+}
+
 Deno.serve(async (req) => {
   const options = handleOptions(req)
   if (options) return options
@@ -66,6 +88,9 @@ Deno.serve(async (req) => {
       throw new HttpError(409, 'Mensalidade não configurada')
     }
     if (!clinic.cnpj) throw new HttpError(409, 'CNPJ/CPF da clínica não configurado')
+    if (!isValidCnpj(clinic.cnpj)) {
+      throw new HttpError(409, 'CNPJ da clínica inválido; atualize o cadastro antes de ativar o Asaas')
+    }
 
     let customerId = clinic.asaas_customer_id || null
     if (!customerId) {

@@ -7,13 +7,13 @@ verify_jwt = false
 verify_jwt = false
 
 [functions.asaas-create-checkout]
-verify_jwt = true
+verify_jwt = false
 
 [functions.asaas-list-payments]
-verify_jwt = true
+verify_jwt = false
 
 [functions.asaas-cancel-subscription]
-verify_jwt = true
+verify_jwt = false
 
 [functions.meta-save-channel]
 verify_jwt = true

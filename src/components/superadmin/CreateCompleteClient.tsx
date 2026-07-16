@@ -71,6 +71,17 @@ interface CreateClientData {
 interface PlanOption {
   id: string;
   name: string;
+  price_monthly: number;
+  promo_active: boolean | null;
+  promo_price_monthly: number | null;
+}
+
+function planMonthlyPrice(plan: PlanOption): number {
+  return Number(
+    plan.promo_active && plan.promo_price_monthly != null
+      ? plan.promo_price_monthly
+      : plan.price_monthly,
+  );
 }
 
 interface CreateCompleteClientResult {
@@ -557,7 +568,14 @@ export function CreateCompleteClient() {
                 <Label htmlFor="planId">Plano Base *</Label>
                 <Select
                   value={formData.planId}
-                  onValueChange={(value) => setFormData(prev => ({ ...prev, planId: value }))}
+                  onValueChange={(value) => {
+                    const plan = plans.find((item) => item.id === value);
+                    setFormData(prev => ({
+                      ...prev,
+                      planId: value,
+                      monthlyFee: plan ? planMonthlyPrice(plan) : 0,
+                    }));
+                  }}
                   required
                 >
                   <SelectTrigger>
@@ -566,7 +584,7 @@ export function CreateCompleteClient() {
                   <SelectContent>
                     {plans.map(plan => (
                       <SelectItem key={plan.id} value={plan.id}>
-                        {plan.name}
+                        {plan.name} — R$ {planMonthlyPrice(plan).toFixed(2)}/mês
                       </SelectItem>
                     ))}
                   </SelectContent>
@@ -639,14 +657,14 @@ export function CreateCompleteClient() {
                 </div>
 
                 <div className="space-y-2">
-                  <Label htmlFor="monthlyFee">Mensalidade (R$)</Label>
+                  <Label htmlFor="monthlyFee">Mensalidade do plano (R$)</Label>
                   <Input
                     id="monthlyFee"
                     type="number"
                     step="0.01"
                     value={formData.monthlyFee}
-                    onChange={(e) => setFormData(prev => ({ ...prev, monthlyFee: parseFloat(e.target.value) || 0 }))}
-                    placeholder="0.00"
+                    readOnly
+                    className="bg-muted"
                   />
                 </div>
               </div>

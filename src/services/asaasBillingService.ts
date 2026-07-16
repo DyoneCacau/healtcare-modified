@@ -38,6 +38,15 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null;
 }
 
+async function functionErrorMessage(error: unknown): Promise<string> {
+  if (isRecord(error) && error.context instanceof Response) {
+    const payload: unknown = await error.context.clone().json().catch(() => null);
+    if (isRecord(payload) && typeof payload.error === "string") return payload.error;
+  }
+  if (error instanceof Error && error.message) return error.message;
+  return "Não foi possível concluir a operação de cobrança";
+}
+
 function trustedPaymentUrl(value?: string): string | null {
   if (!value) return null;
   try {
@@ -54,7 +63,7 @@ function trustedPaymentUrl(value?: string): string | null {
 async function invokeAsaas<T>(functionName: string, body: Record<string, unknown>): Promise<T> {
   const { data, error } = await supabase.functions.invoke<T | FunctionError>(functionName, { body });
 
-  if (error) throw new Error(error.message);
+  if (error) throw new Error(await functionErrorMessage(error));
   if (isRecord(data) && typeof data.error === "string") {
     throw new Error(data.error);
   }

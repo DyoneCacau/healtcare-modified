@@ -44,6 +44,17 @@ interface Plan {
   id: string;
   name: string;
   slug: string;
+  price_monthly: number;
+  promo_active: boolean | null;
+  promo_price_monthly: number | null;
+}
+
+function planMonthlyPrice(plan: Plan): number {
+  return Number(
+    plan.promo_active && plan.promo_price_monthly != null
+      ? plan.promo_price_monthly
+      : plan.price_monthly,
+  );
 }
 
 interface Subscription {
@@ -58,6 +69,8 @@ interface Subscription {
   last_payment_at: string | null;
   notes: string | null;
   created_at: string;
+  monthly_fee: number | null;
+  setup_fee: number | null;
   billing_provider: BillingProvider;
   payment_method: BillingMethod | null;
   clinic: {
@@ -85,6 +98,8 @@ export function SubscriptionsManagement() {
     status: "",
     payment_status: "",
     notes: "",
+    monthly_fee: 0,
+    setup_fee: 0,
   });
 
   useEffect(() => {
@@ -96,9 +111,12 @@ export function SubscriptionsManagement() {
       const [subsResult, plansResult] = await Promise.all([
         supabase
           .from('subscriptions')
-          .select('*, clinics(name, email), plans(id, name, slug)')
+          .select('*, clinics(name, email), plans(id, name, slug, price_monthly, promo_active, promo_price_monthly)')
           .order('created_at', { ascending: false }),
-        supabase.from('plans').select('id, name, slug').eq('is_active', true),
+        supabase
+          .from('plans')
+          .select('id, name, slug, price_monthly, promo_active, promo_price_monthly')
+          .eq('is_active', true),
       ]);
 
       if (subsResult.error) throw subsResult.error;
@@ -135,18 +153,31 @@ export function SubscriptionsManagement() {
   }
 
   function openEditDialog(subscription: Subscription) {
+    const monthlyFee = subscription.plan
+      ? planMonthlyPrice(subscription.plan)
+      : Number(subscription.monthly_fee || 0);
     setSelectedSubscription(subscription);
     setEditForm({
       plan_id: subscription.plan_id || "",
       status: subscription.status,
       payment_status: subscription.payment_status,
       notes: subscription.notes || "",
+      monthly_fee: monthlyFee,
+      setup_fee: Number(subscription.setup_fee || 0),
     });
     setIsEditDialogOpen(true);
   }
 
   async function handleSave() {
     if (!selectedSubscription) return;
+    if (!Number.isFinite(editForm.monthly_fee) || editForm.monthly_fee < 0) {
+      toast.error("Informe uma mensalidade válida");
+      return;
+    }
+    if (!Number.isFinite(editForm.setup_fee) || editForm.setup_fee < 0) {
+      toast.error("Informe uma taxa de implantação válida");
+      return;
+    }
 
     try {
       const { error } = await supabase
@@ -156,6 +187,8 @@ export function SubscriptionsManagement() {
           status: editForm.status,
           payment_status: editForm.payment_status,
           notes: editForm.notes || null,
+          monthly_fee: editForm.monthly_fee,
+          setup_fee: editForm.setup_fee,
           current_period_start: editForm.status === 'active' ? new Date().toISOString() : selectedSubscription.current_period_start,
           current_period_end: editForm.status === 'active' 
             ? new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString() 
@@ -250,7 +283,10 @@ export function SubscriptionsManagement() {
   async function enableAsaas(subscription: Subscription) {
     if (!window.confirm(`Ativar cobrança Asaas para ${subscription.clinic?.name}?`)) return;
     try {
-      await asaasBillingService.createCheckout(subscription.id, false);
+      await asaasBillingService.createCheckout(
+        subscription.id,
+        Number(subscription.setup_fee || 0) > 0,
+      );
       toast.success("Cobrança Asaas ativada.");
       fetchData();
     } catch (error) {
@@ -511,7 +547,17 @@ export function SubscriptionsManagement() {
           <div className="space-y-4 py-4">
             <div className="space-y-2">
               <Label>Plano</Label>
-              <Select value={editForm.plan_id} onValueChange={(v) => setEditForm({ ...editForm, plan_id: v })}>
+              <Select
+                value={editForm.plan_id}
+                onValueChange={(v) => {
+                  const plan = plans.find((item) => item.id === v);
+                  setEditForm({
+                    ...editForm,
+                    plan_id: v,
+                    monthly_fee: plan ? planMonthlyPrice(plan) : 0,
+                  });
+                }}
+              >
                 <SelectTrigger>
                   <SelectValue placeholder="Selecione um plano" />
                 </SelectTrigger>
@@ -552,6 +598,35 @@ export function SubscriptionsManagement() {
                   <SelectItem value="failed">Falhou</SelectItem>
                 </SelectContent>
               </Select>
+            </div>
+
+            <div className="grid gap-4 sm:grid-cols-2">
+              <div className="space-y-2">
+                <Label htmlFor="subscription-monthly-fee">Mensalidade do plano (R$)</Label>
+                <Input
+                  id="subscription-monthly-fee"
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  value={editForm.monthly_fee}
+                  readOnly
+                  className="bg-muted"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="subscription-setup-fee">Taxa de implantação (R$)</Label>
+                <Input
+                  id="subscription-setup-fee"
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  value={editForm.setup_fee}
+                  onChange={(e) => setEditForm({
+                    ...editForm,
+                    setup_fee: Number(e.target.value),
+                  })}
+                />
+              </div>
             </div>
 
             <div className="space-y-2">
