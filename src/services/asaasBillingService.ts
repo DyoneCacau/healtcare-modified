@@ -26,7 +26,12 @@ export interface AsaasCheckout {
   subscriptionId: string;
   asaasSubscriptionId: string;
   billingType: "UNDEFINED";
+  billingDay: number;
+  nextDueDate: string | null;
+  prorationDays: number;
+  prorationAmount: number;
   recurringPaymentUrl: string | null;
+  prorationPaymentUrl: string | null;
   setupPaymentUrl: string | null;
 }
 
@@ -82,6 +87,8 @@ export const asaasBillingService = {
         payment_date?: string;
         invoice_url?: string;
         bank_slip_url?: string;
+        description?: string | null;
+        external_reference?: string | null;
       }>;
       has_more: boolean;
       total_count: number;
@@ -97,7 +104,12 @@ export const asaasBillingService = {
         status: payment.status,
         value: payment.value,
         dueDate: payment.due_date ?? "",
-        description: null,
+        description: payment.description
+          ?? (payment.external_reference?.includes(":proration")
+            ? "Período proporcional"
+            : payment.external_reference?.includes(":setup_fee")
+            ? "Taxa de adesão"
+            : null),
         billingType: payment.billing_type ?? "UNDEFINED",
         invoiceUrl: trustedPaymentUrl(payment.invoice_url),
         bankSlipUrl: trustedPaymentUrl(payment.bank_slip_url),
@@ -115,23 +127,51 @@ export const asaasBillingService = {
     });
   },
 
-  async createCheckout(subscriptionId: string, includeSetupFee: boolean): Promise<AsaasCheckout> {
+  async createCheckout(
+    subscriptionId: string,
+    includeSetupFee: boolean,
+    options?: {
+      billingDay?: number;
+      billingDeferDays?: number;
+      firstDueDate?: string | null;
+      scheduleFirstCharge?: boolean;
+    },
+  ): Promise<AsaasCheckout> {
+    const billingDay = options?.billingDay;
+    const billingDeferDays = options?.billingDeferDays;
+    const firstDueDate = options?.scheduleFirstCharge === false
+      ? null
+      : (options?.firstDueDate ?? null);
     const result = await invokeAsaas<{
       subscription_id: string;
       asaas_subscription_id: string;
       billing_type: "UNDEFINED";
+      billing_day?: number;
+      next_due_date?: string;
+      proration_days?: number;
+      proration_amount?: number;
       recurring_payment?: { invoice_url?: string; bank_slip_url?: string } | null;
+      proration_payment?: { invoice_url?: string; bank_slip_url?: string } | null;
       setup_payment?: { invoice_url?: string; bank_slip_url?: string } | null;
     }>("asaas-create-checkout", {
       subscription_id: subscriptionId,
       include_setup_fee: includeSetupFee,
+      ...(billingDay != null ? { billing_day: billingDay } : {}),
+      ...(billingDeferDays != null ? { billing_defer_days: billingDeferDays } : {}),
+      first_due_date: firstDueDate,
     });
     return {
       subscriptionId: result.subscription_id,
       asaasSubscriptionId: result.asaas_subscription_id,
       billingType: result.billing_type,
+      billingDay: result.billing_day ?? billingDay ?? 10,
+      nextDueDate: result.next_due_date ?? null,
+      prorationDays: result.proration_days ?? 0,
+      prorationAmount: result.proration_amount ?? 0,
       recurringPaymentUrl: trustedPaymentUrl(result.recurring_payment?.invoice_url)
         ?? trustedPaymentUrl(result.recurring_payment?.bank_slip_url),
+      prorationPaymentUrl: trustedPaymentUrl(result.proration_payment?.invoice_url)
+        ?? trustedPaymentUrl(result.proration_payment?.bank_slip_url),
       setupPaymentUrl: trustedPaymentUrl(result.setup_payment?.invoice_url)
         ?? trustedPaymentUrl(result.setup_payment?.bank_slip_url),
     };

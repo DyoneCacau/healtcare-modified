@@ -1818,6 +1818,9 @@ export type Database = {
           asaas_last_synced_at: string | null
           asaas_next_due_date: string | null
           asaas_subscription_id: string | null
+          billing_day: number
+          billing_defer_days: number
+          billing_first_due_date: string | null
           billing_mode: string
           billing_status: string | null
           clinic_id: string
@@ -1835,6 +1838,8 @@ export type Database = {
           payment_provider: string | null
           payment_status: string | null
           plan_id: string | null
+          proration_amount: number | null
+          proration_days: number | null
           setup_fee: number | null
           status: string
           trial_ends_at: string | null
@@ -1845,6 +1850,9 @@ export type Database = {
           asaas_last_synced_at?: string | null
           asaas_next_due_date?: string | null
           asaas_subscription_id?: string | null
+          billing_day?: number
+          billing_defer_days?: number
+          billing_first_due_date?: string | null
           billing_mode?: string
           billing_status?: string | null
           clinic_id: string
@@ -1862,6 +1870,8 @@ export type Database = {
           payment_provider?: string | null
           payment_status?: string | null
           plan_id?: string | null
+          proration_amount?: number | null
+          proration_days?: number | null
           setup_fee?: number | null
           status?: string
           trial_ends_at?: string | null
@@ -1872,6 +1882,9 @@ export type Database = {
           asaas_last_synced_at?: string | null
           asaas_next_due_date?: string | null
           asaas_subscription_id?: string | null
+          billing_day?: number
+          billing_defer_days?: number
+          billing_first_due_date?: string | null
           billing_mode?: string
           billing_status?: string | null
           clinic_id?: string
@@ -1889,6 +1902,8 @@ export type Database = {
           payment_provider?: string | null
           payment_status?: string | null
           plan_id?: string | null
+          proration_amount?: number | null
+          proration_days?: number | null
           setup_fee?: number | null
           status?: string
           trial_ends_at?: string | null

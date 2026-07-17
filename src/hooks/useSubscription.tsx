@@ -22,6 +22,9 @@ interface Subscription {
   billing_status: string | null;
   payment_method: BillingMethod | null;
   monthly_fee: number | null;
+  billing_day: number | null;
+  proration_days: number | null;
+  proration_amount: number | null;
   next_due_date: string | null;
   grace_period_ends_at: string | null;
   hosted_payment_url: string | null;
@@ -162,9 +165,14 @@ export function SubscriptionProvider({ children }: { children: ReactNode }) {
           billing_status,
           payment_status,
           payment_provider,
+          billing_mode,
           payment_method,
           monthly_fee,
+          billing_day,
+          proration_days,
+          proration_amount,
           asaas_next_due_date,
+          asaas_subscription_id,
           plans (
             id,
             name,
@@ -181,7 +189,16 @@ export function SubscriptionProvider({ children }: { children: ReactNode }) {
 
       if (subData) {
         const plan = subData.plans as unknown as Plan | null;
-        const provider: BillingProvider = subData.payment_provider === 'asaas' ? 'asaas' : 'manual';
+        const row = subData as typeof subData & {
+          billing_mode?: string | null;
+          asaas_subscription_id?: string | null;
+        };
+        const provider: BillingProvider =
+          row.billing_mode === "asaas"
+          || row.payment_provider === "asaas"
+          || Boolean(row.asaas_subscription_id)
+            ? "asaas"
+            : "manual";
         const billingStatus = subData.billing_status ?? subData.payment_status ?? null;
         setSubscription({
           id: subData.id,
@@ -192,6 +209,9 @@ export function SubscriptionProvider({ children }: { children: ReactNode }) {
           billing_status: billingStatus,
           payment_method: subData.payment_method as BillingMethod | null,
           monthly_fee: subData.monthly_fee ?? null,
+          billing_day: subData.billing_day ?? null,
+          proration_days: subData.proration_days ?? null,
+          proration_amount: subData.proration_amount ?? null,
           next_due_date: subData.asaas_next_due_date ?? subData.current_period_end ?? null,
           grace_period_ends_at: null,
           hosted_payment_url: null,

@@ -7,6 +7,7 @@ import {
   asaasBillingService,
   type AsaasInvoice,
 } from "@/services/asaasBillingService";
+import { buildProrationPreview, DEFAULT_BILLING_DAY } from "@/lib/billingDay";
 import { AlertTriangle, CalendarDays, CreditCard, ExternalLink, RefreshCw, ReceiptText } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
@@ -27,7 +28,8 @@ function statusLabel(status: string) {
   return labels[status.toLowerCase()] ?? status;
 }
 
-export default function Billing() {
+/** Conteúdo de cobrança (sem layout) — usado em Administração e na rota /billing. */
+export function BillingContent() {
   const { subscription, plan, isLoading: subscriptionLoading, refreshSubscription } = useSubscription();
   const [invoices, setInvoices] = useState<AsaasInvoice[]>([]);
   const [loading, setLoading] = useState(true);
@@ -92,100 +94,143 @@ export default function Billing() {
     ?? subscription?.current_period_end
     ?? null;
   const monthlyFee = subscription?.monthly_fee;
+  const billingDay = subscription?.billing_day ?? DEFAULT_BILLING_DAY;
+  const prorationNotice = monthlyFee != null && monthlyFee > 0
+    && subscription?.proration_days
+    && subscription.proration_days > 0
+    && subscription.proration_amount
+    && subscription.proration_amount > 0
+    ? buildProrationPreview(monthlyFee, billingDay).summary
+    : null;
   const method = subscription?.payment_method;
   const canPay = Boolean(subscription?.can_pay && invoices.some((invoice) => invoice.canPay));
   const canRegularize = Boolean(subscription?.can_regularize && invoices.some((invoice) => invoice.canPay));
   const canCancel = subscription?.can_cancel ?? false;
+  const prorationInvoice = invoices.find((invoice) =>
+    invoice.canPay && invoice.description?.toLowerCase().includes("proporcional")
+  ) ?? invoices.find((invoice) => invoice.canPay);
 
   return (
-    <MainLayout>
-      <div className="max-w-5xl mx-auto p-4 md:p-8 space-y-6">
-        <Card>
-          <CardHeader>
-            <div className="flex flex-wrap items-center justify-between gap-3">
-              <CardTitle className="flex items-center gap-2">
-                <CreditCard className="h-5 w-5 text-primary" />
-                Assinatura e cobrança
-              </CardTitle>
-              <Badge variant={provider === "asaas" ? "default" : "secondary"}>
-                {provider === "asaas" ? "Cobrança Asaas" : "Cobrança manual"}
-              </Badge>
-            </div>
-          </CardHeader>
-          <CardContent>
-            {subscriptionLoading || loading ? (
-              <div className="py-10 text-center text-muted-foreground">Carregando cobrança...</div>
-            ) : !subscription ? (
-              <p className="text-muted-foreground">Nenhuma assinatura vinculada à clínica selecionada.</p>
-            ) : (
-              <div className="space-y-5">
-                <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-                  <div><p className="text-xs text-muted-foreground">Plano</p><p className="font-medium">{plan?.name ?? "Sem plano"}</p></div>
-                  <div><p className="text-xs text-muted-foreground">Status</p><Badge variant={billingStatus === "overdue" ? "destructive" : "outline"}>{statusLabel(billingStatus)}</Badge></div>
-                  <div><p className="text-xs text-muted-foreground">Próximo vencimento</p><p className="font-medium flex items-center gap-1"><CalendarDays className="h-4 w-4" />{formatDate(nextDueDate)}</p></div>
-                  <div><p className="text-xs text-muted-foreground">Mensalidade</p><p className="font-medium">{monthlyFee == null ? "Não informada" : currency.format(monthlyFee)}</p></div>
-                </div>
-                <div className="rounded-lg bg-muted p-4 text-sm">
-                  Método: <strong>{method ? statusLabel(method.replace("_", " ")) : provider === "asaas" ? "Escolhido no checkout" : "Não definido"}</strong>.
-                  {provider === "asaas" && " O pagamento ocorre somente na página hospedada e segura do Asaas."}
-                </div>
-                <div className="flex flex-wrap gap-2">
-                  {(canPay || canRegularize) && (
-                    <Button onClick={() => openPayment()} disabled={action !== null}>
-                      <ExternalLink className="mr-2 h-4 w-4" />
-                      {canRegularize ? "Regularizar assinatura" : "Pagar agora"}
-                    </Button>
-                  )}
-                  {canCancel && (
-                    <Button variant="outline" onClick={cancelBilling} disabled={action !== null}>
-                      Cancelar assinatura
-                    </Button>
-                  )}
-                  <Button variant="ghost" onClick={() => Promise.all([loadBilling(), refreshSubscription()])}>
-                    <RefreshCw className="mr-2 h-4 w-4" /> Atualizar
-                  </Button>
-                </div>
+    <div className="space-y-6">
+      <Card>
+        <CardHeader>
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <CardTitle className="flex items-center gap-2">
+              <CreditCard className="h-5 w-5 text-primary" />
+              Assinatura e cobrança
+            </CardTitle>
+            <Badge variant={provider === "asaas" ? "default" : "secondary"}>
+              {provider === "asaas" ? "Cobrança Asaas" : "Cobrança manual"}
+            </Badge>
+          </div>
+        </CardHeader>
+        <CardContent>
+          {subscriptionLoading || loading ? (
+            <div className="py-10 text-center text-muted-foreground">Carregando cobrança...</div>
+          ) : !subscription ? (
+            <p className="text-muted-foreground">Nenhuma assinatura vinculada à clínica selecionada.</p>
+          ) : (
+            <div className="space-y-5">
+              <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
+                <div><p className="text-xs text-muted-foreground">Plano</p><p className="font-medium">{plan?.name ?? "Sem plano"}</p></div>
+                <div><p className="text-xs text-muted-foreground">Status</p><Badge variant={billingStatus === "overdue" ? "destructive" : "outline"}>{statusLabel(billingStatus)}</Badge></div>
+                <div><p className="text-xs text-muted-foreground">Dia de vencimento</p><p className="font-medium">Todo dia {billingDay}</p></div>
+                <div><p className="text-xs text-muted-foreground">Próximo vencimento</p><p className="font-medium flex items-center gap-1"><CalendarDays className="h-4 w-4" />{formatDate(nextDueDate)}</p></div>
+                <div><p className="text-xs text-muted-foreground">Mensalidade</p><p className="font-medium">{monthlyFee == null ? "Não informada" : currency.format(monthlyFee)}</p></div>
               </div>
-            )}
-          </CardContent>
-        </Card>
-
-        {provider === "asaas" && (
-          <Card>
-            <CardHeader><CardTitle className="flex items-center gap-2"><ReceiptText className="h-5 w-5" />Faturas</CardTitle></CardHeader>
-            <CardContent className="space-y-3">
-              {loadError ? (
-                <p className="text-sm text-destructive" role="alert">{loadError}</p>
-              ) : invoices.length === 0 ? (
-                <p className="text-sm text-muted-foreground">Nenhuma fatura disponível.</p>
-              ) : invoices.map((invoice) => (
-                <div key={invoice.id} className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 rounded-lg border p-4">
-                  <div>
-                    <div className="flex items-center gap-2"><strong>{currency.format(invoice.value)}</strong><Badge variant={invoice.status === "OVERDUE" ? "destructive" : "secondary"}>{statusLabel(invoice.status)}</Badge></div>
-                    <p className="text-sm text-muted-foreground">Vencimento: {formatDate(invoice.dueDate)} · {invoice.billingType}</p>
-                  </div>
-                  {invoice.canPay && (
-                    <Button size="sm" variant="outline" onClick={() => openPayment(invoice)} disabled={action !== null}>
-                      <ExternalLink className="mr-2 h-4 w-4" /> Abrir cobrança
+              {provider === "asaas" && (prorationNotice || subscription?.proration_amount) && (
+                <div className="rounded-lg border border-amber-200 bg-amber-50 dark:bg-amber-950/30 p-4 text-sm space-y-2">
+                  <p className="font-medium">Cobrança proporcional da adesão</p>
+                  <p>
+                    {prorationNotice
+                      ?? `Valor proporcional: ${currency.format(subscription!.proration_amount!)} (${subscription!.proration_days} dias). Mensalidade cheia de ${currency.format(monthlyFee!)} a partir do dia ${billingDay}.`}
+                  </p>
+                  {subscription?.proration_amount != null && (
+                    <p className="text-muted-foreground">
+                      Proporcional registrado: {currency.format(subscription.proration_amount)}
+                      {subscription.proration_days ? ` · ${subscription.proration_days} dias` : ""}.
+                    </p>
+                  )}
+                  {prorationInvoice?.canPay && (
+                    <Button size="sm" onClick={() => openPayment(prorationInvoice)} disabled={action !== null}>
+                      <ExternalLink className="mr-2 h-4 w-4" /> Pagar proporcional agora
                     </Button>
                   )}
                 </div>
-              ))}
-            </CardContent>
-          </Card>
-        )}
+              )}
+              <div className="rounded-lg bg-muted p-4 text-sm">
+                Método: <strong>{method ? statusLabel(method.replace("_", " ")) : provider === "asaas" ? "Escolhido no checkout" : "Não definido"}</strong>.
+                {provider === "asaas" && " O pagamento ocorre somente na página hospedada e segura do Asaas."}
+              </div>
+              <div className="flex flex-wrap gap-2">
+                {(canPay || canRegularize) && (
+                  <Button onClick={() => openPayment()} disabled={action !== null}>
+                    <ExternalLink className="mr-2 h-4 w-4" />
+                    {canRegularize ? "Regularizar assinatura" : "Pagar agora"}
+                  </Button>
+                )}
+                {canCancel && (
+                  <Button variant="outline" onClick={cancelBilling} disabled={action !== null}>
+                    Cancelar assinatura
+                  </Button>
+                )}
+                <Button variant="ghost" onClick={() => Promise.all([loadBilling(), refreshSubscription()])}>
+                  <RefreshCw className="mr-2 h-4 w-4" /> Atualizar
+                </Button>
+              </div>
+            </div>
+          )}
+        </CardContent>
+      </Card>
 
-        {provider === "manual" && (
-          <Card>
-            <CardContent className="pt-6 flex gap-3">
-              <AlertTriangle className="h-5 w-5 text-amber-600 shrink-0" />
-              <p className="text-sm text-muted-foreground">
-                Esta assinatura é administrada manualmente. Para pagar, regularizar ou cancelar, contate
-                {" "}{import.meta.env.VITE_SUPPORT_EMAIL || "suporte@octupuzz.com.br"}.
-              </p>
+      {provider === "asaas" && (
+        <Card>
+          <CardHeader><CardTitle className="flex items-center gap-2"><ReceiptText className="h-5 w-5" />Faturas</CardTitle></CardHeader>
+          <CardContent className="space-y-3">
+            {loadError ? (
+              <p className="text-sm text-destructive" role="alert">{loadError}</p>
+            ) : invoices.length === 0 ? (
+              <p className="text-sm text-muted-foreground">Nenhuma fatura disponível.</p>
+            ) : invoices.map((invoice) => (
+              <div key={invoice.id} className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 rounded-lg border p-4">
+                <div>
+                  <div className="flex items-center gap-2"><strong>{currency.format(invoice.value)}</strong><Badge variant={invoice.status === "OVERDUE" ? "destructive" : "secondary"}>{statusLabel(invoice.status)}</Badge></div>
+                  <p className="text-sm text-muted-foreground">
+                    {invoice.description ? `${invoice.description} · ` : ""}
+                    Vencimento: {formatDate(invoice.dueDate)} · {invoice.billingType}
+                  </p>
+                </div>
+                {invoice.canPay && (
+                  <Button size="sm" variant="outline" onClick={() => openPayment(invoice)} disabled={action !== null}>
+                    <ExternalLink className="mr-2 h-4 w-4" /> Abrir cobrança
+                  </Button>
+                )}
+              </div>
+            ))}
           </CardContent>
         </Card>
-        )}
+      )}
+
+      {provider === "manual" && (
+        <Card>
+          <CardContent className="pt-6 flex gap-3">
+            <AlertTriangle className="h-5 w-5 text-amber-600 shrink-0" />
+            <p className="text-sm text-muted-foreground">
+              Esta assinatura é administrada manualmente. Para pagar, regularizar ou cancelar, contate
+              {" "}{import.meta.env.VITE_SUPPORT_EMAIL || "suporte@octupuzz.com.br"}.
+            </p>
+          </CardContent>
+        </Card>
+      )}
+    </div>
+  );
+}
+
+export default function Billing() {
+  return (
+    <MainLayout>
+      <div className="max-w-5xl mx-auto p-4 md:p-8">
+        <BillingContent />
       </div>
     </MainLayout>
   );

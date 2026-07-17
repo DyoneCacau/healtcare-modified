@@ -11,6 +11,11 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { asaasBillingService, type BillingProvider } from "@/services/asaasBillingService";
+import {
+  DEFAULT_BILLING_DAY,
+  defaultPromoFirstDueDate,
+} from "@/lib/billingDay";
+import { BillingScheduleFields } from "@/components/superadmin/BillingScheduleFields";
 import { Building2, Plus, CheckCircle } from "lucide-react";
 
 interface ClinicFormData {
@@ -62,6 +67,16 @@ const initialClinic: ClinicFormData = {
   email: "",
 };
 
+function parseMoneyInput(value: string): number {
+  const trimmed = value.trim();
+  if (!trimmed) return 0;
+  const normalized = trimmed.includes(",")
+    ? trimmed.replace(/\./g, "").replace(",", ".")
+    : trimmed;
+  const n = Number(normalized);
+  return Number.isFinite(n) && n >= 0 ? n : 0;
+}
+
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null;
 }
@@ -79,7 +94,10 @@ export function AddClinicToClient() {
   const [loading, setLoading] = useState(false);
   const [adminEmail, setAdminEmail] = useState("");
   const [adminFound, setAdminFound] = useState<FoundAdmin | null>(null);
-  const [setupFee, setSetupFee] = useState(0);
+  const [setupFee, setSetupFee] = useState("");
+  const [billingDay, setBillingDay] = useState(DEFAULT_BILLING_DAY);
+  const [scheduleFirstCharge, setScheduleFirstCharge] = useState(false);
+  const [firstDueDate, setFirstDueDate] = useState(defaultPromoFirstDueDate());
   const [billingProvider, setBillingProvider] = useState<BillingProvider>("asaas");
   const [formData, setFormData] = useState<ClinicFormData>(initialClinic);
 
@@ -201,7 +219,10 @@ export function AddClinicToClient() {
             zipcode: formData.zipcode || null,
             phone: formData.phone || null,
             email: formData.email || null,
-            setupFee,
+            setupFee: parseMoneyInput(setupFee),
+            billingDay,
+            billingDeferDays: 0,
+            billingFirstDueDate: scheduleFirstCharge ? firstDueDate : null,
             billingProvider,
           },
         },
@@ -213,7 +234,15 @@ export function AddClinicToClient() {
       let asaasFailed = false;
       if (billingProvider === "asaas") {
         try {
-          await asaasBillingService.createCheckout(data.subscription_id, setupFee > 0);
+          await asaasBillingService.createCheckout(
+            data.subscription_id,
+            parseMoneyInput(setupFee) > 0,
+            {
+              billingDay,
+              scheduleFirstCharge,
+              firstDueDate: scheduleFirstCharge ? firstDueDate : null,
+            },
+          );
         } catch {
           asaasFailed = true;
         }
@@ -233,7 +262,10 @@ export function AddClinicToClient() {
       setFormData(initialClinic);
       setAdminFound(null);
       setAdminEmail("");
-      setSetupFee(0);
+      setSetupFee("");
+      setBillingDay(DEFAULT_BILLING_DAY);
+      setScheduleFirstCharge(false);
+      setFirstDueDate(defaultPromoFirstDueDate());
       setBillingProvider("asaas");
     } catch (err: unknown) {
       toast.error(err instanceof Error ? err.message : "Erro ao criar unidade");
@@ -376,11 +408,11 @@ export function AddClinicToClient() {
                   <div className="space-y-2">
                     <Label>Taxa de adesão desta unidade (R$)</Label>
                     <Input
-                      type="number"
-                      min="0"
-                      step="0.01"
+                      type="text"
+                      inputMode="decimal"
                       value={setupFee}
-                      onChange={(e) => setSetupFee(Number(e.target.value) || 0)}
+                      onChange={(e) => setSetupFee(e.target.value.replace(/[^\d.,]/g, ""))}
+                      placeholder="0,00"
                     />
                   </div>
                   <div className="space-y-2">
@@ -393,6 +425,21 @@ export function AddClinicToClient() {
                     />
                   </div>
                 </div>
+                {billingProvider === "asaas" && (
+                  <BillingScheduleFields
+                    monthlyFee={adminFound.monthly_fee}
+                    value={{
+                      billingDay,
+                      scheduleFirstCharge,
+                      firstDueDate,
+                    }}
+                    onChange={(next) => {
+                      setBillingDay(next.billingDay);
+                      setScheduleFirstCharge(next.scheduleFirstCharge);
+                      setFirstDueDate(next.firstDueDate);
+                    }}
+                  />
+                )}
                 <div className="space-y-2">
                   <Label>CEP</Label>
                   <Input

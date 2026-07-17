@@ -4,7 +4,7 @@
 // ============================================================================
 
 import { useEffect, useState } from "react";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -20,6 +20,21 @@ import {
   type BillingProvider,
 } from "@/services/asaasBillingService";
 import { parsePlanFeatures } from "@/lib/planFeatures";
+import {
+  DEFAULT_BILLING_DAY,
+  defaultPromoFirstDueDate,
+} from "@/lib/billingDay";
+import { BillingScheduleFields } from "@/components/superadmin/BillingScheduleFields";
+
+function parseMoneyInput(value: string): number {
+  const trimmed = value.trim();
+  if (!trimmed) return 0;
+  const normalized = trimmed.includes(",")
+    ? trimmed.replace(/\./g, "").replace(",", ".")
+    : trimmed;
+  const n = Number(normalized);
+  return Number.isFinite(n) && n >= 0 ? n : 0;
+}
 
 // Lista completa de módulos disponíveis (chaves alinhadas com PlansManagement)
 const AVAILABLE_MODULES = [
@@ -67,7 +82,10 @@ interface CreateClientData {
   planId: string;
   modules: string[];
   monthlyFee: number;
-  setupFee: number;
+  setupFee: string;
+  billingDay: number;
+  scheduleFirstCharge: boolean;
+  firstDueDate: string;
   adminNotes: string;
   billingProvider: BillingProvider;
 }
@@ -144,7 +162,10 @@ export function CreateCompleteClient() {
     planId: "",
     modules: ['dashboard'], // Dashboard sempre incluído
     monthlyFee: 0,
-    setupFee: 0,
+    setupFee: "",
+    billingDay: DEFAULT_BILLING_DAY,
+    scheduleFirstCharge: false,
+    firstDueDate: defaultPromoFirstDueDate(),
     adminNotes: "",
     billingProvider: "manual",
   });
@@ -258,7 +279,7 @@ export function CreateCompleteClient() {
       }
 
       // A Edge Function valida o superadmin e executa toda a criação com service role.
-      const { data, error } = await supabase.functions.invoke<CreateCompleteClientResult>(
+      const { data, error } = await supabase.functions.invoke<CreateCompleteClientResult | { error?: string }>(
         "create-complete-client",
         {
           body: {
@@ -270,14 +291,20 @@ export function CreateCompleteClient() {
             planId: formData.planId,
             modules: formData.modules,
             monthlyFee: formData.monthlyFee,
-            setupFee: formData.setupFee,
+            setupFee: parseMoneyInput(formData.setupFee),
+            billingDay: formData.billingDay,
+            billingDeferDays: 0,
+            billingFirstDueDate: formData.scheduleFirstCharge ? formData.firstDueDate : null,
             adminNotes: formData.adminNotes,
           },
         },
       );
 
       if (error) throw new Error(await getFunctionErrorMessage(error));
-      if (!data || !Array.isArray(data.clinics)) {
+      if (isRecord(data) && typeof data.error === "string") {
+        throw new Error(data.error);
+      }
+      if (!data || !("clinics" in data) || !Array.isArray(data.clinics)) {
         throw new Error("Resposta inválida ao criar o cliente");
       }
 
@@ -285,7 +312,15 @@ export function CreateCompleteClient() {
       if (formData.billingProvider === "asaas") {
         const checkoutResults = await Promise.allSettled(
           data.clinics.map(({ subscription_id }) =>
-            asaasBillingService.createCheckout(subscription_id, formData.setupFee > 0)
+            asaasBillingService.createCheckout(
+              subscription_id,
+              parseMoneyInput(formData.setupFee) > 0,
+              {
+                billingDay: formData.billingDay,
+                scheduleFirstCharge: formData.scheduleFirstCharge,
+                firstDueDate: formData.scheduleFirstCharge ? formData.firstDueDate : null,
+              },
+            )
           ),
         );
         failedCheckouts = checkoutResults.filter(result => result.status === "rejected").length;
@@ -321,7 +356,10 @@ export function CreateCompleteClient() {
         planId: "",
         modules: ['dashboard'],
         monthlyFee: 0,
-        setupFee: 0,
+        setupFee: "",
+        billingDay: DEFAULT_BILLING_DAY,
+        scheduleFirstCharge: false,
+        firstDueDate: defaultPromoFirstDueDate(),
         adminNotes: "",
         billingProvider: "manual",
       });
@@ -351,6 +389,9 @@ export function CreateCompleteClient() {
       <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>Criar Cliente Completo</DialogTitle>
+          <DialogDescription>
+            Cadastre o administrador, clínicas, plano, módulos e cobrança em um único fluxo.
+          </DialogDescription>
         </DialogHeader>
 
         <form onSubmit={handleSubmit} className="space-y-6">
@@ -675,11 +716,14 @@ export function CreateCompleteClient() {
                   <Label htmlFor="setupFee">Taxa de Adesão (R$)</Label>
                   <Input
                     id="setupFee"
-                    type="number"
-                    step="0.01"
+                    type="text"
+                    inputMode="decimal"
                     value={formData.setupFee}
-                    onChange={(e) => setFormData(prev => ({ ...prev, setupFee: parseFloat(e.target.value) || 0 }))}
-                    placeholder="0.00"
+                    onChange={(e) => {
+                      const raw = e.target.value.replace(/[^\d.,]/g, "");
+                      setFormData((prev) => ({ ...prev, setupFee: raw }));
+                    }}
+                    placeholder="0,00"
                   />
                 </div>
 
@@ -695,6 +739,25 @@ export function CreateCompleteClient() {
                   />
                 </div>
               </div>
+
+              {formData.billingProvider === "asaas" && (
+                <BillingScheduleFields
+                  monthlyFee={formData.monthlyFee}
+                  value={{
+                    billingDay: formData.billingDay,
+                    scheduleFirstCharge: formData.scheduleFirstCharge,
+                    firstDueDate: formData.firstDueDate,
+                  }}
+                  onChange={(next) =>
+                    setFormData((prev) => ({
+                      ...prev,
+                      billingDay: next.billingDay,
+                      scheduleFirstCharge: next.scheduleFirstCharge,
+                      firstDueDate: next.firstDueDate,
+                    }))
+                  }
+                />
+              )}
 
               <div className="space-y-2">
                 <Label htmlFor="adminNotes">Notas Administrativas (uso interno)</Label>

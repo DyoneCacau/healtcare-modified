@@ -39,6 +39,14 @@ import { Search, CreditCard, MoreHorizontal, CheckCircle, XCircle, Clock, Play, 
 import { format, formatDistanceToNow, isPast } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { asaasBillingService, type BillingMethod, type BillingProvider } from "@/services/asaasBillingService";
+import {
+  DEFAULT_BILLING_DAY,
+  buildBillingSchedulePreview,
+  defaultPromoFirstDueDate,
+  isIsoDate,
+  resolveFirstDueDate,
+} from "@/lib/billingDay";
+import { BillingScheduleFields } from "@/components/superadmin/BillingScheduleFields";
 
 interface Plan {
   id: string;
@@ -71,6 +79,9 @@ interface Subscription {
   created_at: string;
   monthly_fee: number | null;
   setup_fee: number | null;
+  billing_day: number | null;
+  billing_defer_days: number | null;
+  billing_first_due_date: string | null;
   billing_provider: BillingProvider;
   payment_method: BillingMethod | null;
   clinic: {
@@ -99,8 +110,21 @@ export function SubscriptionsManagement() {
     payment_status: "",
     notes: "",
     monthly_fee: 0,
-    setup_fee: 0,
+    setup_fee: "",
+    billing_day: DEFAULT_BILLING_DAY,
+    schedule_first_charge: false,
+    first_due_date: defaultPromoFirstDueDate(),
   });
+
+  function parseMoneyInput(value: string): number {
+    const trimmed = value.trim();
+    if (!trimmed) return 0;
+    const normalized = trimmed.includes(",")
+      ? trimmed.replace(/\./g, "").replace(",", ".")
+      : trimmed;
+    const n = Number(normalized);
+    return Number.isFinite(n) && n >= 0 ? n : 0;
+  }
 
   useEffect(() => {
     fetchData();
@@ -131,8 +155,14 @@ export function SubscriptionsManagement() {
           clinics?: { name: string; email: string };
           plans?: Plan;
         };
+        const billingDayRaw = (s as { billing_day?: number | null }).billing_day;
+        const deferRaw = (s as { billing_defer_days?: number | null }).billing_defer_days;
+        const firstDueRaw = (s as { billing_first_due_date?: string | null }).billing_first_due_date;
         return {
           ...s,
+          billing_day: billingDayRaw ?? DEFAULT_BILLING_DAY,
+          billing_defer_days: deferRaw === 30 || deferRaw === 60 ? deferRaw : 0,
+          billing_first_due_date: isIsoDate(firstDueRaw) ? firstDueRaw : null,
           billing_provider: row.billing_mode === "asaas"
             || row.payment_provider === "asaas"
             || Boolean(row.asaas_subscription_id)
@@ -156,6 +186,15 @@ export function SubscriptionsManagement() {
     const monthlyFee = subscription.plan
       ? planMonthlyPrice(subscription.plan)
       : Number(subscription.monthly_fee || 0);
+    const billingDay = subscription.billing_day ?? DEFAULT_BILLING_DAY;
+    const hasFirstDue = isIsoDate(subscription.billing_first_due_date);
+    const legacyDefer = subscription.billing_defer_days === 30 || subscription.billing_defer_days === 60
+      ? subscription.billing_defer_days
+      : 0;
+    const scheduleFirstCharge = hasFirstDue || legacyDefer > 0;
+    const firstDue = hasFirstDue
+      ? subscription.billing_first_due_date!
+      : resolveFirstDueDate(billingDay, { deferDays: legacyDefer });
     setSelectedSubscription(subscription);
     setEditForm({
       plan_id: subscription.plan_id || "",
@@ -163,7 +202,12 @@ export function SubscriptionsManagement() {
       payment_status: subscription.payment_status,
       notes: subscription.notes || "",
       monthly_fee: monthlyFee,
-      setup_fee: Number(subscription.setup_fee || 0),
+      setup_fee: subscription.setup_fee != null && Number(subscription.setup_fee) > 0
+        ? String(subscription.setup_fee).replace(".", ",")
+        : "",
+      billing_day: billingDay,
+      schedule_first_charge: scheduleFirstCharge,
+      first_due_date: firstDue,
     });
     setIsEditDialogOpen(true);
   }
@@ -174,7 +218,8 @@ export function SubscriptionsManagement() {
       toast.error("Informe uma mensalidade válida");
       return;
     }
-    if (!Number.isFinite(editForm.setup_fee) || editForm.setup_fee < 0) {
+    const setupFeeValue = parseMoneyInput(editForm.setup_fee);
+    if (editForm.setup_fee.trim() !== "" && !Number.isFinite(setupFeeValue)) {
       toast.error("Informe uma taxa de implantação válida");
       return;
     }
@@ -188,7 +233,10 @@ export function SubscriptionsManagement() {
           payment_status: editForm.payment_status,
           notes: editForm.notes || null,
           monthly_fee: editForm.monthly_fee,
-          setup_fee: editForm.setup_fee,
+          setup_fee: setupFeeValue,
+          billing_day: editForm.billing_day,
+          billing_defer_days: 0,
+          billing_first_due_date: editForm.schedule_first_charge ? editForm.first_due_date : null,
           current_period_start: editForm.status === 'active' ? new Date().toISOString() : selectedSubscription.current_period_start,
           current_period_end: editForm.status === 'active' 
             ? new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString() 
@@ -281,13 +329,44 @@ export function SubscriptionsManagement() {
   }
 
   async function enableAsaas(subscription: Subscription) {
-    if (!window.confirm(`Ativar cobrança Asaas para ${subscription.clinic?.name}?`)) return;
+    const billingDay = subscription.billing_day ?? DEFAULT_BILLING_DAY;
+    const hasFirstDue = isIsoDate(subscription.billing_first_due_date);
+    const legacyDefer = subscription.billing_defer_days === 30 || subscription.billing_defer_days === 60
+      ? subscription.billing_defer_days
+      : 0;
+    const scheduleFirstCharge = hasFirstDue || legacyDefer > 0;
+    const firstDueDate = hasFirstDue
+      ? subscription.billing_first_due_date
+      : (legacyDefer > 0 ? resolveFirstDueDate(billingDay, { deferDays: legacyDefer }) : null);
+    const monthly = Number(subscription.monthly_fee || 0)
+      || (subscription.plan ? planMonthlyPrice(subscription.plan) : 0);
+    const preview = buildBillingSchedulePreview(monthly, billingDay, {
+      scheduleFirstCharge,
+      firstDueDate,
+    });
+    if (!window.confirm(
+      `Ativar cobrança Asaas para ${subscription.clinic?.name}?\n\n${preview.summary}`,
+    )) return;
     try {
-      await asaasBillingService.createCheckout(
+      const checkout = await asaasBillingService.createCheckout(
         subscription.id,
         Number(subscription.setup_fee || 0) > 0,
+        {
+          billingDay,
+          scheduleFirstCharge,
+          firstDueDate,
+        },
       );
-      toast.success("Cobrança Asaas ativada.");
+      const payUrl =
+        checkout.prorationPaymentUrl
+        ?? checkout.setupPaymentUrl
+        ?? checkout.recurringPaymentUrl;
+      toast.success(
+        payUrl
+          ? "Cobrança Asaas ativada. Abrindo o link de pagamento..."
+          : "Cobrança Asaas ativada. O cliente vê as faturas em Configurações → Minha Cobrança.",
+      );
+      if (payUrl) window.open(payUrl, "_blank", "noopener,noreferrer");
       fetchData();
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Erro ao ativar cobrança Asaas.");
@@ -461,7 +540,7 @@ export function SubscriptionsManagement() {
                         )}
                       </div>
                     </TableCell>
-                    <TableCell>{getPaymentBadge(sub.payment_status)}</TableCell>
+                    <TableCell>{getPaymentBadge(sub.billing_status || sub.payment_status)}</TableCell>
                     <TableCell>
                       {sub.current_period_end ? (
                         <span className="text-sm">
@@ -622,17 +701,34 @@ export function SubscriptionsManagement() {
                 <Label htmlFor="subscription-setup-fee">Taxa de implantação (R$)</Label>
                 <Input
                   id="subscription-setup-fee"
-                  type="number"
-                  min="0"
-                  step="0.01"
+                  type="text"
+                  inputMode="decimal"
                   value={editForm.setup_fee}
                   onChange={(e) => setEditForm({
                     ...editForm,
-                    setup_fee: Number(e.target.value),
+                    setup_fee: e.target.value.replace(/[^\d.,]/g, ""),
                   })}
+                  placeholder="0,00"
                 />
               </div>
             </div>
+
+            <BillingScheduleFields
+              monthlyFee={editForm.monthly_fee}
+              value={{
+                billingDay: editForm.billing_day,
+                scheduleFirstCharge: editForm.schedule_first_charge,
+                firstDueDate: editForm.first_due_date,
+              }}
+              onChange={(next) =>
+                setEditForm({
+                  ...editForm,
+                  billing_day: next.billingDay,
+                  schedule_first_charge: next.scheduleFirstCharge,
+                  first_due_date: next.firstDueDate,
+                })
+              }
+            />
 
             <div className="space-y-2">
               <Label>Observações</Label>

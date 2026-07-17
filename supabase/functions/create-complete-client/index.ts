@@ -4,8 +4,20 @@ const MAX_BODY_BYTES = 64_000
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
 const AVAILABLE_MODULES = new Set([
-  'dashboard', 'agenda', 'pacientes', 'profissionais', 'financeiro', 'comissoes',
-  'estoque', 'relatorios', 'ponto', 'administracao', 'termos',
+  'dashboard',
+  'agenda',
+  'pacientes',
+  'pacientes_basico',
+  'profissionais',
+  'financeiro',
+  'financeiro_basico',
+  'comissoes',
+  'estoque',
+  'relatorios',
+  'ponto',
+  'administracao',
+  'termos',
+  'multi_clinica',
 ])
 
 interface ClinicInput {
@@ -31,6 +43,9 @@ interface ClientInput {
   planId: string
   modules: string[]
   setupFee: number
+  billingDay: number
+  billingDeferDays: number
+  billingFirstDueDate: string | null
   adminNotes: string | null
 }
 
@@ -79,8 +94,10 @@ function json(req: Request, body: unknown, status = 200): Response {
 
 function assertAllowedOrigin(req: Request): void {
   const requestOrigin = req.headers.get('origin')
-  if (requestOrigin && requestOrigin !== configuredOrigin()) {
-    throw new HttpError(403, 'Origem não autorizada')
+  if (!requestOrigin) return
+  const allowed = configuredOrigin()
+  if (requestOrigin !== allowed) {
+    throw new HttpError(403, `Origem não autorizada. Use APP_URL=${allowed}`)
   }
 }
 
@@ -203,6 +220,34 @@ function validatePayload(value: unknown): ClientInput {
   }))]
   if (!modules.includes('dashboard')) throw new HttpError(400, 'O módulo Dashboard é obrigatório')
 
+  const rawBillingDay = body.billingDay
+  let billingDay = 10
+  if (rawBillingDay !== undefined && rawBillingDay !== null && rawBillingDay !== '') {
+    if (typeof rawBillingDay !== 'number' || !Number.isInteger(rawBillingDay) || rawBillingDay < 1 || rawBillingDay > 28) {
+      throw new HttpError(400, 'Dia de vencimento inválido (use 1 a 28)')
+    }
+    billingDay = rawBillingDay
+  }
+
+  const rawDefer = body.billingDeferDays
+  let billingDeferDays = 0
+  if (rawDefer !== undefined && rawDefer !== null && rawDefer !== '') {
+    if (typeof rawDefer !== 'number' || ![0, 30, 60].includes(rawDefer)) {
+      throw new HttpError(400, 'Atraso da cobrança inválido (use 0, 30 ou 60)')
+    }
+    billingDeferDays = rawDefer
+  }
+
+  let billingFirstDueDate: string | null = null
+  const rawFirstDue = body.billingFirstDueDate
+  if (typeof rawFirstDue === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(rawFirstDue)) {
+    const today = new Date().toISOString().slice(0, 10)
+    if (rawFirstDue <= today) {
+      throw new HttpError(400, 'A data da 1ª mensalidade deve ser futura')
+    }
+    billingFirstDueDate = rawFirstDue
+  }
+
   return {
     adminName,
     adminEmail,
@@ -212,8 +257,32 @@ function validatePayload(value: unknown): ClientInput {
     planId,
     modules,
     setupFee: validMoney(body.setupFee, 'Taxa de adesão'),
+    billingDay,
+    billingDeferDays,
+    billingFirstDueDate,
     adminNotes: optionalString(body.adminNotes, 'Notas administrativas', 2_000),
   }
+}
+
+function dbErrorMessage(
+  step: string,
+  error: { message?: string; code?: string; details?: string; hint?: string } | null,
+): string {
+  const parts = [step, error?.code, error?.message, error?.details, error?.hint]
+    .filter((part): part is string => Boolean(part && String(part).trim()))
+  return parts.join(' | ')
+}
+
+function slugifyClinicName(name: string): string {
+  const base = name
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .slice(0, 40)
+  const suffix = crypto.randomUUID().replace(/-/g, '').slice(0, 8)
+  return `${base || 'clinica'}-${suffix}`
 }
 
 function serviceClient(): SupabaseClient {
@@ -295,7 +364,7 @@ Deno.serve(async (req) => {
       .select('id, name, price_monthly, promo_active, promo_price_monthly, max_clinics')
       .eq('id', input.planId)
       .maybeSingle()
-    if (planError) throw new Error('Failed to validate plan')
+    if (planError) throw new Error(dbErrorMessage('Failed to validate plan', planError))
     if (!plan) throw new HttpError(400, 'Plano não encontrado')
     const monthlyFee = Number(
       plan.promo_active && plan.promo_price_monthly != null
@@ -319,7 +388,7 @@ Deno.serve(async (req) => {
       .ilike('email', input.adminEmail)
       .limit(1)
       .maybeSingle()
-    if (profileLookupError) throw new Error('Failed to validate email')
+    if (profileLookupError) throw new Error(dbErrorMessage('Failed to validate email', profileLookupError))
     if (existingProfile) throw new HttpError(409, 'Email já cadastrado')
 
     const { data: authData, error: createAuthError } = await supabase.auth.admin.createUser({
@@ -333,7 +402,14 @@ Deno.serve(async (req) => {
         skip_auto_clinic: true,
       },
     })
-    if (createAuthError || !authData.user) throw new HttpError(409, 'Não foi possível criar o usuário; verifique o email')
+    if (createAuthError || !authData.user) {
+      throw new HttpError(
+        409,
+        createAuthError?.message
+          ? `Não foi possível criar o usuário: ${createAuthError.message}`
+          : 'Não foi possível criar o usuário; verifique o email',
+      )
+    }
     createdUserId = authData.user.id
 
     const { error: profileError } = await supabase.from('profiles').upsert({
@@ -343,13 +419,13 @@ Deno.serve(async (req) => {
       phone: input.adminPhone,
       is_active: true,
     }, { onConflict: 'user_id' })
-    if (profileError) throw new Error('Failed to create profile')
+    if (profileError) throw new Error(dbErrorMessage('Failed to create profile', profileError))
 
     const { error: roleError } = await supabase.from('user_roles').upsert({
       user_id: createdUserId,
       role: 'admin',
     }, { onConflict: 'user_id,role' })
-    if (roleError) throw new Error('Failed to create role')
+    if (roleError) throw new Error(dbErrorMessage('Failed to create role', roleError))
 
     const { data: organizationId, error: orgError } = await supabase.rpc(
       'ensure_organization_for_owner',
@@ -358,12 +434,15 @@ Deno.serve(async (req) => {
         p_name: `${input.adminName} — Grupo`,
       },
     )
-    if (orgError || !organizationId) throw new Error('Failed to create organization')
+    if (orgError || !organizationId) {
+      throw new Error(dbErrorMessage('Failed to create organization', orgError))
+    }
 
     const created: Array<{ clinic_id: string; subscription_id: string }> = []
     for (const clinic of input.clinics) {
       const { data: clinicRow, error: clinicError } = await supabase.from('clinics').insert({
         name: clinic.name,
+        slug: slugifyClinicName(clinic.name),
         unit_name: clinic.unit_name,
         cnpj: clinic.cnpj,
         address: clinic.address,
@@ -377,7 +456,9 @@ Deno.serve(async (req) => {
         owner_user_id: createdUserId,
         organization_id: organizationId,
       }).select('id').single()
-      if (clinicError || !clinicRow) throw new Error('Failed to create clinic')
+      if (clinicError || !clinicRow) {
+        throw new Error(dbErrorMessage('Failed to create clinic', clinicError))
+      }
       createdClinicIds.push(clinicRow.id)
 
       const { error: membershipError } = await supabase.from('clinic_users').insert({
@@ -385,7 +466,9 @@ Deno.serve(async (req) => {
         user_id: createdUserId,
         is_owner: true,
       })
-      if (membershipError) throw new Error('Failed to create clinic membership')
+      if (membershipError) {
+        throw new Error(dbErrorMessage('Failed to create clinic membership', membershipError))
+      }
 
       const { data: subscription, error: subscriptionError } = await supabase.from('subscriptions').insert({
         clinic_id: clinicRow.id,
@@ -397,9 +480,14 @@ Deno.serve(async (req) => {
         features_override: input.modules,
         monthly_fee: monthlyFee,
         setup_fee: input.setupFee,
+        billing_day: input.billingDay,
+        billing_defer_days: input.billingDeferDays,
+        billing_first_due_date: input.billingFirstDueDate,
         admin_notes: input.adminNotes,
       }).select('id').single()
-      if (subscriptionError || !subscription) throw new Error('Failed to create subscription')
+      if (subscriptionError || !subscription) {
+        throw new Error(dbErrorMessage('Failed to create subscription', subscriptionError))
+      }
       created.push({ clinic_id: clinicRow.id, subscription_id: subscription.id })
     }
 
@@ -411,8 +499,8 @@ Deno.serve(async (req) => {
   } catch (error) {
     if (supabase && createdUserId) await compensate(supabase, createdClinicIds, createdUserId)
     if (error instanceof HttpError) return json(req, { error: error.message }, error.status)
-    console.error('Unexpected create-complete-client error',
-      error instanceof Error ? error.message : 'unknown')
-    return json(req, { error: 'Não foi possível criar o cliente' }, 500)
+    const message = error instanceof Error ? error.message : 'Não foi possível criar o cliente'
+    console.error('Unexpected create-complete-client error', message)
+    return json(req, { error: message }, 500)
   }
 })

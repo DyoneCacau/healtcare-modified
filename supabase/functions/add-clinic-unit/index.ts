@@ -128,6 +128,9 @@ interface UnitPayload {
   phone: string | null
   email: string | null
   setupFee: number
+  billingDay: number
+  billingDeferDays: number
+  billingFirstDueDate: string | null
   billingProvider: 'manual' | 'asaas'
 }
 
@@ -148,6 +151,38 @@ function validatePayload(value: unknown): UnitPayload {
   if (zipcode && !/^\d{8}$/.test(zipcode)) throw new HttpError(400, 'CEP inválido')
 
   const billingProvider = body.billingProvider === 'asaas' ? 'asaas' : 'manual'
+  const rawBillingDay = body.billingDay
+  let billingDay = 10
+  if (rawBillingDay !== undefined && rawBillingDay !== null && rawBillingDay !== '') {
+    if (
+      typeof rawBillingDay !== 'number'
+      || !Number.isInteger(rawBillingDay)
+      || rawBillingDay < 1
+      || rawBillingDay > 28
+    ) {
+      throw new HttpError(400, 'Dia de vencimento inválido (use 1 a 28)')
+    }
+    billingDay = rawBillingDay
+  }
+
+  const rawDefer = body.billingDeferDays
+  let billingDeferDays = 0
+  if (rawDefer !== undefined && rawDefer !== null && rawDefer !== '') {
+    if (typeof rawDefer !== 'number' || ![0, 30, 60].includes(rawDefer)) {
+      throw new HttpError(400, 'Atraso da cobrança inválido (use 0, 30 ou 60)')
+    }
+    billingDeferDays = rawDefer
+  }
+
+  let billingFirstDueDate: string | null = null
+  const rawFirstDue = body.billingFirstDueDate
+  if (typeof rawFirstDue === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(rawFirstDue)) {
+    const today = new Date().toISOString().slice(0, 10)
+    if (rawFirstDue <= today) {
+      throw new HttpError(400, 'A data da 1ª mensalidade deve ser futura')
+    }
+    billingFirstDueDate = rawFirstDue
+  }
 
   return {
     adminEmail,
@@ -163,6 +198,9 @@ function validatePayload(value: unknown): UnitPayload {
     phone: optionalString(body.phone, 'Telefone', 30),
     email: optionalString(body.email, 'Email da clínica', 254)?.toLowerCase() ?? null,
     setupFee: validMoney(body.setupFee, 'Taxa de adesão'),
+    billingDay,
+    billingDeferDays,
+    billingFirstDueDate,
     billingProvider,
   }
 }
@@ -339,6 +377,9 @@ Deno.serve(async (req) => {
       features_override: modules,
       monthly_fee: monthlyFee,
       setup_fee: input.setupFee,
+      billing_day: input.billingDay,
+      billing_defer_days: input.billingDeferDays,
+      billing_first_due_date: input.billingFirstDueDate,
       admin_notes: 'Nova unidade — cobrança própria por clínica',
     }).select('id').single()
     if (createSubError || !subscription) throw new Error('Failed to create subscription')

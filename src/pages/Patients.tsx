@@ -7,6 +7,7 @@ import { PatientsList } from '@/components/patients/PatientsList';
 import { PatientFormDialog } from '@/components/patients/PatientFormDialog';
 import { PatientDetailsDialog } from '@/components/patients/PatientDetailsDialog';
 import { WhatsAppConfirmationDialog } from '@/components/patients/WhatsAppConfirmationDialog';
+import { ImportPatientsDialog } from '@/components/patients/ImportPatientsDialog';
 import { usePatients, usePatientMutations, PatientData } from '@/hooks/usePatients';
 import { useAppointments } from '@/hooks/useAppointments';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -177,10 +178,13 @@ const Patients = () => {
               Gerencie os pacientes da clínica
             </p>
           </div>
-          <Button onClick={handleNewPatient} className="gap-2">
-            <Plus className="h-4 w-4" />
-            Novo Paciente
-          </Button>
+          <div className="flex flex-wrap gap-2">
+            <ImportPatientsDialog />
+            <Button onClick={handleNewPatient} className="gap-2">
+              <Plus className="h-4 w-4" />
+              Novo Paciente
+            </Button>
+          </div>
         </div>
 
         {/* Stats */}

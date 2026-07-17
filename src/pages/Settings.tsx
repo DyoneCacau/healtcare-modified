@@ -7,7 +7,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
-import { Building2, CreditCard, Check, Loader2, Crown, Sparkles, Zap, MessageSquare, KeyRound, Send } from 'lucide-react';
+import { Building2, CreditCard, Check, Loader2, Crown, Sparkles, Zap, MessageSquare, KeyRound, Send, ReceiptText } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
 import { useSubscription } from '@/hooks/useSubscription';
@@ -34,6 +34,9 @@ import {
 } from '@/components/ui/select';
 import { SupportTab } from '@/components/support/SupportTab';
 import { parsePlanFeatures } from '@/lib/planFeatures';
+import { BillingContent } from '@/pages/Billing';
+import { ErrorBoundary } from '@/components/ErrorBoundary';
+import { useSearchParams } from 'react-router-dom';
 
 interface ClinicData {
   id: string;
@@ -94,6 +97,11 @@ export default function Settings() {
   const { user } = useAuth();
   const { subscription } = useSubscription();
   const { selectedClinicId } = useSelectedClinicId();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const settingsTab = searchParams.get('tab');
+  const activeSettingsTab = ['subscription', 'billing', 'clinic', 'security', 'support'].includes(settingsTab || '')
+    ? (settingsTab as string)
+    : 'subscription';
   const [clinic, setClinic] = useState<ClinicData | null>(null);
   const [plan, setPlan] = useState<PlanDetails | null>(null);
   const [availablePlans, setAvailablePlans] = useState<PlanDetails[]>([]);
@@ -410,22 +418,30 @@ export default function Settings() {
           </p>
         </div>
 
-        <Tabs defaultValue="subscription" className="space-y-6">
-          <TabsList className="grid w-full grid-cols-4 lg:w-auto lg:inline-grid">
+        <Tabs
+          value={activeSettingsTab}
+          onValueChange={(v) => setSearchParams(v === 'subscription' ? {} : { tab: v })}
+          className="space-y-6"
+        >
+          <TabsList className="h-auto w-full flex flex-wrap justify-start gap-1 sm:w-auto sm:inline-flex sm:flex-nowrap">
             <TabsTrigger value="subscription" className="flex items-center gap-2">
-              <CreditCard className="h-4 w-4" />
+              <CreditCard className="h-4 w-4 shrink-0" />
               <span>Meu Plano</span>
             </TabsTrigger>
+            <TabsTrigger value="billing" className="flex items-center gap-2">
+              <ReceiptText className="h-4 w-4 shrink-0" />
+              <span>Minha Cobrança</span>
+            </TabsTrigger>
             <TabsTrigger value="clinic" className="flex items-center gap-2">
-              <Building2 className="h-4 w-4" />
+              <Building2 className="h-4 w-4 shrink-0" />
               <span>Dados da Clínica</span>
             </TabsTrigger>
             <TabsTrigger value="security" className="flex items-center gap-2">
-              <KeyRound className="h-4 w-4" />
+              <KeyRound className="h-4 w-4 shrink-0" />
               <span>Alterar senha</span>
             </TabsTrigger>
             <TabsTrigger value="support" className="flex items-center gap-2">
-              <MessageSquare className="h-4 w-4" />
+              <MessageSquare className="h-4 w-4 shrink-0" />
               <span>Suporte</span>
             </TabsTrigger>
           </TabsList>
@@ -591,6 +607,12 @@ export default function Settings() {
                 </CardContent>
               </Card>
             )}
+          </TabsContent>
+
+          <TabsContent value="billing" className="space-y-6">
+            <ErrorBoundary>
+              <BillingContent />
+            </ErrorBoundary>
           </TabsContent>
 
           {/* Clinic Data Tab */}

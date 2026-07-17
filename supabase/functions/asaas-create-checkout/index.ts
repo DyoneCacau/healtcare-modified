@@ -8,6 +8,15 @@ import {
   json,
   serviceClient,
 } from '../_shared/asaas.ts'
+import {
+  daysUntil,
+  DEFAULT_BILLING_DAY,
+  isIsoDate,
+  normalizeBillingDay,
+  normalizeDeferDays,
+  prorationAmount,
+  resolveFirstDueDate,
+} from '../_shared/billingDay.ts'
 
 interface Customer {
   id: string
@@ -58,7 +67,13 @@ Deno.serve(async (req) => {
   try {
     const body = await req.json().catch(() => {
       throw new HttpError(400, 'JSON inválido')
-    }) as { subscription_id?: string; include_setup_fee?: boolean }
+    }) as {
+      subscription_id?: string
+      include_setup_fee?: boolean
+      billing_day?: number
+      billing_defer_days?: number
+      first_due_date?: string | null
+    }
     assertUuid(body.subscription_id, 'subscription_id')
 
     const supabase = serviceClient()
@@ -66,6 +81,7 @@ Deno.serve(async (req) => {
       .from('subscriptions')
       .select(`
         id, clinic_id, monthly_fee, setup_fee, asaas_subscription_id,
+        billing_day, billing_defer_days, billing_first_due_date,
         clinics!inner(id, name, email, phone, cnpj, asaas_customer_id)
       `)
       .eq('id', body.subscription_id)
@@ -91,6 +107,29 @@ Deno.serve(async (req) => {
     if (!isValidCnpj(clinic.cnpj)) {
       throw new HttpError(409, 'CNPJ da clínica inválido; atualize o cadastro antes de ativar o Asaas')
     }
+
+    const billingDay = normalizeBillingDay(
+      body.billing_day ?? subscription.billing_day ?? DEFAULT_BILLING_DAY,
+    )
+    const deferDays = normalizeDeferDays(
+      body.billing_defer_days ?? subscription.billing_defer_days ?? 0,
+    )
+    const requestedFirstDue = isIsoDate(body.first_due_date)
+      ? body.first_due_date
+      : isIsoDate(subscription.billing_first_due_date)
+      ? subscription.billing_first_due_date
+      : null
+    const todayIso = new Date().toISOString().slice(0, 10)
+    if (requestedFirstDue && requestedFirstDue <= todayIso) {
+      throw new HttpError(400, 'A data da 1ª mensalidade deve ser futura')
+    }
+    const schedulePromo = Boolean(requestedFirstDue) || deferDays > 0
+    const firstDueDate = resolveFirstDueDate(billingDay, {
+      deferDays,
+      firstDueDate: requestedFirstDue,
+    })
+    const prorataDays = schedulePromo ? 0 : daysUntil(firstDueDate)
+    const prorataValue = schedulePromo ? 0 : prorationAmount(monthlyFee, prorataDays)
 
     let customerId = clinic.asaas_customer_id || null
     if (!customerId) {
@@ -118,7 +157,6 @@ Deno.serve(async (req) => {
     let asaasSubscriptionId = subscription.asaas_subscription_id as string | null
     let nextDueDate: string | undefined
     if (!asaasSubscriptionId) {
-      const tomorrow = new Date(Date.now() + 86_400_000).toISOString().slice(0, 10)
       const created = await asaasRequest<AsaasSubscription>('/v3/subscriptions', {
         method: 'POST',
         headers: { 'asaas-idempotency-key': `clinic-subscription-${subscription.id}` },
@@ -126,14 +164,36 @@ Deno.serve(async (req) => {
           customer: customerId,
           billingType: 'UNDEFINED',
           value: monthlyFee,
-          nextDueDate: tomorrow,
+          nextDueDate: firstDueDate,
           cycle: 'MONTHLY',
           description: `Mensalidade ${clinic.name}`,
           externalReference: subscription.id,
         }),
       })
       asaasSubscriptionId = created.id
-      nextDueDate = created.nextDueDate || tomorrow
+      nextDueDate = created.nextDueDate || firstDueDate
+    } else {
+      nextDueDate = firstDueDate
+    }
+
+    const { error: metaError } = await supabase
+      .from('subscriptions')
+      .update({
+        billing_day: billingDay,
+        billing_defer_days: schedulePromo ? (deferDays || 0) : 0,
+        billing_first_due_date: schedulePromo ? firstDueDate : null,
+        proration_days: prorataDays > 0 && prorataValue >= 0.01 ? prorataDays : null,
+        proration_amount: prorataDays > 0 && prorataValue >= 0.01 ? prorataValue : null,
+        // Promo: libera uso durante implantação; cobrança só no 1º vencimento.
+        ...(schedulePromo
+          ? { status: 'active', billing_status: 'pending', payment_status: 'pending' }
+          : {}),
+        updated_at: new Date().toISOString(),
+      })
+      .eq('id', subscription.id)
+    if (metaError) {
+      console.error('Failed to store billing_day/proration', metaError.code)
+      throw new HttpError(500, 'Não foi possível salvar o dia de vencimento')
     }
 
     const { error: bindingError } = await supabase.rpc('asaas_store_billing_binding', {
@@ -145,6 +205,32 @@ Deno.serve(async (req) => {
     if (bindingError) {
       console.error('Failed to store Asaas binding', bindingError.code)
       throw new HttpError(500, 'Não foi possível salvar os dados da cobrança')
+    }
+
+    const today = new Date().toISOString().slice(0, 10)
+
+    let prorationPayment: Payment | null = null
+    if (prorataDays > 0 && prorataValue >= 0.01) {
+      const reference = `${subscription.id}:proration`
+      const existingProration = await asaasRequest<AsaasList<Payment>>(
+        `/v3/payments?externalReference=${encodeURIComponent(reference)}&limit=1`,
+      )
+      prorationPayment = existingProration.data?.[0] || null
+      if (!prorationPayment) {
+        prorationPayment = await asaasRequest<Payment>('/v3/payments', {
+          method: 'POST',
+          headers: { 'asaas-idempotency-key': `clinic-proration-${subscription.id}` },
+          body: JSON.stringify({
+            customer: customerId,
+            billingType: 'UNDEFINED',
+            value: prorataValue,
+            dueDate: today,
+            description:
+              `Período proporcional ${clinic.name} (${prorataDays} dias até ${nextDueDate || firstDueDate})`,
+            externalReference: reference,
+          }),
+        })
+      }
     }
 
     let setupPayment: Payment | null = null
@@ -162,7 +248,7 @@ Deno.serve(async (req) => {
             customer: customerId,
             billingType: 'UNDEFINED',
             value: setupFee,
-            dueDate: new Date().toISOString().slice(0, 10),
+            dueDate: today,
             description: `Taxa de adesão ${clinic.name}`,
             externalReference: reference,
           }),
@@ -179,10 +265,21 @@ Deno.serve(async (req) => {
       subscription_id: subscription.id,
       asaas_subscription_id: asaasSubscriptionId,
       billing_type: 'UNDEFINED',
+      billing_day: billingDay,
+      billing_defer_days: schedulePromo ? (deferDays || 0) : 0,
+      first_due_date: schedulePromo ? firstDueDate : null,
+      next_due_date: nextDueDate || firstDueDate,
+      proration_days: prorataDays > 0 && prorataValue >= 0.01 ? prorataDays : 0,
+      proration_amount: prorataDays > 0 && prorataValue >= 0.01 ? prorataValue : 0,
       recurring_payment: recurringPayment && {
         id: recurringPayment.id,
         invoice_url: recurringPayment.invoiceUrl,
         bank_slip_url: recurringPayment.bankSlipUrl,
+      },
+      proration_payment: prorationPayment && {
+        id: prorationPayment.id,
+        invoice_url: prorationPayment.invoiceUrl,
+        bank_slip_url: prorationPayment.bankSlipUrl,
       },
       setup_payment: setupPayment && {
         id: setupPayment.id,

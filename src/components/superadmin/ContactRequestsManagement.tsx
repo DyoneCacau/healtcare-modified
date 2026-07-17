@@ -21,6 +21,16 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import {
   Table,
   TableBody,
   TableCell,
@@ -38,7 +48,8 @@ import {
   Clock, 
   Mail, 
   Phone,
-  Eye
+  Eye,
+  Trash2,
 } from "lucide-react";
 import { format, formatDistanceToNow } from "date-fns";
 import { ptBR } from "date-fns/locale";
@@ -70,6 +81,8 @@ export function ContactRequestsManagement() {
   const [filterStatus, setFilterStatus] = useState("all");
   const [selectedRequest, setSelectedRequest] = useState<ContactRequest | null>(null);
   const [isDetailDialogOpen, setIsDetailDialogOpen] = useState(false);
+  const [requestToDelete, setRequestToDelete] = useState<ContactRequest | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
   const [notes, setNotes] = useState("");
   const [newStatus, setNewStatus] = useState("");
 
@@ -143,6 +156,33 @@ export function ContactRequestsManagement() {
     } catch (error: any) {
       console.error("Erro ao atualizar:", error);
       toast.error(error.message || "Erro ao atualizar solicitação");
+    }
+  }
+
+  async function handleDelete() {
+    if (!requestToDelete) return;
+
+    setIsDeleting(true);
+    try {
+      const { error } = await supabase
+        .from("contact_requests")
+        .delete()
+        .eq("id", requestToDelete.id);
+
+      if (error) throw error;
+
+      toast.success("Solicitação excluída");
+      if (selectedRequest?.id === requestToDelete.id) {
+        setIsDetailDialogOpen(false);
+        setSelectedRequest(null);
+      }
+      setRequestToDelete(null);
+      fetchRequests();
+    } catch (error: any) {
+      console.error("Erro ao excluir:", error);
+      toast.error(error.message || "Erro ao excluir solicitação");
+    } finally {
+      setIsDeleting(false);
     }
   }
 
@@ -252,14 +292,25 @@ export function ContactRequestsManagement() {
                     </TableCell>
                     <TableCell>{getStatusBadge(request.status)}</TableCell>
                     <TableCell className="text-right">
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        onClick={() => openDetailDialog(request)}
-                      >
-                        <Eye className="h-4 w-4 mr-1" />
-                        Ver Detalhes
-                      </Button>
+                      <div className="flex items-center justify-end gap-2">
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => openDetailDialog(request)}
+                        >
+                          <Eye className="h-4 w-4 mr-1" />
+                          Ver Detalhes
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="text-destructive hover:text-destructive"
+                          onClick={() => setRequestToDelete(request)}
+                          title="Excluir solicitação"
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      </div>
                     </TableCell>
                   </TableRow>
                 ))}
@@ -388,19 +439,60 @@ export function ContactRequestsManagement() {
             </div>
           )}
 
-          <DialogFooter className="shrink-0 border-t pt-4 mt-2">
+          <DialogFooter className="shrink-0 border-t pt-4 mt-2 flex-col-reverse sm:flex-row sm:justify-between gap-2">
             <Button
-              variant="outline"
-              onClick={() => setIsDetailDialogOpen(false)}
+              variant="destructive"
+              onClick={() => selectedRequest && setRequestToDelete(selectedRequest)}
+              disabled={!selectedRequest}
             >
-              Cancelar
+              <Trash2 className="h-4 w-4 mr-1" />
+              Excluir
             </Button>
-            <Button onClick={handleUpdate}>
-              Salvar Alterações
-            </Button>
+            <div className="flex flex-col-reverse sm:flex-row gap-2">
+              <Button
+                variant="outline"
+                onClick={() => setIsDetailDialogOpen(false)}
+              >
+                Cancelar
+              </Button>
+              <Button onClick={handleUpdate}>
+                Salvar Alterações
+              </Button>
+            </div>
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <AlertDialog
+        open={!!requestToDelete}
+        onOpenChange={(open) => {
+          if (!open && !isDeleting) setRequestToDelete(null);
+        }}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Excluir solicitação?</AlertDialogTitle>
+            <AlertDialogDescription>
+              {requestToDelete
+                ? `A solicitação de ${requestToDelete.name} (${requestToDelete.email}) será removida permanentemente.`
+                : "Esta ação não pode ser desfeita."}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={isDeleting}>Cancelar</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={(e) => {
+                e.preventDefault();
+                void handleDelete();
+              }}
+              disabled={isDeleting}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              {isDeleting ? "Excluindo..." : "Excluir"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </>
   );
 }

@@ -55,8 +55,42 @@ Deno.serve(async (req) => {
     if (error || !subscription) throw new HttpError(404, 'Assinatura não encontrada')
 
     await authorizeClinic(req, supabase, subscription.clinic_id, true)
+
+    const mapPayment = (payment: Payment) => ({
+      id: payment.id,
+      status: payment.status,
+      value: payment.value,
+      net_value: payment.netValue,
+      billing_type: payment.billingType,
+      due_date: payment.dueDate,
+      payment_date: payment.paymentDate,
+      invoice_url: payment.invoiceUrl,
+      bank_slip_url: payment.bankSlipUrl,
+      external_reference: payment.externalReference,
+      description: payment.externalReference?.includes(':proration')
+        ? 'Período proporcional'
+        : payment.externalReference?.includes(':setup_fee')
+        ? 'Taxa de adesão'
+        : null,
+    })
+
+    // Cobranças avulsas (pró-rata / adesão) não vêm no endpoint da assinatura.
+    const [prorationList, setupList] = await Promise.all([
+      asaasRequest<{ data: Payment[] }>(
+        `/v3/payments?externalReference=${encodeURIComponent(`${subscriptionId}:proration`)}&limit=5`,
+      ).catch(() => ({ data: [] as Payment[] })),
+      asaasRequest<{ data: Payment[] }>(
+        `/v3/payments?externalReference=${encodeURIComponent(`${subscriptionId}:setup_fee`)}&limit=5`,
+      ).catch(() => ({ data: [] as Payment[] })),
+    ])
+
     if (!subscription.asaas_subscription_id) {
-      return json(req, { data: [], has_more: false, total_count: 0 })
+      const standalone = [...(prorationList.data || []), ...(setupList.data || [])]
+      return json(req, {
+        data: standalone.map(mapPayment),
+        has_more: false,
+        total_count: standalone.length,
+      })
     }
 
     const result = await asaasRequest<{
@@ -68,21 +102,18 @@ Deno.serve(async (req) => {
         + `&limit=${limit}&offset=${offset}`,
     )
 
+    const seen = new Set((result.data || []).map((p) => p.id))
+    const extras = [...(prorationList.data || []), ...(setupList.data || [])]
+      .filter((p) => p.id && !seen.has(p.id))
+
+    const merged = offset === 0
+      ? [...extras, ...(result.data || [])]
+      : (result.data || [])
+
     return json(req, {
-      data: (result.data || []).map((payment) => ({
-        id: payment.id,
-        status: payment.status,
-        value: payment.value,
-        net_value: payment.netValue,
-        billing_type: payment.billingType,
-        due_date: payment.dueDate,
-        payment_date: payment.paymentDate,
-        invoice_url: payment.invoiceUrl,
-        bank_slip_url: payment.bankSlipUrl,
-        external_reference: payment.externalReference,
-      })),
+      data: merged.map(mapPayment),
       has_more: Boolean(result.hasMore),
-      total_count: result.totalCount || 0,
+      total_count: (result.totalCount || 0) + (offset === 0 ? extras.length : 0),
     })
   } catch (error) {
     return errorResponse(req, error)
