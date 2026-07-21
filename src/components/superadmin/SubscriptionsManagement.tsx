@@ -74,6 +74,7 @@ interface Subscription {
   current_period_start: string | null;
   current_period_end: string | null;
   payment_status: string;
+  billing_status: string | null;
   last_payment_at: string | null;
   notes: string | null;
   created_at: string;
@@ -140,7 +141,8 @@ export function SubscriptionsManagement() {
         supabase
           .from('plans')
           .select('id, name, slug, price_monthly, promo_active, promo_price_monthly')
-          .eq('is_active', true),
+          .eq('is_active', true)
+          .neq('slug', 'trial'),
       ]);
 
       if (subsResult.error) throw subsResult.error;
@@ -461,9 +463,10 @@ export function SubscriptionsManagement() {
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="all">Todos os status</SelectItem>
-              <SelectItem value="trial">Trial</SelectItem>
+              <SelectItem value="pending">Pendente</SelectItem>
               <SelectItem value="active">Ativo</SelectItem>
               <SelectItem value="suspended">Suspenso</SelectItem>
+              <SelectItem value="cancelled">Cancelado</SelectItem>
               <SelectItem value="expired">Expirado</SelectItem>
             </SelectContent>
           </Select>
@@ -660,7 +663,7 @@ export function SubscriptionsManagement() {
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="trial">Trial</SelectItem>
+                  <SelectItem value="pending">Pendente</SelectItem>
                   <SelectItem value="active">Ativo</SelectItem>
                   <SelectItem value="suspended">Suspenso</SelectItem>
                   <SelectItem value="cancelled">Cancelado</SelectItem>

@@ -114,7 +114,9 @@ export const asaasBillingService = {
         invoiceUrl: trustedPaymentUrl(payment.invoice_url),
         bankSlipUrl: trustedPaymentUrl(payment.bank_slip_url),
         paymentDate: payment.payment_date ?? null,
-        canPay: !["RECEIVED", "CONFIRMED", "REFUNDED", "CANCELLED"].includes(payment.status),
+        canPay: !["RECEIVED", "CONFIRMED", "REFUNDED", "CANCELLED", "DELETED"].includes(
+          String(payment.status || "").toUpperCase(),
+        ),
       })),
       hasMore: result.has_more,
       totalCount: result.total_count,
@@ -125,6 +127,55 @@ export const asaasBillingService = {
     return invokeAsaas<{ cancelled: true; duplicate?: boolean }>("asaas-cancel-subscription", {
       subscription_id: subscriptionId,
     });
+  },
+
+  enableCardRecurring(subscriptionId: string) {
+    return invokeAsaas<{
+      billing_type: "CREDIT_CARD";
+      payment_id: string | null;
+      invoice_url: string | null;
+      has_open_payment: boolean;
+      message: string;
+    }>("asaas-set-card-recurring", {
+      subscription_id: subscriptionId,
+    }).then((result) => ({
+      ...result,
+      invoice_url: trustedPaymentUrl(result.invoice_url ?? undefined),
+    }));
+  },
+
+  choosePaymentMethod(
+    subscriptionId: string,
+    billingType: Exclude<BillingMethod, "UNDEFINED">,
+    paymentId?: string,
+  ) {
+    return invokeAsaas<{
+      billing_type: Exclude<BillingMethod, "UNDEFINED">;
+      payment_id: string;
+      status: string | null;
+      value: number | null;
+      due_date: string | null;
+      invoice_url: string | null;
+      bank_slip_url: string | null;
+      pix: {
+        encoded_image: string | null;
+        payload: string | null;
+        expiration_date: string | null;
+      } | null;
+      boleto: {
+        identification_field: string | null;
+        bar_code: string | null;
+      } | null;
+      message: string;
+    }>("asaas-choose-payment-method", {
+      subscription_id: subscriptionId,
+      billing_type: billingType,
+      ...(paymentId ? { payment_id: paymentId } : {}),
+    }).then((result) => ({
+      ...result,
+      invoice_url: trustedPaymentUrl(result.invoice_url ?? undefined),
+      bank_slip_url: trustedPaymentUrl(result.bank_slip_url ?? undefined),
+    }));
   },
 
   async createCheckout(

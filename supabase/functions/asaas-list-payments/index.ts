@@ -54,7 +54,7 @@ Deno.serve(async (req) => {
       .single()
     if (error || !subscription) throw new HttpError(404, 'Assinatura não encontrada')
 
-    await authorizeClinic(req, supabase, subscription.clinic_id, true)
+    await authorizeClinic(req, supabase, subscription.clinic_id, false)
 
     const mapPayment = (payment: Payment) => ({
       id: payment.id,

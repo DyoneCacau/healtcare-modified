@@ -42,10 +42,19 @@ para uma única versão e recusa hosts incompatíveis com `ASAAS_ENV`. Assim,
 - `asaas-list-payments`: membro da clínica ou superadmin; lista cobranças e URLs
   hospedadas.
 - `asaas-cancel-subscription`: proprietário ou superadmin; cancela recorrência.
+- `asaas-set-card-recurring`: proprietário; muda assinatura para `CREDIT_CARD` e
+  abre/antecipa fatura no Asaas para o cliente cadastrar o cartão (sem dados de
+  cartão no HealthCare).
+- `asaas-choose-payment-method`: proprietário; escolhe `PIX`, `BOLETO` ou
+  `CREDIT_CARD` na plataforma, atualiza a cobrança no Asaas e devolve QR Pix,
+  boleto ou link de cartão.
 - `asaas-webhook`: autentica o token, persiste `event.id` e aplica eventos de
   pagamento de forma idempotente.
 - `asaas-reconcile`: protegida por `CRON_SECRET`; reaplica eventos pendentes e
   reconcilia pagamentos das assinaturas Asaas.
+
+> A function temporária `asaas-sandbox-card-test` foi removida após a homologação
+> do cartão fictício. Não republicar.
 
 Publique cada função separadamente somente depois de aplicar o SQL e configurar
 os secrets. Este repositório não realiza deploy automaticamente.

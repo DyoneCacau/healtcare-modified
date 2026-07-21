@@ -25,6 +25,10 @@ import {
   defaultPromoFirstDueDate,
 } from "@/lib/billingDay";
 import { BillingScheduleFields } from "@/components/superadmin/BillingScheduleFields";
+import {
+  CommercialChecklist,
+  buildCommercialChecklistState,
+} from "@/components/superadmin/CommercialChecklist";
 
 function parseMoneyInput(value: string): number {
   const trimmed = value.trim();
@@ -140,6 +144,7 @@ export function CreateCompleteClient() {
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
   const [plans, setPlans] = useState<PlanOption[]>([]);
+  const [clientNotified, setClientNotified] = useState(false);
   
   const [formData, setFormData] = useState<CreateClientData>({
     adminName: "",
@@ -167,7 +172,19 @@ export function CreateCompleteClient() {
     scheduleFirstCharge: false,
     firstDueDate: defaultPromoFirstDueDate(),
     adminNotes: "",
-    billingProvider: "manual",
+    billingProvider: "asaas",
+  });
+
+  const checklist = buildCommercialChecklistState({
+    adminName: formData.adminName,
+    adminEmail: formData.adminEmail,
+    clinics: formData.clinics,
+    planId: formData.planId,
+    billingDay: formData.billingDay,
+    billingProvider: formData.billingProvider,
+    scheduleFirstCharge: formData.scheduleFirstCharge,
+    firstDueDate: formData.firstDueDate,
+    clientNotified,
   });
 
   // Carregar planos disponíveis
@@ -179,6 +196,8 @@ export function CreateCompleteClient() {
     const { data } = await supabase
       .from('plans')
       .select('*')
+      .eq('is_active', true)
+      .neq('slug', 'trial')
       .order('name');
     
     if (data) {
@@ -278,6 +297,10 @@ export function CreateCompleteClient() {
         throw new Error("Selecione pelo menos um módulo");
       }
 
+      if (!clientNotified) {
+        throw new Error("Confirme no checklist que o cliente foi avisado sobre login e Minha Cobrança");
+      }
+
       // A Edge Function valida o superadmin e executa toda a criação com service role.
       const { data, error } = await supabase.functions.invoke<CreateCompleteClientResult | { error?: string }>(
         "create-complete-client",
@@ -361,8 +384,9 @@ export function CreateCompleteClient() {
         scheduleFirstCharge: false,
         firstDueDate: defaultPromoFirstDueDate(),
         adminNotes: "",
-        billingProvider: "manual",
+        billingProvider: "asaas",
       });
+      setClientNotified(false);
       
       setOpen(false);
 
@@ -390,11 +414,16 @@ export function CreateCompleteClient() {
         <DialogHeader>
           <DialogTitle>Criar Cliente Completo</DialogTitle>
           <DialogDescription>
-            Cadastre o administrador, clínicas, plano, módulos e cobrança em um único fluxo.
+            Venda assistida: defina plano, vencimento e início da cobrança. O cliente escolhe PIX, boleto ou cartão no Asaas.
           </DialogDescription>
         </DialogHeader>
 
         <form onSubmit={handleSubmit} className="space-y-6">
+          <CommercialChecklist
+            state={checklist}
+            onClientNotifiedChange={setClientNotified}
+          />
+
           {/* SEÇÃO 1: DADOS DO ADMINISTRADOR */}
           <Card>
             <CardHeader>
@@ -782,7 +811,7 @@ export function CreateCompleteClient() {
             >
               Cancelar
             </Button>
-            <Button type="submit" disabled={loading}>
+            <Button type="submit" disabled={loading || !clientNotified}>
               {loading ? "Criando..." : "Criar Cliente"}
             </Button>
           </div>

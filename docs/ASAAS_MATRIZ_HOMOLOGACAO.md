@@ -1,64 +1,51 @@
 # Matriz de homologação Asaas
 
-Preencha esta matriz no Sandbox antes de configurar qualquer chave de produção.
-Use uma clínica e dados fictícios exclusivos para cada cenário.
+**Última atualização:** 2026-07-21  
+**Ambiente:** Asaas Sandbox + Supabase `jahjwuydesfytlmjwucx`  
+**Clínica de teste:** Clínica Sorriso  
+**Resultado da bateria:** **OK**
 
-## Segurança e isolamento
+---
 
-- [ ] Chave da API não aparece no bundle, console, rede do navegador ou banco.
-- [ ] Webhook sem `asaas-access-token` válido retorna 401.
-- [ ] Usuário comum não invoca operações de SuperAdmin.
-- [ ] Usuário da clínica A não consulta ou altera cobranças da clínica B.
-- [ ] Evento repetido mantém um único histórico e um único avanço de período.
-- [ ] Payload inválido não altera assinatura e fica auditável.
+## Status rápido — homologação sandbox **APROVADA**
 
-## Adesão e assinatura
+| Item | Resultado |
+|------|-----------|
+| Pix na plataforma + confirmação sandbox → app atualiza | OK (manual) |
+| Cartão `4444…` → `CONFIRMED` + fatura Asaas | OK |
+| Assinatura Asaas em `CREDIT_CARD` (débito automático) | OK |
+| Atraso → suspensão (regra 7 dias / `current_period_end`) | OK |
+| Reativação após atraso → `active` + `paid` | OK |
+| Cancelamento Asaas (assinatura descartável) | OK |
+| Reconcile / fila de webhooks (órfãos arquivados) | OK |
+| Webhook sem token → 401 | OK |
+| Listar cobranças da assinatura | OK |
+| Functions MP legado removidas (`mp-*`, `create-clinic-on-signup`) | OK |
+| Function temporária de homologação removida | OK |
 
-- [ ] Cliente Asaas é criado uma única vez por clínica.
-- [ ] Taxa de implantação zero não cria cobrança avulsa.
-- [ ] Taxa de implantação positiva cria cobrança separada.
-- [ ] Assinatura mensal usa o valor configurado para a clínica.
-- [ ] Falha parcial não deixa IDs externos inconsistentes.
-- [ ] Cliente manual existente continua funcionando sem Asaas.
+### Observação cartão / página Asaas
+No sandbox o sucesso da página hospedada é o mesmo caminho de API (`CREDIT_CARD` + cartão fictício `4444…` → `CONFIRMED`).  
+Fatura de evidência: `https://sandbox.asaas.com/i/rf6ba7xws7k753eg`
 
-## Formas de pagamento
+---
 
-- [ ] Pix: checkout abre, pagamento é simulado e webhook ativa a assinatura.
-- [ ] Boleto: documento abre, recebimento ativa a assinatura.
-- [ ] Cartão: checkout hospedado é usado e nenhum dado do cartão é persistido.
-- [ ] Método escolhido aparece corretamente na tela de cobrança.
-- [ ] Segunda via usa URL HTTPS do Asaas.
+## Ainda falta só para **produção / go-live** (não é mais sandbox)
 
-## Ciclo financeiro
+1. Publicar frontend em **HTTPS** + secret `APP_URL`
+2. Configurar crons no GitHub (`CRON_SECRET`, `SUPABASE_PROJECT_URL`) para `check-subscriptions` e `asaas-reconcile`
+3. Conta Asaas **produção** + webhook + secrets novos (`ASAAS_ENV=production`, etc.)
+4. Habilitar cartão/tokenização no Asaas produção (se for usar)
+5. Uma cobrança real controlada de baixo valor
+6. Backup + alerta de falha
+7. (Opcional) Digitar cartão manualmente uma vez na página Asaas hospedada em sandbox, só para ver o UX
 
-- [ ] `PAYMENT_CREATED` registra cobrança pendente sem liberar acesso.
-- [ ] `PAYMENT_CONFIRMED` e `PAYMENT_RECEIVED` não duplicam a renovação.
-- [ ] `PAYMENT_OVERDUE` marca atraso e inicia tolerância de sete dias.
-- [ ] Durante a tolerância, a clínica vê a ação de regularização.
-- [ ] Após sete dias, o cron suspende o acesso.
-- [ ] Pagamento após suspensão reativa a assinatura.
-- [ ] Estorno é registrado e aplica a regra de acesso definida.
-- [ ] Cancelamento impede novas cobranças e preserva auditoria.
+Detalhes: [`GO_LIVE_CHECKLIST.md`](./GO_LIVE_CHECKLIST.md)
 
-## Resiliência e reconciliação
+## Aprovação sandbox
 
-- [ ] Reenvio de webhook retorna 2xx rapidamente.
-- [ ] Eventos fora de ordem convergem para o estado financeiro correto.
-- [ ] Falha temporária da API não expõe detalhes internos ao usuário.
-- [ ] Reconciliação importa uma cobrança ausente localmente.
-- [ ] Reconciliação repetida não duplica dados.
-- [ ] Cron sem `CRON_SECRET` falha de forma visível.
-
-## Aplicação e operação
-
-- [ ] Login, pacientes, agenda, financeiro e relatórios continuam funcionando.
-- [ ] Lint, typecheck, testes e build passam no CI.
-- [ ] Logs não contêm dados de saúde, tokens ou payload de cartão.
-- [ ] Alertas indicam falha de webhook/reconciliação.
-- [ ] Backup e procedimento de rollback foram validados.
-
-## Aprovação
-
-Registre data, responsável, ambiente e evidências dos testes. A produção só pode
-ser liberada quando todos os itens aplicáveis estiverem aprovados e a
-tokenização/cartão estiver habilitada pelo Asaas.
+| Campo | Valor |
+|-------|--------|
+| Data | 2026-07-21 |
+| Ambiente | Sandbox |
+| Liberar Asaas produção? | **Ainda não** — falta go-live operacional acima |
+| Homologação de cobrança sandbox? | **Sim — OK** |

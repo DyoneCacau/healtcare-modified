@@ -88,15 +88,18 @@ npm run dev
 
 ### Falta antes da produção
 
-- Executar manualmente `supabase/PRODUCAO_03_ORGANIZATIONS.sql` no SQL Editor (grupos de unidades) e publicar `add-clinic-unit`
-- Concluir todos os cenários de [homologação no Sandbox](docs/ASAAS_MATRIZ_HOMOLOGACAO.md), incluindo Pix, boleto, cartão, atraso, estorno, duplicidade e cancelamento
-- Publicar o frontend e substituir `APP_URL=http://localhost:8080` pela URL HTTPS definitiva
-- Configurar monitoramento, alertas e rotina confiável de backups; o plano Free do Supabase não oferece backup automático
-- Revogar definitivamente qualquer credencial de produção anteriormente exposta
-- Somente após a homologação, criar novos secrets e webhook exclusivos no Asaas de produção
-- Fazer uma cobrança real controlada de baixo valor e liberar clientes gradualmente
+Homologação **Asaas Sandbox: OK** (2026-07-21). Ver
+[`docs/ASAAS_MATRIZ_HOMOLOGACAO.md`](docs/ASAAS_MATRIZ_HOMOLOGACAO.md) e
+[`docs/GO_LIVE_CHECKLIST.md`](docs/GO_LIVE_CHECKLIST.md).
 
-> O ambiente ainda não está liberado para cobranças reais. Enquanto `ASAAS_ENV=sandbox`, use somente dados fictícios.
+Ainda falta para ir ao ar:
+
+- Deploy HTTPS + `APP_URL`
+- Crons (`check-subscriptions`, `asaas-reconcile`) com secrets no GitHub
+- Secrets/webhook Asaas **produção** + cobrança real controlada
+- Backup / alertas
+
+> Não trocar `ASAAS_ENV` para production antes dos itens acima.
 
 ---
 

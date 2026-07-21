@@ -160,14 +160,28 @@ export async function asaasRequest<T>(
       signal: controller.signal,
       headers,
     })
-    const payload = await response.json().catch(() => ({}))
+    const payload = await response.json().catch(() => ({})) as {
+      errors?: Array<{ code?: string; description?: string }>
+    }
     if (!response.ok) {
+      const firstError = Array.isArray(payload?.errors)
+        ? payload.errors.map((e) => e.description || e.code).filter(Boolean).join('; ')
+        : null
       console.error('Asaas request failed', {
         path: normalizedPath,
         status: response.status,
         errorCount: Array.isArray(payload?.errors) ? payload.errors.length : undefined,
+        firstError: firstError || undefined,
       })
-      throw new HttpError(502, 'O provedor de pagamentos recusou a operação')
+      const sandbox = environment === 'sandbox'
+      throw new HttpError(
+        502,
+        sandbox && firstError
+          ? `Asaas: ${firstError}`
+          : sandbox
+            ? `Asaas HTTP ${response.status}`
+            : 'O provedor de pagamentos recusou a operação',
+      )
     }
     return payload as T
   } catch (error) {

@@ -54,6 +54,8 @@ supabase functions deploy create-complete-client
 supabase functions deploy meta-save-channel
 ```
 
+Não publique `asaas-sandbox-card-test` (removida após homologação do cartão fictício).
+
 Somente `asaas-webhook` é público sem JWT Supabase; ele exige o token próprio do
 Asaas. As demais funções validam usuário ou `CRON_SECRET`.
 

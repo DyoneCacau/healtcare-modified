@@ -100,7 +100,7 @@ export function SubscriptionProvider({ children }: { children: ReactNode }) {
   const [hasClinic, setHasClinic] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
 
-  const fetchSubscription = async () => {
+  const fetchSubscription = async (opts?: { silent?: boolean }) => {
     if (!user) {
       setSubscription(null);
       setHasClinic(false);
@@ -115,7 +115,7 @@ export function SubscriptionProvider({ children }: { children: ReactNode }) {
       return;
     }
 
-    setIsLoading(true);
+    if (!opts?.silent) setIsLoading(true);
 
     try {
       let clinicId: string | null = null;
@@ -234,7 +234,7 @@ export function SubscriptionProvider({ children }: { children: ReactNode }) {
   };
 
   const refreshSubscription = async () => {
-    await fetchSubscription();
+    await fetchSubscription({ silent: true });
   };
 
   useEffect(() => {
@@ -250,12 +250,12 @@ export function SubscriptionProvider({ children }: { children: ReactNode }) {
       .on(
         'postgres_changes',
         { event: '*', schema: 'public', table: 'subscriptions' },
-        () => { fetchSubscription(); }
+        () => { void fetchSubscription({ silent: true }); }
       )
       .on(
         'postgres_changes',
         { event: '*', schema: 'public', table: 'plans' },
-        () => { fetchSubscription(); }
+        () => { void fetchSubscription({ silent: true }); }
       )
       .subscribe();
 

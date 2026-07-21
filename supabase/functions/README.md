@@ -20,6 +20,8 @@ Asaas opcional por clínica. Mercado Pago permanece removido.
 | `asaas-create-checkout` | Cria cliente/assinatura e taxa de adesão opcional | `ASAAS_API_KEY`, `ASAAS_API_BASE_URL`, `ASAAS_ENV` |
 | `asaas-list-payments` | Lista faturas da assinatura com isolamento por clínica | Secrets Asaas |
 | `asaas-cancel-subscription` | Cancela recorrência Asaas e estado local | Secrets Asaas |
+| `asaas-set-card-recurring` | Atualiza assinatura para cartão e abre fatura para cadastro | Secrets Asaas |
+| `asaas-choose-payment-method` | Cliente escolhe Pix, boleto ou cartão na plataforma | Secrets Asaas |
 | `asaas-reconcile` | Reconciliação diária de eventos/cobranças | Secrets Asaas e `CRON_SECRET` |
 
 ## Legado (não usar em vendas diretas)
@@ -46,6 +48,8 @@ supabase functions deploy asaas-webhook --no-verify-jwt
 supabase functions deploy asaas-create-checkout
 supabase functions deploy asaas-list-payments
 supabase functions deploy asaas-cancel-subscription
+supabase functions deploy asaas-set-card-recurring
+supabase functions deploy asaas-choose-payment-method
 supabase functions deploy asaas-reconcile --no-verify-jwt
 ```
 

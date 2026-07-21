@@ -15,6 +15,12 @@ verify_jwt = false
 [functions.asaas-cancel-subscription]
 verify_jwt = false
 
+[functions.asaas-set-card-recurring]
+verify_jwt = false
+
+[functions.asaas-choose-payment-method]
+verify_jwt = false
+
 [functions.meta-save-channel]
 verify_jwt = true
 
