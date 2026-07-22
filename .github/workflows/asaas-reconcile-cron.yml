@@ -1,3 +1,11 @@
+# Cron diário: reconciliação Asaas (recupera webhooks perdidos / cobranças)
+#
+# Secrets obrigatórios no repositório GitHub (Settings → Secrets → Actions):
+#   SUPABASE_PROJECT_URL  → https://jahjwuydesfytlmjwucx.supabase.co
+#   CRON_SECRET           → o mesmo valor do secret CRON_SECRET no Supabase
+#
+# Agenda: todo dia 09:30 UTC (~06:30 BRT). Também pode rodar manualmente.
+
 name: Reconcile Asaas Billing
 
 on:
@@ -19,7 +27,7 @@ jobs:
           CRON_SECRET: ${{ secrets.CRON_SECRET }}
         run: |
           if [ -z "$SUPABASE_PROJECT_URL" ] || [ -z "$CRON_SECRET" ]; then
-            echo "::error::SUPABASE_PROJECT_URL e CRON_SECRET são obrigatórios."
+            echo "::error::Configure SUPABASE_PROJECT_URL e CRON_SECRET em Settings → Secrets → Actions."
             exit 1
           fi
 

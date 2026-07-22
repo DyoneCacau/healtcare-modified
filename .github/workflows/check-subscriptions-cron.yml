@@ -1,28 +1,44 @@
-# Cron opcional: verificação diária de assinaturas
+# Cron diário: verificação de assinaturas (atraso / suspensão)
 #
-# Configure os secrets no repositório:
-#   SUPABASE_PROJECT_URL  → https://xxxx.supabase.co
-#   CRON_SECRET           → mesmo valor do Supabase Edge Functions Secrets
+# Secrets obrigatórios no repositório GitHub (Settings → Secrets → Actions):
+#   SUPABASE_PROJECT_URL  → https://jahjwuydesfytlmjwucx.supabase.co
+#   CRON_SECRET           → o mesmo valor do secret CRON_SECRET no Supabase
 #
-# Ou desative este workflow e use EasyCron / Render Cron com o curl documentado em PENDENCIAS_DEPLOY.md
+# Agenda: todo dia 09:00 UTC (~06:00 BRT). Também pode rodar manualmente (Actions → Run workflow).
 
 name: Check Subscriptions
 
 on:
   schedule:
-    - cron: '0 9 * * *' # 09:00 UTC (~6h BRT)
+    - cron: '0 9 * * *'
   workflow_dispatch:
+
+permissions:
+  contents: read
 
 jobs:
   check:
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
-      - name: Call check-subscriptions
+      - name: Validate required secrets
+        env:
+          SUPABASE_PROJECT_URL: ${{ secrets.SUPABASE_PROJECT_URL }}
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
         run: |
-          if [ -z "${{ secrets.SUPABASE_PROJECT_URL }}" ] || [ -z "${{ secrets.CRON_SECRET }}" ]; then
-            echo "Secrets SUPABASE_PROJECT_URL e CRON_SECRET não configurados — job ignorado."
-            exit 0
+          if [ -z "$SUPABASE_PROJECT_URL" ] || [ -z "$CRON_SECRET" ]; then
+            echo "::error::Configure SUPABASE_PROJECT_URL e CRON_SECRET em Settings → Secrets → Actions."
+            exit 1
           fi
-          curl -sf -X POST "${{ secrets.SUPABASE_PROJECT_URL }}/functions/v1/check-subscriptions" \
-            -H "Authorization: Bearer ${{ secrets.CRON_SECRET }}" \
+
+      - name: Call check-subscriptions
+        env:
+          SUPABASE_PROJECT_URL: ${{ secrets.SUPABASE_PROJECT_URL }}
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+        run: |
+          curl --fail-with-body --silent --show-error \
+            --retry 2 --retry-all-errors \
+            --max-time 120 \
+            -X POST "$SUPABASE_PROJECT_URL/functions/v1/check-subscriptions" \
+            -H "Authorization: Bearer $CRON_SECRET" \
             -H "Content-Type: application/json"
