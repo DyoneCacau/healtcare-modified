@@ -6,6 +6,9 @@ verify_jwt = false
 [functions.asaas-reconcile]
 verify_jwt = false
 
+[functions.check-subscriptions]
+verify_jwt = false
+
 [functions.asaas-create-checkout]
 verify_jwt = false
 
