@@ -352,6 +352,7 @@ export function useTransactionMutations() {
       queryClient.invalidateQueries({ queryKey: ['transactions'] });
       queryClient.invalidateQueries({ queryKey: ['financial-summary'] });
       queryClient.invalidateQueries({ queryKey: ['dashboard-stats'] });
+      queryClient.invalidateQueries({ queryKey: ['revenue-chart'] });
       toast.success('Transação registrada com sucesso!');
     },
     onError: (error) => {
@@ -445,6 +446,7 @@ export function useTransactionMutations() {
       queryClient.invalidateQueries({ queryKey: ['transactions'] });
       queryClient.invalidateQueries({ queryKey: ['financial-summary'] });
       queryClient.invalidateQueries({ queryKey: ['dashboard-stats'] });
+      queryClient.invalidateQueries({ queryKey: ['revenue-chart'] });
       queryClient.invalidateQueries({ queryKey: ['financial-audit'] });
       toast.success('Transação atualizada!');
     },
@@ -516,6 +518,7 @@ export function useTransactionMutations() {
       queryClient.invalidateQueries({ queryKey: ['transactions'] });
       queryClient.invalidateQueries({ queryKey: ['financial-summary'] });
       queryClient.invalidateQueries({ queryKey: ['dashboard-stats'] });
+      queryClient.invalidateQueries({ queryKey: ['revenue-chart'] });
       queryClient.invalidateQueries({ queryKey: ['financial-audit'] });
       queryClient.invalidateQueries({ queryKey: ['audit-events'] });
       toast.success('Transação cancelada!');
@@ -580,6 +583,7 @@ export function useTransactionMutations() {
       queryClient.invalidateQueries({ queryKey: ['transactions'] });
       queryClient.invalidateQueries({ queryKey: ['financial-summary'] });
       queryClient.invalidateQueries({ queryKey: ['dashboard-stats'] });
+      queryClient.invalidateQueries({ queryKey: ['revenue-chart'] });
       toast.success('Estorno registrado com sucesso.');
     },
     onError: (error) => {
@@ -618,6 +622,7 @@ export function useTransactionMutations() {
         queryClient.invalidateQueries({ queryKey: ['transactions'] });
         queryClient.invalidateQueries({ queryKey: ['financial-summary'] });
         queryClient.invalidateQueries({ queryKey: ['dashboard-stats'] });
+        queryClient.invalidateQueries({ queryKey: ['revenue-chart'] });
       }
     },
   });

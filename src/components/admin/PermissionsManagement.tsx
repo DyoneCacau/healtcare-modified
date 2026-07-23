@@ -58,7 +58,7 @@ interface CustomRole {
   permissions: { feature: string; can_view: boolean; can_create: boolean; can_edit: boolean; can_delete: boolean }[];
 }
 
-const ALWAYS_AVAILABLE_FEATURES = ['dashboard', 'configuracoes', 'agenda_todas_clinicas'];
+const ALWAYS_AVAILABLE_FEATURES = ['dashboard', 'configuracoes', 'agenda_todas_clinicas', 'procedimentos'];
 const FEATURE_ALIASES: Record<string, string[]> = {
   pacientes_basico: ['pacientes'],
   financeiro_basico: ['financeiro'],

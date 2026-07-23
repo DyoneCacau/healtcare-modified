@@ -111,7 +111,6 @@ export default function Administration() {
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedEmployee, setSelectedEmployee] = useState('all');
   const [auditUnlocked, setAuditUnlocked] = useState(false);
-  const [auditEmail, setAuditEmail] = useState('');
   const [auditPassword, setAuditPassword] = useState('');
   const [auditError, setAuditError] = useState('');
   const [isUnlockingAudit, setIsUnlockingAudit] = useState(false);
@@ -120,17 +119,11 @@ export default function Administration() {
     to: new Date(),
   });
 
-  const { auditEvents, isLoading: isAuditLoading } = useAuditEvents(isAdmin);
+  const { auditEvents, isLoading: isAuditLoading } = useAuditEvents(isAdmin && auditUnlocked);
 
   useEffect(() => {
     fetchData();
   }, [clinicId, isSuperAdmin]);
-
-  useEffect(() => {
-    if (user?.email) {
-      setAuditEmail(user.email);
-    }
-  }, [user?.email]);
 
   const fetchData = async () => {
     let allowedUserIds: string[] | null = null;
@@ -335,8 +328,9 @@ export default function Administration() {
   };
 
   const handleAuditUnlock = async () => {
-    if (!auditEmail.trim()) {
-      setAuditError('Informe o e-mail do administrador da clínica.');
+    const email = user?.email?.trim();
+    if (!email) {
+      setAuditError('Não foi possível identificar o e-mail da sessão atual.');
       return;
     }
     if (!auditPassword.trim()) {
@@ -348,12 +342,12 @@ export default function Administration() {
     setAuditError('');
     try {
       const { error } = await auditVerificationClient.auth.signInWithPassword({
-        email: auditEmail.trim(),
+        email,
         password: auditPassword,
       });
 
       if (error) {
-        setAuditError('E-mail ou senha inválidos.');
+        setAuditError('Senha inválida.');
         return;
       }
 
@@ -760,15 +754,8 @@ export default function Administration() {
                 </CardHeader>
                 <CardContent className="space-y-3">
                   <p className="text-sm text-muted-foreground">
-                    Para acessar a auditoria, confirme as credenciais do administrador da clínica.
+                    Para acessar a auditoria, confirme sua senha de acesso.
                   </p>
-                  <Input
-                    type="email"
-                    value={auditEmail}
-                    onChange={(e) => setAuditEmail(e.target.value)}
-                    placeholder="E-mail do administrador"
-                    autoComplete="username"
-                  />
                   <Input
                     type="password"
                     value={auditPassword}

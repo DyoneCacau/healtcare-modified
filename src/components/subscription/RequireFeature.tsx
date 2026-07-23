@@ -12,6 +12,7 @@ export const FEATURE_LABELS: Record<string, string> = {
   financeiro: 'Financeiro',
   comissoes: 'Comissões',
   estoque: 'Estoque',
+  procedimentos: 'Procedimentos',
   relatorios: 'Relatórios',
   ponto: 'Controle de Ponto',
   atendimento: 'Atendimento Omnichannel',

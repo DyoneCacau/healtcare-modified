@@ -19,6 +19,7 @@ export const PERMISSION_FEATURES = [
   { id: 'financeiro', label: 'Financeiro' },
   { id: 'comissoes', label: 'Comissões' },
   { id: 'estoque', label: 'Estoque' },
+  { id: 'procedimentos', label: 'Procedimentos' },
   { id: 'atendimento', label: 'Atendimento' },
   { id: 'relatorios', label: 'Relatórios' },
   { id: 'ponto', label: 'Ponto' },
@@ -112,6 +113,16 @@ export const PERMISSION_GROUPS: PermissionGroup[] = [
       { feature: 'estoque', label: 'Ver', actions: ['can_view'] },
       { feature: 'estoque', label: 'Criar / Editar', actions: ['can_create', 'can_edit'] },
       { feature: 'estoque', label: 'Excluir', actions: ['can_delete'] },
+    ],
+  },
+  {
+    id: 'gr_procedimentos',
+    label: 'Procedimentos',
+    children: [
+      { feature: 'procedimentos', label: 'Ver catálogo', actions: ['can_view'] },
+      { feature: 'procedimentos', label: 'Criar', actions: ['can_create'] },
+      { feature: 'procedimentos', label: 'Editar', actions: ['can_edit'] },
+      { feature: 'procedimentos', label: 'Excluir', actions: ['can_delete'] },
     ],
   },
   {

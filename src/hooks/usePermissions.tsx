@@ -1,5 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
+import { getDefaultPermissionsForRole, type SystemRole } from '@/lib/permissionsConstants';
 import { useAuth } from './useAuth';
 import { useClinic } from './useClinic';
 
@@ -41,6 +42,9 @@ export function usePermissions() {
         (perms || []).forEach((p: any) => {
           map[p.feature] = { can_view: p.can_view, can_create: p.can_create, can_edit: p.can_edit, can_delete: p.can_delete };
         });
+        // Sem linhas salvas: acesso pleno (comportamento atual). Com matriz parcial,
+        // features novas (ex.: procedimentos) usam default negado até o admin salvar.
+        if (Object.keys(map).length === 0) return 'full';
         return map;
       }
 
@@ -68,6 +72,19 @@ export function usePermissions() {
 
       // Se não há permissões salvas para esta clínica/role, mantém comportamento atual (acesso pelo plano)
       if (Object.keys(map).length === 0) return 'full';
+
+      // Features novas ainda sem linha na matriz: aplica default da role (admin = tudo)
+      getDefaultPermissionsForRole(role as SystemRole).forEach((row) => {
+        if (!map[row.feature]) {
+          map[row.feature] = {
+            can_view: row.can_view,
+            can_create: row.can_create,
+            can_edit: row.can_edit,
+            can_delete: row.can_delete,
+          };
+        }
+      });
+
       return map;
     },
     enabled: !!user?.id && !!clinicId,
