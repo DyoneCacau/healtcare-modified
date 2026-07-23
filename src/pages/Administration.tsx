@@ -439,7 +439,7 @@ export default function Administration() {
   };
 
   if (!isAdmin) {
-    return <Navigate to="/" replace />;
+    return <Navigate to="/app" replace />;
   }
 
   return (

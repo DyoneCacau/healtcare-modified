@@ -1,5 +1,6 @@
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
 @import url("https://fonts.googleapis.com/css2?family=Inter&display=swap");
+@import url('https://fonts.googleapis.com/css2?family=Outfit:wght@500;600;700&display=swap');
 
 @tailwind base;
 @tailwind components;
@@ -174,6 +175,43 @@
   }
   to {
     opacity: 1;
+  }
+}
+
+.landing-root .font-landing {
+  font-family: 'Outfit', 'Inter', system-ui, sans-serif;
+}
+
+.landing-fade-up {
+  animation: landingFadeUp 0.8s ease-out both;
+}
+
+.landing-fade-up-delay {
+  animation: landingFadeUp 0.9s ease-out 0.15s both;
+}
+
+.landing-float {
+  animation: landingFloat 6s ease-in-out infinite;
+}
+
+@keyframes landingFadeUp {
+  from {
+    opacity: 0;
+    transform: translateY(18px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes landingFloat {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-8px);
   }
 }
 

@@ -12,6 +12,7 @@ import { RequireFeature } from "@/components/subscription/RequireFeature";
 import { OnboardingScreen } from "@/components/onboarding/OnboardingScreen";
 import { useOnboarding } from "@/hooks/useOnboarding";
 const Index = React.lazy(() => import("./pages/Index"));
+const Landing = React.lazy(() => import("./pages/Landing"));
 const Login = React.lazy(() => import("./pages/Login"));
 const ForgotPassword = React.lazy(() => import("./pages/ForgotPassword"));
 const ResetPassword = React.lazy(() => import("./pages/ResetPassword"));
@@ -133,17 +134,32 @@ function AuthenticatedAppLayout() {
   );
 }
 
+function PublicHome() {
+  const { user, isLoading } = useAuth();
+
+  if (isLoading) {
+    return <LoadingScreen />;
+  }
+
+  if (user) {
+    return <Navigate to="/app" replace />;
+  }
+
+  return <Landing />;
+}
+
 function AppRoutes() {
   return (
     <React.Suspense fallback={<LoadingScreen />}>
       <Routes>
+      <Route path="/" element={<PublicHome />} />
       <Route path="/login" element={<Login />} />
       <Route path="/privacidade" element={<Privacy />} />
       <Route path="/forgot-password" element={<ForgotPassword />} />
       <Route path="/reset-password" element={<ResetPassword />} />
 
       <Route element={<AuthenticatedAppLayout />}>
-        <Route path="/" element={<Index />} />
+        <Route path="/app" element={<Index />} />
 
         <Route
           path="/pacientes"

@@ -77,7 +77,7 @@ export default function SuperAdmin() {
   }
 
   if (!isSuperAdmin) {
-    return <Navigate to="/" replace />;
+    return <Navigate to="/app" replace />;
   }
 
   return (

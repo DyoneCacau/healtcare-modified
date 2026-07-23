@@ -47,7 +47,7 @@ interface MenuItem {
 }
 
 const menuItems: MenuItem[] = [
-  { icon: LayoutDashboard, label: "Dashboard", path: "/", feature: "dashboard" },
+  { icon: LayoutDashboard, label: "Dashboard", path: "/app", feature: "dashboard" },
   { icon: Calendar, label: "Agenda", path: "/agenda", feature: "agenda" },
   { icon: Users, label: "Pacientes", path: "/pacientes", feature: "pacientes" },
   { icon: Stethoscope, label: "Profissionais", path: "/profissionais", feature: "profissionais" },
