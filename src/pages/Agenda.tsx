@@ -100,6 +100,8 @@ export default function Agenda() {
         cro: apt.professional?.cro || '',
       } as Professional,
       procedure: apt.procedure,
+      procedureId: apt.procedure_id ?? undefined,
+      procedurePrice: apt.procedure_price == null ? undefined : Number(apt.procedure_price),
       status: apt.status as AgendaAppointment['status'],
       paymentStatus: apt.payment_status as AgendaAppointment['paymentStatus'],
       notes: apt.notes,
@@ -259,7 +261,8 @@ export default function Agenda() {
     paymentMethod: PaymentMethod,
     quantity: number,
     commissionBreakdown: CommissionBreakdownItem[],
-    scheduleReturn?: boolean
+    scheduleReturn?: boolean,
+    adjustmentReason?: string,
   ) => {
     // Update appointment status
     await updateAppointment.mutateAsync({
@@ -272,7 +275,10 @@ export default function Agenda() {
     await createTransaction.mutateAsync({
       type: 'income',
       amount: serviceValue,
-      description: `${appointment.procedure} - ${appointment.patientName}`,
+      description: [
+        `${appointment.procedure} - ${appointment.patientName}`,
+        adjustmentReason ? `Ajuste: ${adjustmentReason}` : null,
+      ].filter(Boolean).join(' | '),
       category: 'Procedimento',
       payment_method: paymentMethod,
       reference_type: 'appointment',
@@ -350,6 +356,8 @@ export default function Agenda() {
         start_time: data.startTime,
         end_time: data.endTime,
         procedure: data.procedure,
+        procedure_id: data.procedureId ?? null,
+        procedure_price: data.procedurePrice ?? null,
         status: data.status,
         payment_status: data.paymentStatus,
         notes: data.notes,
@@ -380,6 +388,8 @@ export default function Agenda() {
         start_time: data.startTime!,
         end_time: data.endTime!,
         procedure: data.procedure!,
+        procedure_id: data.procedureId ?? null,
+        procedure_price: data.procedurePrice ?? null,
         status: data.status || 'pending',
         payment_status: data.paymentStatus || 'pending',
         notes: data.notes,

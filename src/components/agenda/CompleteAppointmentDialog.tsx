@@ -31,6 +31,7 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { Input } from '@/components/ui/input';
+import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
@@ -43,7 +44,6 @@ import { CommissionRule, beneficiaryTypeLabels, calculationUnitLabels } from '@/
 import {
   findApplicableRules,
   calculateCommissionAmount,
-  getProcedurePrice,
   formatCommissionInfo,
   validateAppointmentCompletion,
   ValidationResult,
@@ -65,7 +65,8 @@ interface CompleteAppointmentDialogProps {
     paymentMethod: PaymentMethod,
     quantity: number,
     commissionBreakdown: CommissionBreakdownItem[],
-    scheduleReturn?: boolean
+    scheduleReturn?: boolean,
+    adjustmentReason?: string,
   ) => void;
   commissionRules?: CommissionRule[];
 }
@@ -88,12 +89,14 @@ export function CompleteAppointmentDialog({
   const [validation, setValidation] = useState<ValidationResult>({ isValid: true });
   const [proceedWithoutRule, setProceedWithoutRule] = useState(false);
   const [scheduleReturn, setScheduleReturn] = useState(false);
+  const [adjustmentReason, setAdjustmentReason] = useState('');
 
   useEffect(() => {
     if (appointment) {
       // Reset states
       setProceedWithoutRule(false);
       setScheduleReturn(false);
+      setAdjustmentReason('');
       setQuantity(1);
       
       // Validate appointment completion
@@ -105,11 +108,11 @@ export function CompleteAppointmentDialog({
       );
       setValidation(validationResult);
 
-      // Get suggested price from procedure table
-      const suggestedPrice = getProcedurePrice(
-        appointment.procedure,
-        appointment.clinic.id
-      );
+      // Snapshot do catálogo no momento do agendamento. O valor continua
+      // editável abaixo para descontos, indicação ou negociação.
+      // Agendamentos legados não têm snapshot do catálogo; mantêm o
+      // comportamento anterior de R$ 150 como sugestão, sempre editável.
+      const suggestedPrice = appointment.procedurePrice ?? 150;
       setServiceValue(suggestedPrice);
 
       // Find ALL applicable commission rules (professional + seller + reception)
@@ -161,7 +164,8 @@ export function CompleteAppointmentDialog({
       paymentMethod,
       quantity,
       commissionBreakdown,
-      scheduleReturn
+      scheduleReturn,
+      adjustmentReason.trim() || undefined,
     );
     onOpenChange(false);
   };
@@ -270,6 +274,9 @@ export function CompleteAppointmentDialog({
                     disabled={validation.errorCode === 'DUPLICATE'}
                   />
                 </div>
+                <p className="text-xs text-muted-foreground">
+                  Valor sugerido pelo catálogo. Edite para aplicar desconto, indicação ou negociação.
+                </p>
               </div>
 
               {needsQuantity && (
@@ -285,6 +292,22 @@ export function CompleteAppointmentDialog({
                     disabled={validation.errorCode === 'DUPLICATE'}
                   />
                 </div>
+              )}
+            </div>
+            <div className="grid gap-2">
+              <Label htmlFor="adjustmentReason">Observação sobre preço (opcional)</Label>
+              <Textarea
+                id="adjustmentReason"
+                value={adjustmentReason}
+                onChange={(event) => setAdjustmentReason(event.target.value)}
+                placeholder="Ex.: desconto por indicação, condição especial..."
+                rows={2}
+                disabled={validation.errorCode === 'DUPLICATE'}
+              />
+              {appointment.leadSource === 'referral' && (
+                <p className="text-xs text-muted-foreground">
+                  Atendimento por indicação{appointment.referralName ? `: ${appointment.referralName}` : ''}.
+                </p>
               )}
             </div>
 

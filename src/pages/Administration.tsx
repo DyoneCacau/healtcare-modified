@@ -41,6 +41,8 @@ import { PermissionsManagement } from '@/components/admin/PermissionsManagement'
 import { ErrorBoundary } from '@/components/ErrorBoundary';
 import { MyClinicsContent } from '@/components/admin/MyClinicsContent';
 import { supabase } from '@/integrations/supabase/client';
+import { createClient } from '@supabase/supabase-js';
+import type { Database } from '@/integrations/supabase/types';
 import { useAuth } from '@/hooks/useAuth';
 import { useClinic } from '@/hooks/useClinic';
 import { useAuditEvents } from '@/hooks/useFinancial';
@@ -82,6 +84,21 @@ interface PendingCorrection {
 
 const ADMIN_TAB_VALUES = ['clinics', 'corrections', 'users', 'permissions', 'timesheet', 'settings', 'audit'] as const;
 
+// Cliente isolado apenas para confirmação de senha. Ele não compartilha
+// storage/session com o cliente principal, então um superadmin pode confirmar
+// a senha do admin da clínica sem trocar a sessão que está usando.
+const auditVerificationClient = createClient<Database>(
+  import.meta.env.VITE_SUPABASE_URL,
+  import.meta.env.VITE_SUPABASE_ANON_KEY || import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY,
+  {
+    auth: {
+      persistSession: false,
+      autoRefreshToken: false,
+      detectSessionInUrl: false,
+    },
+  },
+);
+
 export default function Administration() {
   const { isAdmin, isSuperAdmin, user, profile } = useAuth();
   const { clinicId } = useClinic();
@@ -94,8 +111,10 @@ export default function Administration() {
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedEmployee, setSelectedEmployee] = useState('all');
   const [auditUnlocked, setAuditUnlocked] = useState(false);
+  const [auditEmail, setAuditEmail] = useState('');
   const [auditPassword, setAuditPassword] = useState('');
   const [auditError, setAuditError] = useState('');
+  const [isUnlockingAudit, setIsUnlockingAudit] = useState(false);
   const [dateRange] = useState({
     from: subDays(new Date(), 30),
     to: new Date(),
@@ -106,6 +125,12 @@ export default function Administration() {
   useEffect(() => {
     fetchData();
   }, [clinicId, isSuperAdmin]);
+
+  useEffect(() => {
+    if (user?.email) {
+      setAuditEmail(user.email);
+    }
+  }, [user?.email]);
 
   const fetchData = async () => {
     let allowedUserIds: string[] | null = null;
@@ -310,8 +335,8 @@ export default function Administration() {
   };
 
   const handleAuditUnlock = async () => {
-    if (!user?.email) {
-      setAuditError('Usuário sem e-mail.');
+    if (!auditEmail.trim()) {
+      setAuditError('Informe o e-mail do administrador da clínica.');
       return;
     }
     if (!auditPassword.trim()) {
@@ -319,19 +344,26 @@ export default function Administration() {
       return;
     }
 
-    const { error } = await supabase.auth.signInWithPassword({
-      email: user.email,
-      password: auditPassword,
-    });
-
-    if (error) {
-      setAuditError('Senha inválida.');
-      return;
-    }
-
-    setAuditUnlocked(true);
-    setAuditPassword('');
+    setIsUnlockingAudit(true);
     setAuditError('');
+    try {
+      const { error } = await auditVerificationClient.auth.signInWithPassword({
+        email: auditEmail.trim(),
+        password: auditPassword,
+      });
+
+      if (error) {
+        setAuditError('E-mail ou senha inválidos.');
+        return;
+      }
+
+      setAuditUnlocked(true);
+      setAuditPassword('');
+    } finally {
+      // A sessão temporária é descartada: não altera a sessão do usuário atual.
+      await auditVerificationClient.auth.signOut();
+      setIsUnlockingAudit(false);
+    }
   };
 
   const formatAudit = (entry: AuditEvent) => {
@@ -439,7 +471,7 @@ export default function Administration() {
   };
 
   if (!isAdmin) {
-    return <Navigate to="/" replace />;
+    return <Navigate to="/app" replace />;
   }
 
   return (
@@ -728,19 +760,30 @@ export default function Administration() {
                 </CardHeader>
                 <CardContent className="space-y-3">
                   <p className="text-sm text-muted-foreground">
-                    Para acessar a auditoria, confirme sua senha.
+                    Para acessar a auditoria, confirme as credenciais do administrador da clínica.
                   </p>
+                  <Input
+                    type="email"
+                    value={auditEmail}
+                    onChange={(e) => setAuditEmail(e.target.value)}
+                    placeholder="E-mail do administrador"
+                    autoComplete="username"
+                  />
                   <Input
                     type="password"
                     value={auditPassword}
                     onChange={(e) => setAuditPassword(e.target.value)}
                     placeholder="Digite sua senha"
+                    autoComplete="current-password"
+                    onKeyDown={(event) => {
+                      if (event.key === 'Enter') void handleAuditUnlock();
+                    }}
                   />
                   {auditError && (
                     <p className="text-sm text-destructive">{auditError}</p>
                   )}
-                  <Button onClick={handleAuditUnlock}>
-                    Confirmar
+                  <Button onClick={handleAuditUnlock} disabled={isUnlockingAudit}>
+                    {isUnlockingAudit ? 'Confirmando...' : 'Confirmar'}
                   </Button>
                 </CardContent>
               </Card>

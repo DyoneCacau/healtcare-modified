@@ -27,7 +27,7 @@ export function ClinicSelector() {
     async (clinicId: string) => {
       try {
         setSelectedClinicId(clinicId);
-        navigate('/', { replace: true });
+        navigate('/app', { replace: true });
       } catch (error) {
         console.error("Erro ao selecionar clínica:", error);
         toast.error("Erro ao acessar clínica");

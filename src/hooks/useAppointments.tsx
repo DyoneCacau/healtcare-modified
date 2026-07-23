@@ -13,6 +13,8 @@ export interface AppointmentData {
   start_time: string;
   end_time: string;
   procedure: string;
+  procedure_id?: string | null;
+  procedure_price?: number | null;
   status: string;
   payment_status: string;
   notes: string | null;

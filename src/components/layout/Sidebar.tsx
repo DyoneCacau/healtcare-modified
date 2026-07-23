@@ -5,6 +5,7 @@ import {
   Calendar,
   Users,
   Stethoscope,
+  ListPlus,
   DollarSign,
   Package,
   Settings,
@@ -47,10 +48,11 @@ interface MenuItem {
 }
 
 const menuItems: MenuItem[] = [
-  { icon: LayoutDashboard, label: "Dashboard", path: "/", feature: "dashboard" },
+  { icon: LayoutDashboard, label: "Dashboard", path: "/app", feature: "dashboard" },
   { icon: Calendar, label: "Agenda", path: "/agenda", feature: "agenda" },
   { icon: Users, label: "Pacientes", path: "/pacientes", feature: "pacientes" },
   { icon: Stethoscope, label: "Profissionais", path: "/profissionais", feature: "profissionais" },
+  { icon: ListPlus, label: "Procedimentos", path: "/procedimentos", feature: "administracao" },
   { icon: DollarSign, label: "Financeiro", path: "/financeiro", feature: "financeiro" },
   { icon: Percent, label: "Comissões", path: "/comissoes", feature: "comissoes" },
   { icon: Clock, label: "Ponto", path: "/ponto", feature: "ponto" },

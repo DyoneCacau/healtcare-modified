@@ -36,7 +36,7 @@ export default function Login() {
 
   useEffect(() => {
     if (!authLoading && user) {
-      navigate("/");
+      navigate("/app");
     }
   }, [user, authLoading, navigate]);
 
@@ -50,7 +50,7 @@ export default function Login() {
       setIsLoading(false);
     } else {
       toast.success("Login realizado com sucesso!");
-      navigate("/");
+      navigate("/app");
     }
   };
 

@@ -27,6 +27,10 @@ export interface AgendaAppointment {
   patientPhone?: string;
   professional: Professional;
   procedure: string;
+  /** Catálogo atual; ausente em agendamentos antigos/personalizados. */
+  procedureId?: string | null;
+  /** Preço sugerido no momento do agendamento (snapshot editável no fechamento). */
+  procedurePrice?: number | null;
   status: 'confirmed' | 'pending' | 'return' | 'completed' | 'cancelled' | 'no_show';
   paymentStatus: 'paid' | 'pending' | 'partial' | 'refunded';
   notes?: string;

@@ -12,6 +12,7 @@ import { RequireFeature } from "@/components/subscription/RequireFeature";
 import { OnboardingScreen } from "@/components/onboarding/OnboardingScreen";
 import { useOnboarding } from "@/hooks/useOnboarding";
 const Index = React.lazy(() => import("./pages/Index"));
+const Landing = React.lazy(() => import("./pages/Landing"));
 const Login = React.lazy(() => import("./pages/Login"));
 const ForgotPassword = React.lazy(() => import("./pages/ForgotPassword"));
 const ResetPassword = React.lazy(() => import("./pages/ResetPassword"));
@@ -23,6 +24,7 @@ const Reports = React.lazy(() => import("./pages/Reports"));
 const Commissions = React.lazy(() => import("./pages/Commissions"));
 const Inventory = React.lazy(() => import("./pages/Inventory"));
 const Professionals = React.lazy(() => import("./pages/Professionals"));
+const Procedures = React.lazy(() => import("./pages/Procedures"));
 const TimeClock = React.lazy(() => import("./pages/TimeClock"));
 const Administration = React.lazy(() => import("./pages/Administration"));
 const SuperAdmin = React.lazy(() => import("./pages/SuperAdmin"));
@@ -133,17 +135,32 @@ function AuthenticatedAppLayout() {
   );
 }
 
+function PublicHome() {
+  const { user, isLoading } = useAuth();
+
+  if (isLoading) {
+    return <LoadingScreen />;
+  }
+
+  if (user) {
+    return <Navigate to="/app" replace />;
+  }
+
+  return <Landing />;
+}
+
 function AppRoutes() {
   return (
     <React.Suspense fallback={<LoadingScreen />}>
       <Routes>
+      <Route path="/" element={<PublicHome />} />
       <Route path="/login" element={<Login />} />
       <Route path="/privacidade" element={<Privacy />} />
       <Route path="/forgot-password" element={<ForgotPassword />} />
       <Route path="/reset-password" element={<ResetPassword />} />
 
       <Route element={<AuthenticatedAppLayout />}>
-        <Route path="/" element={<Index />} />
+        <Route path="/app" element={<Index />} />
 
         <Route
           path="/pacientes"
@@ -213,6 +230,15 @@ function AppRoutes() {
           element={
             <RequireFeature feature="profissionais">
               <Professionals />
+            </RequireFeature>
+          }
+        />
+
+        <Route
+          path="/procedimentos"
+          element={
+            <RequireFeature feature="administracao">
+              <Procedures />
             </RequireFeature>
           }
         />
