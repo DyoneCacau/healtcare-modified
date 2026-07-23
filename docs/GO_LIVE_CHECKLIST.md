@@ -1,7 +1,8 @@
 # O que falta para colocar a plataforma no ar
 
-**Data:** 2026-07-21  
-**Homologação Asaas Sandbox:** **OK**
+**Data:** 2026-07-22  
+**Homologação Asaas Sandbox:** **OK**  
+**Crons GitHub:** **OK**
 
 ---
 
@@ -9,34 +10,27 @@
 
 - Pix / Boleto / Cartão na Minha Cobrança
 - Pix confirmado no sandbox e status atualizado no app
-- Cartão sandbox `4444…` aprovado (`CONFIRMED`)
+- Cartão sandbox aprovado
 - Atraso → suspensão → reativação
-- Cancelamento Asaas (fluxo validado)
-- Reconcile / webhook 401
-- Functions Mercado Pago legadas **removidas**
-- Build, typecheck e testes unitários OK
+- Cancelamento Asaas
+- Crons diários (Check Subscriptions + Reconcile Asaas)
+- Functions Mercado Pago legadas removidas
+- Build / typecheck / testes OK
 
 ---
 
-## Falta para ir ao ar (produção)
+## Falta para ir ao ar
 
-1. **Deploy do frontend** (HTTPS) + `APP_URL` no Supabase  
-2. **Crons GitHub** — `CRON_SECRET` já está no Supabase; falta autenticar o `gh` e gravar os secrets no repositório (ou cadastrar manualmente em Settings → Secrets → Actions):
-   - `SUPABASE_PROJECT_URL` = `https://jahjwuydesfytlmjwucx.supabase.co`
-   - `CRON_SECRET` = o mesmo valor do Supabase  
-3. **Asaas produção:** conta, API key, webhook, `ASAAS_ENV=production`  
-4. Liberação de **cartão** no Asaas produção (se for oferecer)  
-5. **1 cobrança real** de teste  
-6. **Backup** do banco + alerta se webhook falhar  
+1. **Publicar o frontend** em HTTPS (Vercel/Netlify/etc.) com `VITE_SUPABASE_URL` e `VITE_SUPABASE_ANON_KEY`
+2. No Supabase, secret **`APP_URL`** = essa URL HTTPS (CORS)
+3. **Asaas produção**
+   - Conta de produção
+   - Nova API key
+   - Novo `ASAAS_WEBHOOK_TOKEN`
+   - Secrets: `ASAAS_ENV=production`, `ASAAS_API_BASE_URL=https://api.asaas.com/v3`, `ASAAS_API_KEY`, `ASAAS_WEBHOOK_TOKEN`
+   - Webhook apontando para `https://jahjwuydesfytlmjwucx.supabase.co/functions/v1/asaas-webhook`
+4. Pedir ao Asaas a **liberação de cartão** (se for usar cartão em produção)
+5. Fazer **1 cobrança real** de baixo valor e validar
+6. **Backup** do banco + algum alerta se o webhook falhar
 
 Enquanto isso, manter `ASAAS_ENV=sandbox`.
-
-### Como ativar os crons (quando o `gh` estiver logado)
-
-```bash
-gh secret set SUPABASE_PROJECT_URL --body "https://jahjwuydesfytlmjwucx.supabase.co"
-# CRON_SECRET: use o mesmo valor configurado no Supabase Edge Functions → Secrets
-gh secret set CRON_SECRET
-```
-
-Depois: Actions → **Check Subscriptions** / **Reconcile Asaas Billing** → Run workflow (teste manual).
