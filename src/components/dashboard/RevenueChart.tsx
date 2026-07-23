@@ -1,6 +1,7 @@
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useClinic } from '@/hooks/useClinic';
+import { netRevenue, sumRegularExpenses } from '@/lib/financialAggregation';
 import {
   AreaChart,
   Area,
@@ -34,8 +35,9 @@ export function RevenueChart() {
 
       const { data: transactions, error } = await supabase
         .from('financial_transactions')
-        .select('type, amount, created_at')
+        .select('type, amount, created_at, category, refunded_at, deleted_at')
         .eq('clinic_id', clinicId)
+        .is('deleted_at', null)
         .gte('created_at', months[0].start)
         .lte('created_at', months[months.length - 1].end);
 
@@ -46,13 +48,9 @@ export function RevenueChart() {
           t => t.created_at >= month.start && t.created_at <= month.end
         );
 
-        const receitas = monthTransactions
-          .filter(t => t.type === 'income')
-          .reduce((sum, t) => sum + Number(t.amount), 0);
-
-        const despesas = monthTransactions
-          .filter(t => t.type === 'expense')
-          .reduce((sum, t) => sum + Number(t.amount), 0);
+        // Estorno remove da receita; despesa "Estorno" legada não entra em despesas
+        const receitas = netRevenue(monthTransactions);
+        const despesas = sumRegularExpenses(monthTransactions);
 
         return {
           month: month.label.charAt(0).toUpperCase() + month.label.slice(1),

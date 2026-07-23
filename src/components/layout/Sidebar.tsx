@@ -52,7 +52,7 @@ const menuItems: MenuItem[] = [
   { icon: Calendar, label: "Agenda", path: "/agenda", feature: "agenda" },
   { icon: Users, label: "Pacientes", path: "/pacientes", feature: "pacientes" },
   { icon: Stethoscope, label: "Profissionais", path: "/profissionais", feature: "profissionais" },
-  { icon: ListPlus, label: "Procedimentos", path: "/procedimentos", feature: "administracao" },
+  { icon: ListPlus, label: "Procedimentos", path: "/procedimentos", feature: "procedimentos" },
   { icon: DollarSign, label: "Financeiro", path: "/financeiro", feature: "financeiro" },
   { icon: Percent, label: "Comissões", path: "/comissoes", feature: "comissoes" },
   { icon: Clock, label: "Ponto", path: "/ponto", feature: "ponto" },

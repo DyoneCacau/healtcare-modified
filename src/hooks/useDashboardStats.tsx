@@ -1,5 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
+import { netBalance } from '@/lib/financialAggregation';
 import { useClinic } from './useClinic';
 
 export function useDashboardStats() {
@@ -59,16 +60,16 @@ export function useDashboardStats() {
 
       const { data: todayTransactions, error: transError } = await supabase
         .from('financial_transactions')
-        .select('type, amount')
+        .select('type, amount, category, refunded_at, deleted_at')
         .eq('clinic_id', clinicId)
+        .is('deleted_at', null)
         .gte('created_at', startOfDay)
         .lte('created_at', endOfDay);
 
       if (transError) throw transError;
 
-      const todayBalance = (todayTransactions || []).reduce((sum, t) => {
-        return sum + (t.type === 'income' ? Number(t.amount) : -Number(t.amount));
-      }, 0);
+      // Estornos (refunded_at) e despesas "Estorno" legadas saem do saldo do dia
+      const todayBalance = netBalance(todayTransactions || []);
 
       // Calculate trends
       const todayCount = (todayAppointments || []).length;

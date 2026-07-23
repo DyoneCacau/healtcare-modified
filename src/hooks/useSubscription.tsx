@@ -57,6 +57,7 @@ const ROUTE_FEATURE_MAP: Record<string, string> = {
   '/financeiro': 'financeiro',
   '/comissoes': 'comissoes',
   '/estoque': 'estoque',
+  '/procedimentos': 'procedimentos',
   '/relatorios': 'relatorios',
   '/ponto': 'ponto',
   '/atendimento': 'atendimento',
@@ -66,12 +67,13 @@ const ROUTE_FEATURE_MAP: Record<string, string> = {
 };
 
 // Features que sempre estão disponíveis (não dependem do plano)
-const ALWAYS_AVAILABLE = ['dashboard', 'configuracoes'];
+const ALWAYS_AVAILABLE = ['dashboard', 'configuracoes', 'procedimentos'];
 
 // Features que equivalem a outras (ex.: versoes basicas liberam o modulo principal)
 const FEATURE_ALIASES: Record<string, string[]> = {
   pacientes_basico: ['pacientes'],
   financeiro_basico: ['financeiro'],
+  administracao: ['procedimentos'],
 };
 
 // Lista completa de features do sistema para referência
@@ -83,6 +85,7 @@ export const ALL_FEATURES = [
   'financeiro',
   'comissoes',
   'estoque',
+  'procedimentos',
   'relatorios',
   'ponto',
   'atendimento',

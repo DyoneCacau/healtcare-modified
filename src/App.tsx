@@ -237,7 +237,7 @@ function AppRoutes() {
         <Route
           path="/procedimentos"
           element={
-            <RequireFeature feature="administracao">
+            <RequireFeature feature="procedimentos">
               <Procedures />
             </RequireFeature>
           }

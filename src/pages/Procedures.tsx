@@ -42,6 +42,7 @@ import {
 } from '@/components/ui/table';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useAuth } from '@/hooks/useAuth';
+import { usePermissions } from '@/hooks/usePermissions';
 import {
   useClinicProcedures,
   useClinicProcedureMutations,
@@ -69,7 +70,8 @@ function currency(value: number): string {
 }
 
 export default function Procedures() {
-  const { isAdmin } = useAuth();
+  const { isSuperAdmin } = useAuth();
+  const { can, isLoading: permissionsLoading } = usePermissions();
   const { procedures, isLoading, error } = useClinicProcedures();
   const { createProcedure, updateProcedure } = useClinicProcedureMutations();
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -78,6 +80,10 @@ export default function Procedures() {
   const [search, setSearch] = useState('');
   const [category, setCategory] = useState('all');
   const [status, setStatus] = useState('all');
+
+  const canView = isSuperAdmin || can('procedimentos', 'can_view');
+  const canCreate = isSuperAdmin || can('procedimentos', 'can_create');
+  const canEdit = isSuperAdmin || can('procedimentos', 'can_edit');
 
   const categories = useMemo(
     () => Array.from(new Set(procedures.map((item) => item.category))).sort(),
@@ -96,12 +102,14 @@ export default function Procedures() {
   }, [procedures, search, category, status]);
 
   const openNew = () => {
+    if (!canCreate) return;
     setEditing(null);
     setForm(EMPTY_FORM);
     setDialogOpen(true);
   };
 
   const openEdit = (procedure: ClinicProcedure) => {
+    if (!canEdit) return;
     setEditing(procedure);
     setForm({
       name: procedure.name,
@@ -118,6 +126,8 @@ export default function Procedures() {
 
   const handleSave = async () => {
     if (!form.name.trim()) return;
+    if (editing && !canEdit) return;
+    if (!editing && !canCreate) return;
     const payload = {
       ...form,
       name: form.name.trim(),
@@ -132,7 +142,18 @@ export default function Procedures() {
     setDialogOpen(false);
   };
 
-  if (!isAdmin) return <Navigate to="/app" replace />;
+  if (permissionsLoading) {
+    return (
+      <MainLayout>
+        <div className="space-y-4">
+          <Skeleton className="h-10 w-64" />
+          <Skeleton className="h-40 w-full" />
+        </div>
+      </MainLayout>
+    );
+  }
+
+  if (!canView) return <Navigate to="/app" replace />;
 
   return (
     <MainLayout>
@@ -144,10 +165,12 @@ export default function Procedures() {
               Cadastre os serviços oferecidos pela clínica
             </p>
           </div>
-          <Button onClick={openNew}>
-            <Plus className="mr-2 h-4 w-4" />
-            Novo procedimento
-          </Button>
+          {canCreate && (
+            <Button onClick={openNew}>
+              <Plus className="mr-2 h-4 w-4" />
+              Novo procedimento
+            </Button>
+          )}
         </div>
 
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
@@ -252,10 +275,12 @@ export default function Procedures() {
                           </Badge>
                         </TableCell>
                         <TableCell className="text-right">
-                          <Button variant="ghost" size="icon" onClick={() => openEdit(procedure)}>
-                            <Pencil className="h-4 w-4" />
-                            <span className="sr-only">Editar {procedure.name}</span>
-                          </Button>
+                          {canEdit && (
+                            <Button variant="ghost" size="icon" onClick={() => openEdit(procedure)}>
+                              <Pencil className="h-4 w-4" />
+                              <span className="sr-only">Editar {procedure.name}</span>
+                            </Button>
+                          )}
                         </TableCell>
                       </TableRow>
                     ))}
