@@ -43,6 +43,7 @@ import {
 } from '@/types/commission';
 import { useProfessionals } from '@/hooks/useProfessionals';
 import { useClinics } from '@/hooks/useClinic';
+import { useClinicProcedures } from '@/hooks/useClinicProcedures';
 import { PROCEDURE_OPTIONS } from '@/lib/procedures';
 
 const formSchema = z.object({
@@ -79,6 +80,7 @@ export function CommissionRuleForm({
   const [selectedClinic, setSelectedClinic] = useState(selectedClinicId || '');
   const { professionals } = useProfessionals();
   const { clinics } = useClinics();
+  const { activeProcedures } = useClinicProcedures(selectedClinic);
 
   const form = useForm<FormValues>({
     resolver: zodResolver(formSchema),
@@ -213,7 +215,17 @@ export function CommissionRuleForm({
               render={({ field }) => (
                 <FormItem>
                   <FormLabel>Tipo de Beneficiário</FormLabel>
-                  <Select value={field.value} onValueChange={field.onChange}>
+                  <Select
+                    value={field.value}
+                    onValueChange={(value) => {
+                      field.onChange(value);
+                      const selected = activeProcedures.find((item) => item.name === value);
+                      if (!editingRule && selected?.default_commission != null) {
+                        form.setValue('calculationType', 'percentage');
+                        form.setValue('value', selected.default_commission);
+                      }
+                    }}
+                  >
                     <FormControl>
                       <SelectTrigger>
                         <SelectValue />
@@ -302,11 +314,19 @@ export function CommissionRuleForm({
                     </FormControl>
                     <SelectContent>
                       <SelectItem value="all">Todos os Procedimentos</SelectItem>
-                      {PROCEDURE_OPTIONS.map((proc) => (
+                      {(activeProcedures.length
+                        ? activeProcedures.map((item) => item.name)
+                        : PROCEDURE_OPTIONS
+                      ).filter((proc) => proc !== 'Outros').map((proc) => (
                         <SelectItem key={proc} value={proc}>
                           {proc}
                         </SelectItem>
                       ))}
+                      {field.value !== 'all'
+                        && !activeProcedures.some((item) => item.name === field.value)
+                        && !PROCEDURE_OPTIONS.includes(field.value as any) && (
+                          <SelectItem value={field.value}>{field.value} (atual)</SelectItem>
+                        )}
                     </SelectContent>
                   </Select>
                   <FormMessage />

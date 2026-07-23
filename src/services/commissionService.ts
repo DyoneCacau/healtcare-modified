@@ -205,17 +205,6 @@ export function calculateCommissionAmount(
 }
 
 /**
- * Gets the price for a procedure - returns default if not found
- */
-export function getProcedurePrice(
-  procedure: string,
-  clinicId: string
-): number {
-  // Return default price - in production this would query the database
-  return 150;
-}
-
-/**
  * Completes an appointment and generates all related financial entries
  */
 export function completeAppointment(

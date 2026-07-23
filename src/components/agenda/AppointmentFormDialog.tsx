@@ -38,6 +38,7 @@ import { cn } from '@/lib/utils';
 import { AgendaAppointment, Professional, LeadSource, leadSourceLabels } from '@/types/agenda';
 import { Clinic } from '@/types/clinic';
 import { usePatients } from '@/hooks/usePatients';
+import { useClinicProcedures } from '@/hooks/useClinicProcedures';
 import { PROCEDURE_OPTIONS } from '@/lib/procedures';
 import { toast } from 'sonner';
 
@@ -93,6 +94,8 @@ export function AppointmentFormDialog({
   const [professionalId, setProfessionalId] = useState('');
   const [clinicId, setClinicId] = useState('');
   const [procedure, setProcedure] = useState('');
+  const [procedureId, setProcedureId] = useState<string | null>(null);
+  const [procedurePrice, setProcedurePrice] = useState<number | null>(null);
   const [status, setStatus] = useState<AgendaAppointment['status']>('pending');
   const [paymentStatus, setPaymentStatus] = useState<AgendaAppointment['paymentStatus']>('pending');
   const [notes, setNotes] = useState('');
@@ -105,6 +108,7 @@ export function AppointmentFormDialog({
   const [bookingFeePaymentMethod, setBookingFeePaymentMethod] = useState<BookingFeePaymentMethod | null>(null);
 
   const { patients } = usePatients();
+  const { activeProcedures, error: proceduresError } = useClinicProcedures(clinicId);
 
   const isEditing = !!appointment;
   const prevOpenRef = useRef(false);
@@ -125,7 +129,11 @@ export function AppointmentFormDialog({
       setPatientId(appointment.patientId);
       setProfessionalId(appointment.professional.id);
       setClinicId(appointment.clinic.id);
-      setProcedure(PROCEDURE_OPTIONS.includes(appointment.procedure as any) ? appointment.procedure : 'Outros');
+      setProcedure(appointment.procedureId ? appointment.procedure : (
+        PROCEDURE_OPTIONS.includes(appointment.procedure as any) ? appointment.procedure : 'Outros'
+      ));
+      setProcedureId(appointment.procedureId || null);
+      setProcedurePrice(appointment.procedurePrice ?? null);
       setStatus(appointment.status);
       setPaymentStatus(appointment.paymentStatus);
       setNotes(appointment.notes || '');
@@ -144,6 +152,8 @@ export function AppointmentFormDialog({
       setProfessionalId('');
       setClinicId(clinics[0]?.id || '');
       setProcedure(prefillProcedure || '');
+      setProcedureId(null);
+      setProcedurePrice(null);
       setStatus('pending');
       setPaymentStatus('pending');
       setNotes('');
@@ -209,6 +219,8 @@ export function AppointmentFormDialog({
         patientName: patient.name,
         professional,
         procedure: effectiveProcedure,
+        procedureId,
+        procedurePrice,
         status,
         paymentStatus,
         notes,
@@ -246,6 +258,44 @@ export function AppointmentFormDialog({
   };
 
   const activePatients = patients.filter((p) => p.status === 'active');
+
+  const procedureSelectValue = procedureId
+    || (procedure === 'Outros' ? '__custom__' : procedure ? `legacy:${procedure}` : '');
+
+  const handleProcedureChange = (value: string) => {
+    if (value === '__custom__') {
+      setProcedure('Outros');
+      setProcedureId(null);
+      setProcedurePrice(null);
+      return;
+    }
+    if (value.startsWith('legacy:')) {
+      setProcedure(value.slice('legacy:'.length));
+      setProcedureId(null);
+      setProcedurePrice(null);
+      setCustomProcedure('');
+      return;
+    }
+    const selected = activeProcedures.find((item) => item.id === value);
+    if (!selected) return;
+    setProcedure(selected.name);
+    setProcedureId(selected.id);
+    setProcedurePrice(selected.default_price);
+    setCustomProcedure('');
+    setEndTime(addMinutesToTime(startTime, selected.duration_minutes));
+  };
+
+  const handleClinicChange = (value: string) => {
+    if (value !== clinicId) {
+      // Procedimentos pertencem à unidade. Ao trocar a clínica, evita
+      // gravar um procedure_id de outra unidade no novo agendamento.
+      setProcedure('');
+      setProcedureId(null);
+      setProcedurePrice(null);
+      setCustomProcedure('');
+    }
+    setClinicId(value);
+  };
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -319,7 +369,7 @@ export function AppointmentFormDialog({
 
             <div className="grid gap-2">
               <Label htmlFor="clinic">Clínica *</Label>
-              <Select value={clinicId} onValueChange={setClinicId}>
+              <Select value={clinicId} onValueChange={handleClinicChange}>
                 <SelectTrigger>
                   <SelectValue placeholder="Selecione" />
                 </SelectTrigger>
@@ -399,19 +449,27 @@ export function AppointmentFormDialog({
 
           <div className="grid gap-2">
             <Label htmlFor="procedure">Procedimento *</Label>
-            <Select value={procedure || ''} onValueChange={(v) => { setProcedure(v); if (v !== 'Outros') setCustomProcedure(''); }}>
+            <Select value={procedureSelectValue} onValueChange={handleProcedureChange}>
               <SelectTrigger id="procedure">
                 <SelectValue placeholder="Selecione o procedimento" />
               </SelectTrigger>
               <SelectContent>
-                {PROCEDURE_OPTIONS.map((p) => (
-                  <SelectItem key={p} value={p}>
-                    {p}
+                {activeProcedures.map((item) => (
+                  <SelectItem key={item.id} value={item.id}>
+                    {item.name} — R$ {item.default_price.toFixed(2).replace('.', ',')} · {item.duration_minutes} min
                   </SelectItem>
                 ))}
-                {procedure && !PROCEDURE_OPTIONS.includes(procedure as any) && (
-                  <SelectItem value={procedure}>{procedure} (atual)</SelectItem>
+                {activeProcedures.length === 0 && PROCEDURE_OPTIONS.filter((p) => p !== 'Outros').map((p) => (
+                  <SelectItem key={p} value={`legacy:${p}`}>{p}</SelectItem>
+                ))}
+                {procedureId && !activeProcedures.some((item) => item.id === procedureId) && (
+                  <SelectItem value={procedureId}>{procedure} (atual)</SelectItem>
                 )}
+                {procedure && !procedureId && procedure !== 'Outros'
+                  && (activeProcedures.length > 0 || !PROCEDURE_OPTIONS.includes(procedure as any)) && (
+                  <SelectItem value={`legacy:${procedure}`}>{procedure} (atual)</SelectItem>
+                )}
+                <SelectItem value="__custom__">Outro / personalizado</SelectItem>
               </SelectContent>
             </Select>
             {procedure === 'Outros' && (
@@ -422,7 +480,11 @@ export function AppointmentFormDialog({
               />
             )}
             <p className="text-xs text-muted-foreground">
-              Use a mesma lista das regras de comissão para o cálculo bater ao finalizar.
+              {procedureId && procedurePrice != null
+                ? `Preço sugerido: R$ ${procedurePrice.toFixed(2).replace('.', ',')}. Pode ser alterado ao finalizar.`
+                : proceduresError
+                ? 'Catálogo indisponível; usando a lista anterior e procedimento personalizado.'
+                : 'Cadastre preços em Procedimentos para preencher valor e duração automaticamente.'}
             </p>
           </div>
 

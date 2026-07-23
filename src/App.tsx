@@ -24,6 +24,7 @@ const Reports = React.lazy(() => import("./pages/Reports"));
 const Commissions = React.lazy(() => import("./pages/Commissions"));
 const Inventory = React.lazy(() => import("./pages/Inventory"));
 const Professionals = React.lazy(() => import("./pages/Professionals"));
+const Procedures = React.lazy(() => import("./pages/Procedures"));
 const TimeClock = React.lazy(() => import("./pages/TimeClock"));
 const Administration = React.lazy(() => import("./pages/Administration"));
 const SuperAdmin = React.lazy(() => import("./pages/SuperAdmin"));
@@ -229,6 +230,15 @@ function AppRoutes() {
           element={
             <RequireFeature feature="profissionais">
               <Professionals />
+            </RequireFeature>
+          }
+        />
+
+        <Route
+          path="/procedimentos"
+          element={
+            <RequireFeature feature="administracao">
+              <Procedures />
             </RequireFeature>
           }
         />
