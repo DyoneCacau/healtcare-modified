@@ -39,79 +39,30 @@ const SCREENS = [
   {
     id: "dashboard",
     title: "Dashboard",
-    caption: "Visão geral do dia",
-    body: (
-      <div className="space-y-3 p-4">
-        <div className="grid grid-cols-3 gap-2">
-          {["Agenda", "Receita", "Pacientes"].map((label) => (
-            <div key={label} className="rounded-md bg-sky-50 px-2 py-3">
-              <p className="text-[10px] text-slate-500">{label}</p>
-              <p className="mt-1 text-sm font-semibold text-slate-800">—</p>
-            </div>
-          ))}
-        </div>
-        <div className="h-20 rounded-md bg-slate-100" />
-        <div className="h-14 rounded-md bg-slate-100" />
-      </div>
-    ),
+    caption: "Visão geral com gráfico de receitas e despesas",
+    image: "/landing/landing-dashboard.png",
+    alt: "Tela do dashboard HealthCare com gráfico Receitas vs Despesas",
   },
   {
     id: "pacientes",
     title: "Pacientes",
-    caption: "Prontuário e odontograma",
-    body: (
-      <div className="space-y-3 p-4">
-        <div className="h-8 rounded-md bg-slate-100" />
-        <div className="space-y-2">
-          {[1, 2, 3, 4].map((i) => (
-            <div key={i} className="flex items-center gap-3 rounded-md border border-slate-100 px-3 py-2">
-              <div className="h-8 w-8 rounded-full bg-sky-100" />
-              <div className="flex-1 space-y-1">
-                <div className="h-2.5 w-24 rounded bg-slate-200" />
-                <div className="h-2 w-16 rounded bg-slate-100" />
-              </div>
-            </div>
-          ))}
-        </div>
-      </div>
-    ),
+    caption: "Lista, busca e prontuário do paciente",
+    image: "/landing/landing-pacientes.png",
+    alt: "Tela de pacientes do HealthCare",
   },
   {
     id: "financeiro",
     title: "Financeiro",
-    caption: "Caixa e lançamentos",
-    body: (
-      <div className="space-y-3 p-4">
-        <div className="rounded-md bg-emerald-50 px-3 py-4">
-          <p className="text-[10px] text-emerald-700">Saldo do caixa</p>
-          <p className="text-lg font-semibold text-emerald-900">R$ —</p>
-        </div>
-        <div className="space-y-2">
-          {[1, 2, 3].map((i) => (
-            <div key={i} className="flex justify-between rounded-md bg-slate-50 px-3 py-2">
-              <div className="h-2.5 w-20 rounded bg-slate-200" />
-              <div className="h-2.5 w-12 rounded bg-slate-200" />
-            </div>
-          ))}
-        </div>
-      </div>
-    ),
+    caption: "Caixa, entradas e movimentações do dia",
+    image: "/landing/landing-financeiro.png",
+    alt: "Tela financeiro e caixa do HealthCare",
   },
   {
     id: "profissionais",
     title: "Profissionais",
-    caption: "Equipe e permissões",
-    body: (
-      <div className="grid grid-cols-2 gap-2 p-4">
-        {[1, 2, 3, 4].map((i) => (
-          <div key={i} className="rounded-md border border-slate-100 p-3">
-            <div className="mx-auto h-10 w-10 rounded-full bg-amber-100" />
-            <div className="mx-auto mt-2 h-2 w-16 rounded bg-slate-200" />
-            <div className="mx-auto mt-1 h-2 w-10 rounded bg-slate-100" />
-          </div>
-        ))}
-      </div>
-    ),
+    caption: "Equipe, CRO e especialidades",
+    image: "/landing/landing-profissionais.png",
+    alt: "Tela de profissionais do HealthCare",
   },
 ] as const;
 
@@ -333,48 +284,14 @@ export default function Landing() {
             </div>
 
             <div className="landing-fade-up-delay relative mx-auto w-full max-w-lg lg:max-w-none">
-              <div className="landing-float overflow-hidden rounded-t-2xl border border-white/15 bg-[#0b1726]/70 shadow-2xl shadow-black/30 backdrop-blur">
-                <div className="flex items-center gap-2 border-b border-white/10 px-4 py-3">
-                  <div className="h-2.5 w-2.5 rounded-full bg-rose-400/80" />
-                  <div className="h-2.5 w-2.5 rounded-full bg-amber-400/80" />
-                  <div className="h-2.5 w-2.5 rounded-full bg-emerald-400/80" />
-                  <span className="ml-2 text-xs text-white/50">Painel da clínica</span>
-                </div>
-                <div className="grid grid-cols-[72px_1fr]">
-                  <div className="space-y-2 border-r border-white/10 bg-[#08121d] p-3">
-                    {[1, 2, 3, 4, 5].map((i) => (
-                      <div
-                        key={i}
-                        className={cn(
-                          "h-7 rounded-md",
-                          i === 1 ? "bg-sky-500/40" : "bg-white/5",
-                        )}
-                      />
-                    ))}
-                  </div>
-                  <div className="bg-gradient-to-b from-slate-50 to-slate-100 p-3 text-slate-800">
-                    <div className="mb-3 flex items-center justify-between">
-                      <div className="h-3 w-28 rounded bg-slate-300" />
-                      <div className="h-7 w-20 rounded-md bg-sky-500/80" />
-                    </div>
-                    <div className="grid grid-cols-3 gap-2">
-                      {["Hoje", "Receita", "Confirmados"].map((label) => (
-                        <div key={label} className="rounded-lg bg-white p-2 shadow-sm">
-                          <p className="text-[10px] text-slate-500">{label}</p>
-                          <p className="mt-1 text-sm font-semibold">—</p>
-                        </div>
-                      ))}
-                    </div>
-                    <div className="mt-3 h-28 rounded-lg bg-white p-3 shadow-sm">
-                      <div className="mb-2 h-2.5 w-24 rounded bg-slate-200" />
-                      <div className="space-y-2">
-                        <div className="h-8 rounded bg-sky-50" />
-                        <div className="h-8 rounded bg-slate-50" />
-                        <div className="h-8 rounded bg-amber-50" />
-                      </div>
-                    </div>
-                  </div>
-                </div>
+              <div className="landing-float overflow-hidden rounded-2xl border border-white/15 bg-[#0b1726]/40 shadow-2xl shadow-black/30">
+                <img
+                  src="/landing/landing-dashboard.png"
+                  alt="Dashboard HealthCare com gráfico de receitas e despesas"
+                  className="h-auto w-full object-cover object-top"
+                  width={1536}
+                  height={1024}
+                />
               </div>
             </div>
           </div>
@@ -446,10 +363,18 @@ export default function Landing() {
                     <p className="font-medium text-slate-900">{SCREENS[activeScreen].title}</p>
                     <p className="text-xs text-slate-500">{SCREENS[activeScreen].caption}</p>
                   </div>
-                  <span className="text-xs text-slate-400">prévia ilustrativa</span>
+                  <span className="text-xs text-slate-400">prévia do sistema</span>
                 </div>
-                <div className="min-h-[260px] bg-white transition-opacity duration-500">
-                  {SCREENS[activeScreen].body}
+                <div className="bg-slate-100 transition-opacity duration-500">
+                  <img
+                    key={SCREENS[activeScreen].id}
+                    src={SCREENS[activeScreen].image}
+                    alt={SCREENS[activeScreen].alt}
+                    className="landing-screen-fade h-auto w-full object-cover object-top"
+                    width={1536}
+                    height={1024}
+                    loading="lazy"
+                  />
                 </div>
               </div>
             </div>
