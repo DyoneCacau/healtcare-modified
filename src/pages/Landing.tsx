@@ -404,7 +404,7 @@ export default function Landing() {
               Planos para o tamanho da sua clínica
             </h2>
             <p className="mt-3 text-slate-600">
-              Valores de referência. A contratação é feita após demonstração — ativamos sua unidade com o plano certo.
+              Mesmos planos do sistema. A contratação é feita após demonstração — ativamos sua unidade com o plano certo.
             </p>
           </div>
 
@@ -429,8 +429,7 @@ export default function Landing() {
                   {plan.description}
                 </p>
                 <p className="mt-5">
-                  <span className="text-sm">a partir de</span>
-                  <span className="ml-2 font-landing text-4xl font-semibold">R$ {plan.price}</span>
+                  <span className="font-landing text-4xl font-semibold">R$ {plan.price}</span>
                   <span className={cn("text-sm", plan.highlight ? "text-sky-100" : "text-slate-500")}>/mês</span>
                 </p>
                 <ul className="mt-6 flex-1 space-y-2.5 text-sm">
