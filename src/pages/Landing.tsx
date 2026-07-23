@@ -68,24 +68,39 @@ const SCREENS = [
 
 const PLANS = [
   {
-    name: "Starter",
-    price: "79",
-    description: "Para consultórios em início de operação.",
-    features: ["Até 2 profissionais", "1 unidade", "Agenda e pacientes", "Financeiro básico"],
+    name: "Plano 1 - Básico",
+    price: "189,00",
+    description: "Acesso às funcionalidades essenciais.",
+    features: [
+      "Agenda",
+      "Pacientes (básico)",
+      "Financeiro (básico)",
+      "Módulos essenciais da clínica",
+    ],
     highlight: false,
   },
   {
-    name: "Professional",
-    price: "149",
-    description: "Para clínicas que precisam crescer com controle.",
-    features: ["Até 5 profissionais", "Até 3 unidades", "Relatórios avançados", "Comissões e estoque"],
+    name: "Plano 2 - Profissional",
+    price: "369,99",
+    description: "Funcionalidades avançadas para clínicas em crescimento.",
+    features: [
+      "Agenda e pacientes",
+      "Financeiro completo",
+      "Profissionais",
+      "Recursos avançados para operação",
+    ],
     highlight: true,
   },
   {
-    name: "Enterprise",
-    price: "249",
-    description: "Para redes e operação multiunidade.",
-    features: ["Profissionais ilimitados", "Unidades conforme plano", "Suporte prioritário", "Onboarding assistido"],
+    name: "Plano Premium",
+    price: "589,90",
+    description: "Acesso completo a todas as funcionalidades.",
+    features: [
+      "Agenda e pacientes",
+      "Financeiro completo",
+      "Relatórios",
+      "Acesso a todos os módulos",
+    ],
     highlight: false,
   },
 ] as const;
