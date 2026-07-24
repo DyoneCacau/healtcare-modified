@@ -3,6 +3,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
+import { CurrencyInput } from "@/components/ui/currency-input";
 import { Label } from "@/components/ui/label";
 import {
   Select,
@@ -111,21 +112,11 @@ export function SubscriptionsManagement() {
     payment_status: "",
     notes: "",
     monthly_fee: 0,
-    setup_fee: "",
+    setup_fee: 0,
     billing_day: DEFAULT_BILLING_DAY,
     schedule_first_charge: false,
     first_due_date: defaultPromoFirstDueDate(),
   });
-
-  function parseMoneyInput(value: string): number {
-    const trimmed = value.trim();
-    if (!trimmed) return 0;
-    const normalized = trimmed.includes(",")
-      ? trimmed.replace(/\./g, "").replace(",", ".")
-      : trimmed;
-    const n = Number(normalized);
-    return Number.isFinite(n) && n >= 0 ? n : 0;
-  }
 
   useEffect(() => {
     fetchData();
@@ -204,9 +195,7 @@ export function SubscriptionsManagement() {
       payment_status: subscription.payment_status,
       notes: subscription.notes || "",
       monthly_fee: monthlyFee,
-      setup_fee: subscription.setup_fee != null && Number(subscription.setup_fee) > 0
-        ? String(subscription.setup_fee).replace(".", ",")
-        : "",
+      setup_fee: Number(subscription.setup_fee) || 0,
       billing_day: billingDay,
       schedule_first_charge: scheduleFirstCharge,
       first_due_date: firstDue,
@@ -220,8 +209,8 @@ export function SubscriptionsManagement() {
       toast.error("Informe uma mensalidade válida");
       return;
     }
-    const setupFeeValue = parseMoneyInput(editForm.setup_fee);
-    if (editForm.setup_fee.trim() !== "" && !Number.isFinite(setupFeeValue)) {
+    const setupFeeValue = Number(editForm.setup_fee) || 0;
+    if (!Number.isFinite(setupFeeValue) || setupFeeValue < 0) {
       toast.error("Informe uma taxa de implantação válida");
       return;
     }
@@ -690,28 +679,23 @@ export function SubscriptionsManagement() {
             <div className="grid gap-4 sm:grid-cols-2">
               <div className="space-y-2">
                 <Label htmlFor="subscription-monthly-fee">Mensalidade do plano (R$)</Label>
-                <Input
+                <CurrencyInput
                   id="subscription-monthly-fee"
-                  type="number"
-                  min="0"
-                  step="0.01"
                   value={editForm.monthly_fee}
+                  onValueChange={() => {}}
                   readOnly
                   className="bg-muted"
                 />
               </div>
               <div className="space-y-2">
                 <Label htmlFor="subscription-setup-fee">Taxa de implantação (R$)</Label>
-                <Input
+                <CurrencyInput
                   id="subscription-setup-fee"
-                  type="text"
-                  inputMode="decimal"
-                  value={editForm.setup_fee}
-                  onChange={(e) => setEditForm({
+                  value={Number(editForm.setup_fee) || 0}
+                  onValueChange={(v) => setEditForm({
                     ...editForm,
-                    setup_fee: e.target.value.replace(/[^\d.,]/g, ""),
+                    setup_fee: v,
                   })}
-                  placeholder="0,00"
                 />
               </div>
             </div>

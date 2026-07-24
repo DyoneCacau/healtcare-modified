@@ -21,6 +21,7 @@ import {
 import { cn } from '@/lib/utils';
 import { Transaction, PaymentMethod } from '@/types/financial';
 import { usePatients } from '@/hooks/usePatients';
+import { CurrencyInput } from '@/components/ui/currency-input';
 import { toast } from 'sonner';
 
 interface PaymentFormProps {
@@ -67,53 +68,53 @@ export function PaymentForm({
   initialData,
 }: PaymentFormProps) {
   const [description, setDescription] = useState('');
-  const [amount, setAmount] = useState('');
+  const [amount, setAmount] = useState(0);
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('cash');
   const [patientId, setPatientId] = useState('');
   const [category, setCategory] = useState('');
   const [notes, setNotes] = useState('');
-  const [voucherDiscount, setVoucherDiscount] = useState('');
+  const [voucherDiscount, setVoucherDiscount] = useState(0);
   const [editReason, setEditReason] = useState('');
 
   const [splitMethod1, setSplitMethod1] = useState<Exclude<PaymentMethod, 'split'>>('pix');
-  const [splitAmount1, setSplitAmount1] = useState('');
+  const [splitAmount1, setSplitAmount1] = useState(0);
   const [splitMethod2, setSplitMethod2] = useState<Exclude<PaymentMethod, 'split'>>('credit');
-  const [splitAmount2, setSplitAmount2] = useState('');
+  const [splitAmount2, setSplitAmount2] = useState(0);
 
   const { patients } = usePatients();
   const categories = type === 'income' ? incomeCategories : expenseCategories;
 
   const resetForm = () => {
     setDescription('');
-    setAmount('');
+    setAmount(0);
     setPaymentMethod('cash');
     setPatientId('');
     setCategory('');
     setNotes('');
-    setVoucherDiscount('');
-    setSplitAmount1('');
-    setSplitAmount2('');
+    setVoucherDiscount(0);
+    setSplitAmount1(0);
+    setSplitAmount2(0);
     setEditReason('');
   };
 
   const applyInitialData = () => {
     if (!initialData) return;
     setDescription(initialData.description);
-    setAmount(initialData.amount.toFixed(2));
+    setAmount(Number(initialData.amount) || 0);
     setPaymentMethod(initialData.paymentMethod);
     setPatientId(initialData.patientId || '');
     setCategory(initialData.category);
     setNotes(initialData.notes || '');
-    setVoucherDiscount(initialData.voucherDiscount ? initialData.voucherDiscount.toFixed(2) : '');
+    setVoucherDiscount(Number(initialData.voucherDiscount) || 0);
 
     if (initialData.paymentSplit) {
       setSplitMethod1(initialData.paymentSplit.method1);
-      setSplitAmount1(initialData.paymentSplit.amount1.toFixed(2));
+      setSplitAmount1(Number(initialData.paymentSplit.amount1) || 0);
       setSplitMethod2(initialData.paymentSplit.method2);
-      setSplitAmount2(initialData.paymentSplit.amount2.toFixed(2));
+      setSplitAmount2(Number(initialData.paymentSplit.amount2) || 0);
     } else {
-      setSplitAmount1('');
-      setSplitAmount2('');
+      setSplitAmount1(0);
+      setSplitAmount2(0);
     }
   };
 
@@ -127,27 +128,27 @@ export function PaymentForm({
   }, [open, mode, initialData]);
 
   const handleSave = async () => {
-    if (!description || !amount || !category) {
+    if (!description || !category) {
       toast.error('Preencha todos os campos obrigatórios');
       return;
     }
 
-    const amountNum = parseFloat(amount);
-    if (isNaN(amountNum) || amountNum <= 0) {
+    const amountNum = Number(amount);
+    if (!Number.isFinite(amountNum) || amountNum <= 0) {
       toast.error('Valor inválido');
       return;
     }
 
     if (paymentMethod === 'split') {
-      const split1 = parseFloat(splitAmount1);
-      const split2 = parseFloat(splitAmount2);
+      const split1 = Number(splitAmount1);
+      const split2 = Number(splitAmount2);
 
-      if (isNaN(split1) || isNaN(split2)) {
+      if (!Number.isFinite(split1) || !Number.isFinite(split2)) {
         toast.error('Valores de divisão inválidos');
         return;
       }
 
-      if (Math.abs((split1 + split2) - amountNum) > 0.01) {
+      if (Math.abs(split1 + split2 - amountNum) > 0.01) {
         toast.error('A soma dos valores divididos deve ser igual ao valor total');
         return;
       }
@@ -169,13 +170,13 @@ export function PaymentForm({
       userId: 'user1',
       userName: 'Usuário',
       notes: notes || undefined,
-      voucherDiscount: voucherDiscount ? parseFloat(voucherDiscount) : undefined,
+      voucherDiscount: voucherDiscount > 0 ? voucherDiscount : undefined,
       paymentSplit: paymentMethod === 'split'
         ? {
             method1: splitMethod1,
-            amount1: parseFloat(splitAmount1),
+            amount1: splitAmount1,
             method2: splitMethod2,
-            amount2: parseFloat(splitAmount2),
+            amount2: splitAmount2,
           }
         : undefined,
     };
@@ -191,12 +192,12 @@ export function PaymentForm({
     }
   };
 
-  const handleAmountChange = (value: string) => {
+  const handleAmountChange = (value: number) => {
     setAmount(value);
-    if (paymentMethod === 'split' && value) {
-      const half = (parseFloat(value) / 2).toFixed(2);
+    if (paymentMethod === 'split' && value > 0) {
+      const half = Math.round((value / 2) * 100) / 100;
       setSplitAmount1(half);
-      setSplitAmount2(half);
+      setSplitAmount2(Math.round((value - half) * 100) / 100);
     }
   };
 
@@ -228,12 +229,9 @@ export function PaymentForm({
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-2">
               <Label>Valor (R$) *</Label>
-              <Input
-                type="number"
-                step="0.01"
+              <CurrencyInput
                 value={amount}
-                onChange={(e) => handleAmountChange(e.target.value)}
-                placeholder="0,00"
+                onValueChange={handleAmountChange}
               />
             </div>
 
@@ -318,12 +316,9 @@ export function PaymentForm({
           {paymentMethod === 'voucher' && (
             <div className="space-y-2 p-3 bg-muted/50 rounded-lg">
               <Label>Desconto do Voucher/Parceria (R$)</Label>
-              <Input
-                type="number"
-                step="0.01"
+              <CurrencyInput
                 value={voucherDiscount}
-                onChange={(e) => setVoucherDiscount(e.target.value)}
-                placeholder="Valor do desconto"
+                onValueChange={setVoucherDiscount}
               />
               <p className="text-xs text-muted-foreground">
                 Informe o valor do desconto concedido pela parceria
@@ -349,12 +344,9 @@ export function PaymentForm({
                       <SelectItem value="pix">PIX</SelectItem>
                     </SelectContent>
                   </Select>
-                  <Input
-                    type="number"
-                    step="0.01"
+                  <CurrencyInput
                     value={splitAmount1}
-                    onChange={(e) => setSplitAmount1(e.target.value)}
-                    placeholder="R$ 0,00"
+                    onValueChange={setSplitAmount1}
                   />
                 </div>
 
@@ -371,12 +363,9 @@ export function PaymentForm({
                       <SelectItem value="pix">PIX</SelectItem>
                     </SelectContent>
                   </Select>
-                  <Input
-                    type="number"
-                    step="0.01"
+                  <CurrencyInput
                     value={splitAmount2}
-                    onChange={(e) => setSplitAmount2(e.target.value)}
-                    placeholder="R$ 0,00"
+                    onValueChange={setSplitAmount2}
                   />
                 </div>
               </div>

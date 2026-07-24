@@ -7,6 +7,7 @@ import { useEffect, useState } from "react";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { CurrencyInput } from "@/components/ui/currency-input";
 import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -29,16 +30,6 @@ import {
   CommercialChecklist,
   buildCommercialChecklistState,
 } from "@/components/superadmin/CommercialChecklist";
-
-function parseMoneyInput(value: string): number {
-  const trimmed = value.trim();
-  if (!trimmed) return 0;
-  const normalized = trimmed.includes(",")
-    ? trimmed.replace(/\./g, "").replace(",", ".")
-    : trimmed;
-  const n = Number(normalized);
-  return Number.isFinite(n) && n >= 0 ? n : 0;
-}
 
 // Lista completa de módulos disponíveis (chaves alinhadas com PlansManagement)
 const AVAILABLE_MODULES = [
@@ -86,7 +77,7 @@ interface CreateClientData {
   planId: string;
   modules: string[];
   monthlyFee: number;
-  setupFee: string;
+  setupFee: number;
   billingDay: number;
   scheduleFirstCharge: boolean;
   firstDueDate: string;
@@ -167,7 +158,7 @@ export function CreateCompleteClient() {
     planId: "",
     modules: ['dashboard'], // Dashboard sempre incluído
     monthlyFee: 0,
-    setupFee: "",
+    setupFee: 0,
     billingDay: DEFAULT_BILLING_DAY,
     scheduleFirstCharge: false,
     firstDueDate: defaultPromoFirstDueDate(),
@@ -314,7 +305,7 @@ export function CreateCompleteClient() {
             planId: formData.planId,
             modules: formData.modules,
             monthlyFee: formData.monthlyFee,
-            setupFee: parseMoneyInput(formData.setupFee),
+            setupFee: formData.setupFee,
             billingDay: formData.billingDay,
             billingDeferDays: 0,
             billingFirstDueDate: formData.scheduleFirstCharge ? formData.firstDueDate : null,
@@ -337,7 +328,7 @@ export function CreateCompleteClient() {
           data.clinics.map(({ subscription_id }) =>
             asaasBillingService.createCheckout(
               subscription_id,
-              parseMoneyInput(formData.setupFee) > 0,
+              formData.setupFee > 0,
               {
                 billingDay: formData.billingDay,
                 scheduleFirstCharge: formData.scheduleFirstCharge,
@@ -379,7 +370,7 @@ export function CreateCompleteClient() {
         planId: "",
         modules: ['dashboard'],
         monthlyFee: 0,
-        setupFee: "",
+        setupFee: 0,
         billingDay: DEFAULT_BILLING_DAY,
         scheduleFirstCharge: false,
         firstDueDate: defaultPromoFirstDueDate(),
@@ -743,26 +734,19 @@ export function CreateCompleteClient() {
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
                   <Label htmlFor="setupFee">Taxa de Adesão (R$)</Label>
-                  <Input
+                  <CurrencyInput
                     id="setupFee"
-                    type="text"
-                    inputMode="decimal"
                     value={formData.setupFee}
-                    onChange={(e) => {
-                      const raw = e.target.value.replace(/[^\d.,]/g, "");
-                      setFormData((prev) => ({ ...prev, setupFee: raw }));
-                    }}
-                    placeholder="0,00"
+                    onValueChange={(v) => setFormData((prev) => ({ ...prev, setupFee: v }))}
                   />
                 </div>
 
                 <div className="space-y-2">
                   <Label htmlFor="monthlyFee">Mensalidade do plano (R$)</Label>
-                  <Input
+                  <CurrencyInput
                     id="monthlyFee"
-                    type="number"
-                    step="0.01"
                     value={formData.monthlyFee}
+                    onValueChange={() => {}}
                     readOnly
                     className="bg-muted"
                   />

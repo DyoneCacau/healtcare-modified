@@ -52,6 +52,7 @@ import type {
   ClinicProcedureInput,
   ProcedureBillingUnit,
 } from '@/types/clinicProcedure';
+import { CurrencyInput } from '@/components/ui/currency-input';
 import { BILLING_UNIT_LABELS } from '@/types/clinicProcedure';
 
 const EMPTY_FORM: ClinicProcedureInput = {
@@ -322,13 +323,10 @@ export default function Procedures() {
             </div>
             <div className="space-y-2">
               <Label htmlFor="procedure-price">Preço padrão</Label>
-              <Input
+              <CurrencyInput
                 id="procedure-price"
-                type="number"
-                min="0"
-                step="0.01"
                 value={form.default_price}
-                onChange={(event) => setForm({ ...form, default_price: Number(event.target.value) })}
+                onValueChange={(value) => setForm({ ...form, default_price: value })}
               />
             </div>
             <div className="space-y-2">
