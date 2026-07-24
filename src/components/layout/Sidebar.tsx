@@ -330,7 +330,7 @@ export function Sidebar() {
         </div>
       )}
 
-      <nav className="overflow-y-auto p-3">
+      <nav className="min-h-0 flex-1 overflow-y-auto p-3">
         <ul className="space-y-1">
           {/* SuperAdmin Link - only for superadmins */}
           {isSuperAdmin && (
@@ -380,8 +380,8 @@ export function Sidebar() {
         </ul>
       </nav>
 
-      {/* Footer */}
-      <div className="border-t border-sidebar-border p-3">
+      {/* Footer fixo na base */}
+      <div className="mt-auto shrink-0 border-t border-sidebar-border p-3">
         <div
           className={cn(
             "mb-3 flex items-center gap-3 rounded-lg bg-sidebar-accent p-3",
