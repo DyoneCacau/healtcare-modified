@@ -62,6 +62,13 @@ export function sumRegularExpenses(transactions: FinancialAggregationTransaction
   return transactions.filter(isRegularExpense).reduce((sum, t) => sum + amountOf(t), 0);
 }
 
+/** Total estornado no período (income com refunded_at + despesa legada Estorno). */
+export function sumRefunds(transactions: FinancialAggregationTransaction[]): number {
+  return transactions
+    .filter((t) => !isDeletedTransaction(t) && (isRefundedIncome(t) || isLegacyRefundExpense(t)))
+    .reduce((sum, t) => sum + amountOf(t), 0);
+}
+
 /** Receita líquida no gráfico (desconta estorno legado; income com refunded_at já sai). */
 export function netRevenue(transactions: FinancialAggregationTransaction[]): number {
   const legacyRefund = transactions

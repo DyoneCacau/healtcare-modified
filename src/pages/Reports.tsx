@@ -16,6 +16,15 @@ import { ReportFilters } from '@/components/reports/ReportFilters';
 import { useProfessionals } from '@/hooks/useProfessionals';
 import { leadSourceLabels, LeadSource } from '@/types/agenda';
 import {
+  amountOf,
+  isActiveIncome,
+  isRegularExpense,
+  netBalance,
+  sumActiveIncome,
+  sumRefunds,
+  sumRegularExpenses,
+} from '@/lib/financialAggregation';
+import {
   BarChart,
   Bar,
   XAxis,
@@ -66,6 +75,7 @@ export default function Reports() {
   const [financialData, setFinancialData] = useState<any>({
     totalIncome: 0,
     totalExpense: 0,
+    totalRefund: 0,
     netBalance: 0,
     byPaymentMethod: [],
     byCategory: [],
@@ -102,6 +112,7 @@ export default function Reports() {
       setFinancialData({
         totalIncome: 0,
         totalExpense: 0,
+        totalRefund: 0,
         netBalance: 0,
         byPaymentMethod: [],
         byCategory: [],
@@ -147,35 +158,38 @@ export default function Reports() {
         .from('financial_transactions')
         .select('*')
         .eq('clinic_id', clinicId)
+        .is('deleted_at', null)
         .gte('created_at', `${startDate}T00:00:00`)
         .lte('created_at', `${endDate}T23:59:59`);
 
       if (transactions) {
-        const incomeTotal = transactions.filter(t => t.type === 'income').reduce((sum, t) => sum + Number(t.amount), 0);
-        const expenseTotal = transactions.filter(t => t.type === 'expense').reduce((sum, t) => sum + Number(t.amount), 0);
-        
+        const incomeTotal = sumActiveIncome(transactions);
+        const expenseTotal = sumRegularExpenses(transactions);
+        const refundTotal = sumRefunds(transactions);
+
         const byMethod = new Map<string, number>();
-        transactions.filter(t => t.type === 'income').forEach(t => {
+        transactions.filter(isActiveIncome).forEach((t) => {
           const method = t.payment_method || 'Outros';
-          byMethod.set(method, (byMethod.get(method) || 0) + Number(t.amount));
+          byMethod.set(method, (byMethod.get(method) || 0) + amountOf(t));
         });
 
         const byCategory = new Map<string, number>();
-        transactions.forEach(t => {
+        transactions.filter(isActiveIncome).forEach((t) => {
           const cat = t.category || 'Sem categoria';
-          byCategory.set(cat, (byCategory.get(cat) || 0) + Number(t.amount));
+          byCategory.set(cat, (byCategory.get(cat) || 0) + amountOf(t));
         });
 
         const byExpenseCategory = new Map<string, number>();
-        transactions.filter(t => t.type === 'expense').forEach(t => {
+        transactions.filter(isRegularExpense).forEach((t) => {
           const cat = t.category || 'Sem categoria';
-          byExpenseCategory.set(cat, (byExpenseCategory.get(cat) || 0) + Number(t.amount));
+          byExpenseCategory.set(cat, (byExpenseCategory.get(cat) || 0) + amountOf(t));
         });
 
         setFinancialData({
           totalIncome: incomeTotal,
           totalExpense: expenseTotal,
-          netBalance: incomeTotal - expenseTotal,
+          totalRefund: refundTotal,
+          netBalance: netBalance(transactions),
           byPaymentMethod: Array.from(byMethod.entries()).map(([name, value]) => ({
             name: paymentMethodLabels[name] || name,
             value,
@@ -341,7 +355,13 @@ export default function Reports() {
       const referralCount = byLeadSource.get('referral') || 0;
 
       // Dados mensais para comparação (melhor/pior mês em vendas)
-      const incomeTx = (await supabase.from('financial_transactions').select('type, amount, created_at').eq('clinic_id', clinicId).eq('type', 'income').gte('created_at', `${startDate}T00:00:00`).lte('created_at', `${endDate}T23:59:59`)).data || [];
+      const incomeTx = (await supabase
+        .from('financial_transactions')
+        .select('type, amount, created_at, category, refunded_at, deleted_at')
+        .eq('clinic_id', clinicId)
+        .is('deleted_at', null)
+        .gte('created_at', `${startDate}T00:00:00`)
+        .lte('created_at', `${endDate}T23:59:59`)).data || [];
       const monthNames: Record<string, string> = { '01': 'Jan', '02': 'Fev', '03': 'Mar', '04': 'Abr', '05': 'Mai', '06': 'Jun', '07': 'Jul', '08': 'Ago', '09': 'Set', '10': 'Out', '11': 'Nov', '12': 'Dez' };
       const monthlyMap = new Map<string, { revenue: number; appointments: number; completed: number; newPatients: number }>();
       let monthCursor = new Date(startDate);
@@ -354,10 +374,11 @@ export default function Reports() {
         monthCursor = addMonths(monthCursor, 1);
       }
       (incomeTx as any[]).forEach((t: any) => {
+        if (!isActiveIncome(t)) return;
         const key = t.created_at?.slice(0, 7) || '';
         if (monthlyMap.has(key)) {
           const m = monthlyMap.get(key)!;
-          m.revenue += Number(t.amount || 0);
+          m.revenue += amountOf(t);
           monthlyMap.set(key, m);
         }
       });
@@ -422,10 +443,12 @@ export default function Reports() {
         if (aptIds.length > 0) {
           const { data: txList } = await supabase
             .from('financial_transactions')
-            .select('amount')
+            .select('amount, refunded_at, deleted_at')
             .eq('clinic_id', clinicId)
             .eq('type', 'income')
             .eq('reference_type', 'appointment')
+            .is('deleted_at', null)
+            .is('refunded_at', null)
             .in('reference_id', aptIds);
           revenue = (txList || []).reduce((s, t) => s + Number(t.amount || 0), 0);
         }
@@ -511,6 +534,7 @@ export default function Reports() {
         <table class="dre-table">
           <tr><td>Receitas</td><td class="text-right">R$ ${fmt(financialData.totalIncome)}</td></tr>
           <tr><td class="sub">(-) Despesas</td><td class="text-right sub">R$ ${fmt(financialData.totalExpense)}</td></tr>
+          <tr><td class="sub">(-) Estornos</td><td class="text-right sub">R$ ${fmt(financialData.totalRefund || 0)}</td></tr>
           ${((financialData.byExpenseCategory || []) as { name: string; value: number }[])
             .map((r, i) => `<tr><td class="sub indent">1.${i + 1} ${r.name}</td><td class="text-right sub">R$ ${fmt(r.value)}</td></tr>`)
             .join('')}
@@ -644,6 +668,7 @@ export default function Reports() {
       'Resumo Financeiro',
       'Receitas,' + financialData.totalIncome.toFixed(2),
       'Despesas,' + financialData.totalExpense.toFixed(2),
+      'Estornos,' + Number(financialData.totalRefund || 0).toFixed(2),
       'Saldo Líquido,' + financialData.netBalance.toFixed(2),
       '',
       'Agendamentos',
@@ -734,7 +759,7 @@ export default function Reports() {
 
           {/* Financial Tab */}
           <TabsContent value="financial" className="space-y-4">
-            <div className="grid gap-4 md:grid-cols-3">
+            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
               <Card>
                 <CardContent className="pt-6">
                   <p className="text-sm text-muted-foreground">Total Receitas</p>
@@ -748,6 +773,14 @@ export default function Reports() {
                   <p className="text-sm text-muted-foreground">Total Despesas</p>
                   <p className="text-2xl font-bold text-red-600">
                     R$ {financialData.totalExpense.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                  </p>
+                </CardContent>
+              </Card>
+              <Card>
+                <CardContent className="pt-6">
+                  <p className="text-sm text-muted-foreground">Estornos</p>
+                  <p className="text-2xl font-bold text-amber-600">
+                    R$ {Number(financialData.totalRefund || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
                   </p>
                 </CardContent>
               </Card>
