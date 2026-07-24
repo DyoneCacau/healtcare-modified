@@ -1418,6 +1418,82 @@ export type Database = {
           },
         ]
       }
+      patient_files: {
+        Row: {
+          category: string
+          clinic_id: string
+          created_at: string
+          created_by: string | null
+          evolution_id: string | null
+          file_path: string
+          file_size: number
+          id: string
+          mime_type: string
+          name: string
+          notes: string
+          patient_id: string
+          rotation: number
+          tooth_number: number | null
+          updated_at: string
+        }
+        Insert: {
+          category?: string
+          clinic_id: string
+          created_at?: string
+          created_by?: string | null
+          evolution_id?: string | null
+          file_path: string
+          file_size?: number
+          id?: string
+          mime_type?: string
+          name: string
+          notes?: string
+          patient_id: string
+          rotation?: number
+          tooth_number?: number | null
+          updated_at?: string
+        }
+        Update: {
+          category?: string
+          clinic_id?: string
+          created_at?: string
+          created_by?: string | null
+          evolution_id?: string | null
+          file_path?: string
+          file_size?: number
+          id?: string
+          mime_type?: string
+          name?: string
+          notes?: string
+          patient_id?: string
+          rotation?: number
+          tooth_number?: number | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "patient_files_clinic_id_fkey"
+            columns: ["clinic_id"]
+            isOneToOne: false
+            referencedRelation: "clinics"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "patient_files_evolution_id_fkey"
+            columns: ["evolution_id"]
+            isOneToOne: false
+            referencedRelation: "patient_evolutions"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "patient_files_patient_id_fkey"
+            columns: ["patient_id"]
+            isOneToOne: false
+            referencedRelation: "patients"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       patients: {
         Row: {
           address: string | null
