@@ -26,6 +26,7 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { Input } from '@/components/ui/input';
+import { CurrencyInput } from '@/components/ui/currency-input';
 import { Textarea } from '@/components/ui/textarea';
 import { Button } from '@/components/ui/button';
 import { Switch } from '@/components/ui/switch';
@@ -425,26 +426,29 @@ export function CommissionRuleForm({
                     )}
                   </FormLabel>
                   <FormControl>
-                    <div className="relative">
-                      <Input
-                        type="number"
-                        step={watchCalculationType === 'percentage' ? '1' : '0.01'}
-                        min="0"
-                        max={watchCalculationType === 'percentage' ? '100' : undefined}
-                        {...field}
-                        onChange={(e) => field.onChange(parseFloat(e.target.value) || 0)}
-                        className={watchCalculationType === 'percentage' ? 'pr-8' : 'pl-9'}
-                      />
-                      {watchCalculationType === 'percentage' ? (
+                    {watchCalculationType === 'percentage' ? (
+                      <div className="relative">
+                        <Input
+                          type="text"
+                          inputMode="decimal"
+                          value={field.value === 0 ? '' : String(field.value)}
+                          onChange={(e) => {
+                            const raw = e.target.value.replace(',', '.').replace(/[^\d.]/g, '');
+                            field.onChange(raw === '' ? 0 : parseFloat(raw) || 0);
+                          }}
+                          className="pr-8 tabular-nums"
+                          placeholder="0"
+                        />
                         <span className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground">
                           %
                         </span>
-                      ) : (
-                        <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground">
-                          R$
-                        </span>
-                      )}
-                    </div>
+                      </div>
+                    ) : (
+                      <CurrencyInput
+                        value={Number(field.value) || 0}
+                        onValueChange={field.onChange}
+                      />
+                    )}
                   </FormControl>
                   <FormMessage />
                 </FormItem>

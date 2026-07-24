@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { CurrencyInput } from "@/components/ui/currency-input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
@@ -350,24 +351,18 @@ export function PlansManagement() {
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
                 <Label htmlFor="price_monthly">Preço Mensal (R$) *</Label>
-                <Input
+                <CurrencyInput
                   id="price_monthly"
-                  type="number"
-                  step="0.01"
-                  value={formData.price_monthly}
-                  onChange={(e) => setFormData({ ...formData, price_monthly: e.target.value })}
-                  placeholder="99.90"
+                  value={Number(formData.price_monthly) || 0}
+                  onValueChange={(v) => setFormData({ ...formData, price_monthly: String(v) })}
                 />
               </div>
               <div className="space-y-2">
                 <Label htmlFor="price_yearly">Preço Anual (R$)</Label>
-                <Input
+                <CurrencyInput
                   id="price_yearly"
-                  type="number"
-                  step="0.01"
-                  value={formData.price_yearly}
-                  onChange={(e) => setFormData({ ...formData, price_yearly: e.target.value })}
-                  placeholder="999.00"
+                  value={Number(formData.price_yearly) || 0}
+                  onValueChange={(v) => setFormData({ ...formData, price_yearly: v ? String(v) : "" })}
                 />
               </div>
             </div>
@@ -435,13 +430,10 @@ export function PlansManagement() {
               </div>
               <div className="space-y-2">
                 <Label htmlFor="promo_price_monthly">Preço Promocional (R$)</Label>
-                <Input
+                <CurrencyInput
                   id="promo_price_monthly"
-                  type="number"
-                  step="0.01"
-                  value={formData.promo_price_monthly}
-                  onChange={(e) => setFormData({ ...formData, promo_price_monthly: e.target.value })}
-                  placeholder="Ex: 199.90"
+                  value={Number(formData.promo_price_monthly) || 0}
+                  onValueChange={(v) => setFormData({ ...formData, promo_price_monthly: v ? String(v) : "" })}
                 />
               </div>
             </div>

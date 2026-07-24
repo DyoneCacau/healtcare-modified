@@ -4,6 +4,7 @@ import { useState } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { CurrencyInput } from "@/components/ui/currency-input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -67,16 +68,6 @@ const initialClinic: ClinicFormData = {
   email: "",
 };
 
-function parseMoneyInput(value: string): number {
-  const trimmed = value.trim();
-  if (!trimmed) return 0;
-  const normalized = trimmed.includes(",")
-    ? trimmed.replace(/\./g, "").replace(",", ".")
-    : trimmed;
-  const n = Number(normalized);
-  return Number.isFinite(n) && n >= 0 ? n : 0;
-}
-
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null;
 }
@@ -94,7 +85,7 @@ export function AddClinicToClient() {
   const [loading, setLoading] = useState(false);
   const [adminEmail, setAdminEmail] = useState("");
   const [adminFound, setAdminFound] = useState<FoundAdmin | null>(null);
-  const [setupFee, setSetupFee] = useState("");
+  const [setupFee, setSetupFee] = useState(0);
   const [billingDay, setBillingDay] = useState(DEFAULT_BILLING_DAY);
   const [scheduleFirstCharge, setScheduleFirstCharge] = useState(false);
   const [firstDueDate, setFirstDueDate] = useState(defaultPromoFirstDueDate());
@@ -219,7 +210,7 @@ export function AddClinicToClient() {
             zipcode: formData.zipcode || null,
             phone: formData.phone || null,
             email: formData.email || null,
-            setupFee: parseMoneyInput(setupFee),
+            setupFee,
             billingDay,
             billingDeferDays: 0,
             billingFirstDueDate: scheduleFirstCharge ? firstDueDate : null,
@@ -236,7 +227,7 @@ export function AddClinicToClient() {
         try {
           await asaasBillingService.createCheckout(
             data.subscription_id,
-            parseMoneyInput(setupFee) > 0,
+            setupFee > 0,
             {
               billingDay,
               scheduleFirstCharge,
@@ -262,7 +253,7 @@ export function AddClinicToClient() {
       setFormData(initialClinic);
       setAdminFound(null);
       setAdminEmail("");
-      setSetupFee("");
+      setSetupFee(0);
       setBillingDay(DEFAULT_BILLING_DAY);
       setScheduleFirstCharge(false);
       setFirstDueDate(defaultPromoFirstDueDate());
@@ -407,19 +398,16 @@ export function AddClinicToClient() {
                   </div>
                   <div className="space-y-2">
                     <Label>Taxa de adesão desta unidade (R$)</Label>
-                    <Input
-                      type="text"
-                      inputMode="decimal"
+                    <CurrencyInput
                       value={setupFee}
-                      onChange={(e) => setSetupFee(e.target.value.replace(/[^\d.,]/g, ""))}
-                      placeholder="0,00"
+                      onValueChange={setSetupFee}
                     />
                   </div>
                   <div className="space-y-2">
                     <Label>Mensalidade do plano (R$)</Label>
-                    <Input
-                      type="number"
+                    <CurrencyInput
                       value={adminFound.monthly_fee}
+                      onValueChange={() => {}}
                       readOnly
                       className="bg-muted"
                     />

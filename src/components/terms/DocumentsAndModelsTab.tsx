@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { CurrencyInput } from '@/components/ui/currency-input';
 import { Label } from '@/components/ui/label';
 import { FileText, Printer } from 'lucide-react';
 import { useClinicBranding } from '@/hooks/useTerms';
@@ -73,7 +74,7 @@ export function DocumentsAndModelsTab() {
   const [printOpen, setPrintOpen] = useState(false);
   const [printType, setPrintType] = useState<DocumentPrintType>('atestado');
   const [selectedPatient, setSelectedPatient] = useState<Patient | null>(null);
-  const [reciboValue, setReciboValue] = useState('');
+  const [reciboValue, setReciboValue] = useState(0);
   const [reciboDesc, setReciboDesc] = useState('Servicos odontologicos');
   const [reciboDialogOpen, setReciboDialogOpen] = useState(false);
   const [patientDialogOpen, setPatientDialogOpen] = useState(false);
@@ -86,7 +87,7 @@ export function DocumentsAndModelsTab() {
     setPrintType(type);
     if (type === 'recibo') {
       setSelectedPatient(samplePatient);
-      setReciboValue('');
+      setReciboValue(0);
       setReciboDesc('Servicos odontologicos');
       setReciboDialogOpen(true);
       return;
@@ -169,13 +170,9 @@ export function DocumentsAndModelsTab() {
           <div className="space-y-4 py-4">
             <div className="space-y-2">
               <Label>Valor (R$)</Label>
-              <Input
-                type="number"
-                step="0.01"
-                min="0"
+              <CurrencyInput
                 value={reciboValue}
-                onChange={(e) => setReciboValue(e.target.value)}
-                placeholder="0,00"
+                onValueChange={setReciboValue}
               />
             </div>
             <div className="space-y-2">
@@ -246,7 +243,7 @@ export function DocumentsAndModelsTab() {
         primaryColor={branding?.primaryColor || '#000000'}
         useDefaultColor={!branding?.hasCustomColor}
         professionals={activeProfessionals.map((p) => ({ id: p.id, name: p.name, specialty: p.specialty, cro: p.cro }))}
-        paymentValue={printType === 'recibo' ? parseFloat(reciboValue) || 0 : undefined}
+        paymentValue={printType === 'recibo' ? reciboValue : undefined}
         paymentDescription={printType === 'recibo' ? reciboDesc : undefined}
       />
     </div>

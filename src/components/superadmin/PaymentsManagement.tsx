@@ -3,6 +3,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
+import { CurrencyInput } from "@/components/ui/currency-input";
 import { DateInput } from "@/components/ui/date-input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
@@ -81,7 +82,7 @@ export function PaymentsManagement() {
   const [registerDialogOpen, setRegisterDialogOpen] = useState(false);
   const [subscriptionsList, setSubscriptionsList] = useState<{ id: string; clinic_name: string; plan_name: string }[]>([]);
   const [regSubscriptionId, setRegSubscriptionId] = useState("");
-  const [regAmount, setRegAmount] = useState("");
+  const [regAmount, setRegAmount] = useState(0);
   const [regDate, setRegDate] = useState(new Date().toISOString().split("T")[0]);
   const [regNextDueDate, setRegNextDueDate] = useState<string | "">("");
   const [regMethod, setRegMethod] = useState("pix");
@@ -236,7 +237,7 @@ DELETE FROM payment_history WHERE status = 'rejected';`;
       })
     );
     setRegSubscriptionId("");
-    setRegAmount("");
+    setRegAmount(0);
     setRegDate(new Date().toISOString().split("T")[0]);
     setRegNextDueDate("");
     setRegMethod("pix");
@@ -250,7 +251,7 @@ DELETE FROM payment_history WHERE status = 'rejected';`;
     try {
       const { error } = await supabase.rpc("register_payment", {
         p_subscription_id: regSubscriptionId,
-        p_amount: parseFloat(regAmount),
+        p_amount: regAmount,
         p_paid_at: regDate,
         p_payment_method: regMethod,
         p_description: regDescription || null,
@@ -259,7 +260,7 @@ DELETE FROM payment_history WHERE status = 'rejected';`;
       if (error) {
         const msg = error.message || "";
         if (msg.includes("Could not find the function") || msg.includes("schema cache")) {
-          await registerPaymentFallback(regSubscriptionId, parseFloat(regAmount), regDate, regMethod, regDescription, regNextDueDate || null);
+          await registerPaymentFallback(regSubscriptionId, regAmount, regDate, regMethod, regDescription, regNextDueDate || null);
           return;
         }
         throw error;
@@ -540,12 +541,9 @@ DELETE FROM payment_history WHERE status = 'rejected';`;
             </div>
             <div className="space-y-2">
               <Label>Valor (R$) *</Label>
-              <Input
-                type="number"
-                step="0.01"
+              <CurrencyInput
                 value={regAmount}
-                onChange={(e) => setRegAmount(e.target.value)}
-                placeholder="0,00"
+                onValueChange={setRegAmount}
                 required
               />
             </div>
@@ -587,7 +585,7 @@ DELETE FROM payment_history WHERE status = 'rejected';`;
               <Button type="button" variant="outline" onClick={() => setRegisterDialogOpen(false)}>
                 Cancelar
               </Button>
-              <Button type="submit" disabled={regLoading || !regSubscriptionId || !regAmount}>
+              <Button type="submit" disabled={regLoading || !regSubscriptionId || regAmount <= 0}>
                 {regLoading ? "Salvando..." : "Registrar e ativar plano"}
               </Button>
             </DialogFooter>
