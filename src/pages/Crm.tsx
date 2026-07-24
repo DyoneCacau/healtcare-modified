@@ -84,6 +84,9 @@ export default function Crm() {
   const [editing, setEditing] = useState<CrmLead | null>(null);
   const [form, setForm] = useState(emptyForm);
   const [convertingId, setConvertingId] = useState<string | null>(null);
+  const [dragLeadId, setDragLeadId] = useState<string | null>(null);
+  const [dragOverStage, setDragOverStage] = useState<CrmLeadStage | null>(null);
+  const [formError, setFormError] = useState('');
 
   const today = startOfDay(new Date());
 
@@ -119,6 +122,7 @@ export default function Crm() {
 
   const openCreate = () => {
     setEditing(null);
+    setFormError('');
     setForm({
       ...emptyForm,
       owner_user_id: user?.id || '',
@@ -128,6 +132,7 @@ export default function Crm() {
 
   const openEdit = (lead: CrmLead) => {
     setEditing(lead);
+    setFormError('');
     setForm({
       name: lead.name,
       phone: lead.phone || '',
@@ -146,13 +151,17 @@ export default function Crm() {
   };
 
   const handleSave = async () => {
-    if (!form.name.trim()) return;
+    if (!form.name.trim() || !form.phone.trim() || !form.lead_source) {
+      setFormError('Preencha nome, telefone e origem do lead.');
+      return;
+    }
+    setFormError('');
     const payload = {
       name: form.name.trim(),
-      phone: form.phone || null,
+      phone: form.phone.trim(),
       email: form.email || null,
       stage: form.stage,
-      lead_source: form.lead_source || null,
+      lead_source: form.lead_source,
       referral_name: form.referral_name || null,
       interest: form.interest || null,
       estimated_value: form.estimated_value > 0 ? form.estimated_value : null,
@@ -304,7 +313,34 @@ export default function Crm() {
 
         <div className="grid gap-4 xl:grid-cols-5 md:grid-cols-2 lg:grid-cols-3">
           {CRM_STAGES.map((stage) => (
-            <Card key={stage.id} className={cn('border', stage.tone)}>
+            <Card
+              key={stage.id}
+              className={cn(
+                'border transition-shadow',
+                stage.tone,
+                dragOverStage === stage.id && 'ring-2 ring-primary shadow-md',
+              )}
+              onDragOver={(e) => {
+                if (!canEdit) return;
+                e.preventDefault();
+                e.dataTransfer.dropEffect = 'move';
+                setDragOverStage(stage.id);
+              }}
+              onDragLeave={() => {
+                setDragOverStage((current) => (current === stage.id ? null : current));
+              }}
+              onDrop={(e) => {
+                if (!canEdit) return;
+                e.preventDefault();
+                const leadId = e.dataTransfer.getData('text/crm-lead-id');
+                setDragOverStage(null);
+                setDragLeadId(null);
+                if (!leadId) return;
+                const lead = leads.find((l) => l.id === leadId);
+                if (!lead || lead.stage === stage.id) return;
+                moveLeadStage.mutate({ id: leadId, stage: stage.id });
+              }}
+            >
               <CardHeader className="pb-2">
                 <CardTitle className="text-sm flex items-center justify-between gap-2">
                   <span>{stage.label}</span>
@@ -312,9 +348,11 @@ export default function Crm() {
                 </CardTitle>
                 <p className="text-xs text-muted-foreground">{stage.description}</p>
               </CardHeader>
-              <CardContent className="space-y-2 max-h-[60vh] overflow-y-auto">
+              <CardContent className="space-y-2 min-h-[120px] max-h-[60vh] overflow-y-auto">
                 {byStage[stage.id].length === 0 ? (
-                  <p className="text-xs text-muted-foreground py-6 text-center">Nenhum lead</p>
+                  <p className="text-xs text-muted-foreground py-6 text-center">
+                    {dragOverStage === stage.id ? 'Solte aqui' : 'Nenhum lead'}
+                  </p>
                 ) : (
                   byStage[stage.id].map((lead) => {
                     const overdue =
@@ -322,13 +360,24 @@ export default function Crm() {
                       !['won', 'lost'].includes(lead.stage) &&
                       isBefore(parseISO(lead.nextFollowUp), today);
                     return (
-                      <button
+                      <div
                         key={lead.id}
-                        type="button"
+                        draggable={canEdit}
+                        onDragStart={(e) => {
+                          if (!canEdit) return;
+                          e.dataTransfer.setData('text/crm-lead-id', lead.id);
+                          e.dataTransfer.effectAllowed = 'move';
+                          setDragLeadId(lead.id);
+                        }}
+                        onDragEnd={() => {
+                          setDragLeadId(null);
+                          setDragOverStage(null);
+                        }}
                         onClick={() => canEdit && openEdit(lead)}
                         className={cn(
                           'w-full rounded-lg border bg-background p-3 text-left transition hover:shadow-sm',
-                          canEdit ? 'cursor-pointer' : 'cursor-default',
+                          canEdit ? 'cursor-grab active:cursor-grabbing' : 'cursor-default',
+                          dragLeadId === lead.id && 'opacity-50',
                         )}
                       >
                         <div className="flex items-start justify-between gap-2">
@@ -405,7 +454,7 @@ export default function Crm() {
                             )}
                           </div>
                         )}
-                      </button>
+                      </div>
                     );
                   })
                 )}
@@ -431,7 +480,7 @@ export default function Crm() {
             </div>
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-2">
-                <Label>Telefone</Label>
+                <Label>Telefone *</Label>
                 <Input
                   value={form.phone}
                   onChange={(e) => setForm({ ...form, phone: e.target.value })}
@@ -463,16 +512,13 @@ export default function Crm() {
                 </Select>
               </div>
               <div className="space-y-2">
-                <Label>Origem</Label>
+                <Label>Origem *</Label>
                 <Select
-                  value={form.lead_source || 'none'}
-                  onValueChange={(v) =>
-                    setForm({ ...form, lead_source: v === 'none' ? '' : (v as LeadSource) })
-                  }
+                  value={form.lead_source || undefined}
+                  onValueChange={(v) => setForm({ ...form, lead_source: v as LeadSource })}
                 >
                   <SelectTrigger><SelectValue placeholder="Selecione" /></SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="none">Sem origem</SelectItem>
                     {(Object.keys(leadSourceLabels) as LeadSource[]).map((key) => (
                       <SelectItem key={key} value={key}>{leadSourceLabels[key]}</SelectItem>
                     ))}
@@ -480,6 +526,9 @@ export default function Crm() {
                 </Select>
               </div>
             </div>
+            {formError && (
+              <p className="text-sm text-destructive">{formError}</p>
+            )}
             {form.lead_source === 'referral' && (
               <div className="space-y-2">
                 <Label>Quem indicou</Label>
@@ -573,7 +622,13 @@ export default function Crm() {
             <Button variant="outline" onClick={() => setDialogOpen(false)}>Cancelar</Button>
             <Button
               onClick={handleSave}
-              disabled={!form.name.trim() || createLead.isPending || updateLead.isPending}
+              disabled={
+                !form.name.trim() ||
+                !form.phone.trim() ||
+                !form.lead_source ||
+                createLead.isPending ||
+                updateLead.isPending
+              }
             >
               Salvar
             </Button>

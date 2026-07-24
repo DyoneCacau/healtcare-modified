@@ -81,6 +81,14 @@ export const DateInput = React.forwardRef<HTMLInputElement, Props>(
     }, [value]);
 
     const selectedDate = isoToDate(value);
+
+    const applyMask = (raw: string) => {
+      const digits = raw.replace(/\D/g, "").slice(0, 8);
+      if (digits.length <= 2) return digits;
+      if (digits.length <= 4) return `${digits.slice(0, 2)}/${digits.slice(2)}`;
+      return `${digits.slice(0, 2)}/${digits.slice(2, 4)}/${digits.slice(4)}`;
+    };
+
     const inputEl = (
       <Input
         ref={ref}
@@ -88,11 +96,13 @@ export const DateInput = React.forwardRef<HTMLInputElement, Props>(
         inputMode="numeric"
         placeholder={props.placeholder || "dd/MM/aaaa"}
         value={text}
+        maxLength={10}
         onChange={(e) => {
-          const next = e.target.value;
+          const next = applyMask(e.target.value);
           setText(next);
           const iso = brToIso(next);
           if (iso) onChange(iso);
+          if (next.length === 0) onChange("");
         }}
         onBlur={(e) => {
           const iso = brToIso(text);
