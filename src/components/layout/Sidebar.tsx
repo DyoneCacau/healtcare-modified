@@ -73,10 +73,10 @@ const menuEntries: MenuEntry[] = [
     children: [
       { icon: DollarSign, label: "Caixa", path: "/financeiro", feature: "financeiro" },
       { icon: Wallet, label: "Contas a receber", path: "/contas-a-receber", feature: "contas_receber" },
+      { icon: Percent, label: "Comissões", path: "/comissoes", feature: "comissoes" },
       { icon: FileBarChart, label: "Relatórios", path: "/relatorios", feature: "relatorios" },
     ],
   },
-  { icon: Percent, label: "Comissões", path: "/comissoes", feature: "comissoes" },
   { icon: Clock, label: "Ponto", path: "/ponto", feature: "ponto" },
   { icon: FileText, label: "Meus Termos", path: "/termos", feature: "termos" },
   { icon: Package, label: "Estoque", path: "/estoque", feature: "estoque" },
@@ -118,7 +118,9 @@ export function Sidebar() {
 
   const financeChildActive = useMemo(
     () =>
-      ["/financeiro", "/contas-a-receber", "/relatorios"].includes(location.pathname),
+      ["/financeiro", "/contas-a-receber", "/comissoes", "/relatorios"].includes(
+        location.pathname,
+      ),
     [location.pathname],
   );
 
