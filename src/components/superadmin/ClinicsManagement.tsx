@@ -289,7 +289,7 @@ export function ClinicsManagement() {
                             }}
                           >
                             <Puzzle className="h-4 w-4 mr-2" />
-                            Módulos / presentear
+                            Módulos avulso
                           </DropdownMenuItem>
                           <DropdownMenuItem onClick={() => toggleClinicStatus(clinic)}>
                             {clinic.is_active ? (
