@@ -65,6 +65,11 @@ interface AppointmentFormDialogProps {
   /** Pré-preenche paciente e procedimento (ex: vindo do Alerta de Retorno) */
   prefillPatientId?: string | null;
   prefillProcedure?: string;
+  /** Prefill comercial (ex.: CRM de Vendas) */
+  prefillLeadSource?: LeadSource | '' | null;
+  prefillReferralName?: string | null;
+  prefillSellerId?: string | null;
+  prefillNotes?: string | null;
   /** Data inicial ao criar (ex: data selecionada na Agenda) */
   initialDate?: Date;
   /** Horário inicial ao criar (ex: clique no slot da Agenda) */
@@ -83,6 +88,10 @@ export function AppointmentFormDialog({
   onSave,
   prefillPatientId,
   prefillProcedure,
+  prefillLeadSource,
+  prefillReferralName,
+  prefillSellerId,
+  prefillNotes,
   initialDate,
   initialStartTime,
   initialEndTime,
@@ -156,15 +165,28 @@ export function AppointmentFormDialog({
       setProcedurePrice(null);
       setStatus('pending');
       setPaymentStatus('pending');
-      setNotes('');
-      setSellerId('');
-      setLeadSource('');
-      setReferralName('');
+      setNotes(prefillNotes || '');
+      setSellerId(prefillSellerId || '');
+      setLeadSource(prefillLeadSource || '');
+      setReferralName(prefillReferralName || '');
       setCustomProcedure('');
       setBookingFee(null);
       setBookingFeePaymentMethod(null);
     }
-  }, [open, appointment, clinics, prefillPatientId, prefillProcedure, initialDate, initialStartTime, initialEndTime]);
+  }, [
+    open,
+    appointment,
+    clinics,
+    prefillPatientId,
+    prefillProcedure,
+    prefillLeadSource,
+    prefillReferralName,
+    prefillSellerId,
+    prefillNotes,
+    initialDate,
+    initialStartTime,
+    initialEndTime,
+  ]);
 
   const checkConflict = (): boolean => {
     if (!professionalId || !date) return false;

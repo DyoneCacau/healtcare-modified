@@ -1,8 +1,10 @@
 import { useMemo, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { format, parseISO, isBefore, startOfDay } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import {
   AlertCircle,
+  CalendarPlus,
   KanbanSquare,
   Phone,
   Plus,
@@ -37,6 +39,7 @@ import { usePermissions } from '@/hooks/usePermissions';
 import { useAuth } from '@/hooks/useAuth';
 import { useCrmLeads, useCrmLeadMutations } from '@/hooks/useCrmLeads';
 import { useClinicStaffOptions } from '@/hooks/useClinicStaffOptions';
+import { usePatientMutations } from '@/hooks/usePatients';
 import { formatCurrencyBRL } from '@/lib/currency';
 import { leadSourceLabels, type LeadSource } from '@/types/agenda';
 import {
@@ -45,6 +48,7 @@ import {
   type CrmLeadStage,
 } from '@/types/crm';
 import { cn } from '@/lib/utils';
+import { toast } from 'sonner';
 
 const emptyForm = {
   name: '',
@@ -62,10 +66,12 @@ const emptyForm = {
 };
 
 export default function Crm() {
+  const navigate = useNavigate();
   const { can, isLoading: permLoading } = usePermissions();
   const { user } = useAuth();
   const { data: leads = [], isLoading, error } = useCrmLeads();
   const { createLead, updateLead, moveLeadStage, deleteLead } = useCrmLeadMutations();
+  const { createPatient } = usePatientMutations();
   const { staff } = useClinicStaffOptions();
 
   const canView = can('crm', 'can_view');
@@ -77,6 +83,7 @@ export default function Crm() {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editing, setEditing] = useState<CrmLead | null>(null);
   const [form, setForm] = useState(emptyForm);
+  const [convertingId, setConvertingId] = useState<string | null>(null);
 
   const today = startOfDay(new Date());
 
@@ -161,6 +168,61 @@ export default function Crm() {
       await createLead.mutateAsync(payload);
     }
     setDialogOpen(false);
+  };
+
+  /** Cria paciente (se preciso) e abre Agenda com origem/interesse do CRM */
+  const handleScheduleFromLead = async (lead: CrmLead) => {
+    setConvertingId(lead.id);
+    try {
+      let patientId = lead.patientId;
+      if (!patientId) {
+        const originLabel = lead.leadSource ? leadSourceLabels[lead.leadSource] : null;
+        const created = await createPatient.mutateAsync({
+          name: lead.name,
+          cpf: null,
+          phone: lead.phone,
+          email: lead.email,
+          address: null,
+          birth_date: null,
+          clinical_notes: [
+            originLabel ? `Origem (CRM): ${originLabel}` : null,
+            lead.referralName ? `Indicação: ${lead.referralName}` : null,
+            lead.interest ? `Interesse: ${lead.interest}` : null,
+            lead.notes || null,
+          ]
+            .filter(Boolean)
+            .join('\n') || null,
+          allergies: [],
+          status: 'active',
+        });
+        patientId = created.id;
+        await updateLead.mutateAsync({
+          id: lead.id,
+          patient_id: patientId,
+        });
+      }
+
+      const params = new URLSearchParams({
+        fromCrm: '1',
+        patientId,
+        crmLeadId: lead.id,
+        crmTargetStage: lead.stage === 'won' ? 'won' : 'scheduled',
+      });
+      if (lead.interest) params.set('procedure', lead.interest);
+      if (lead.leadSource) params.set('leadSource', lead.leadSource);
+      if (lead.referralName) params.set('referralName', lead.referralName);
+      if (lead.ownerUserId) params.set('sellerId', lead.ownerUserId);
+      if (lead.notes) params.set('notes', lead.notes.slice(0, 400));
+
+      setDialogOpen(false);
+      navigate(`/agenda?${params.toString()}`);
+      toast.success('Abrindo agenda com dados do lead');
+    } catch (err) {
+      console.error(err);
+      toast.error('Não foi possível criar o paciente / abrir a agenda');
+    } finally {
+      setConvertingId(null);
+    }
   };
 
   if (permLoading || isLoading) {
@@ -311,7 +373,7 @@ export default function Crm() {
                           )}
                         </div>
                         {canEdit && (
-                          <div className="mt-2" onClick={(e) => e.stopPropagation()}>
+                          <div className="mt-2 space-y-2" onClick={(e) => e.stopPropagation()}>
                             <Select
                               value={lead.stage}
                               onValueChange={(v) =>
@@ -329,6 +391,18 @@ export default function Crm() {
                                 ))}
                               </SelectContent>
                             </Select>
+                            {lead.stage !== 'lost' && (
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                className="h-7 w-full text-xs"
+                                disabled={convertingId === lead.id}
+                                onClick={() => handleScheduleFromLead(lead)}
+                              >
+                                <CalendarPlus className="mr-1 h-3.5 w-3.5" />
+                                {lead.patientId ? 'Agendar' : 'Paciente + Agenda'}
+                              </Button>
+                            )}
                           </div>
                         )}
                       </button>
@@ -473,7 +547,7 @@ export default function Crm() {
               />
             </div>
           </div>
-          <DialogFooter className="gap-2 sm:gap-0">
+          <DialogFooter className="gap-2 sm:gap-0 flex-wrap">
             {editing && canDelete && (
               <Button
                 variant="destructive"
@@ -484,6 +558,16 @@ export default function Crm() {
                 }}
               >
                 Excluir
+              </Button>
+            )}
+            {editing && canEdit && editing.stage !== 'lost' && (
+              <Button
+                variant="secondary"
+                disabled={convertingId === editing.id}
+                onClick={() => handleScheduleFromLead(editing)}
+              >
+                <CalendarPlus className="mr-2 h-4 w-4" />
+                {editing.patientId ? 'Abrir na Agenda' : 'Criar paciente e agendar'}
               </Button>
             )}
             <Button variant="outline" onClick={() => setDialogOpen(false)}>Cancelar</Button>

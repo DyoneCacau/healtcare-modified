@@ -111,6 +111,7 @@ export function useCrmLeadMutations() {
   const createLead = useMutation({
     mutationFn: async (input: CrmLeadInput) => {
       if (!clinicId || !user?.id) throw new Error('Clínica ou usuário não identificado');
+      if (!input.name?.trim()) throw new Error('Nome do lead é obrigatório');
 
       const { data, error } = await supabase
         .from('crm_leads' as any)
@@ -163,6 +164,7 @@ export function useCrmLeadMutations() {
       if (input.notes !== undefined) payload.notes = input.notes?.trim() || null;
       if (input.owner_user_id !== undefined) payload.owner_user_id = input.owner_user_id;
       if (input.patient_id !== undefined) payload.patient_id = input.patient_id;
+      if (input.appointment_id !== undefined) payload.appointment_id = input.appointment_id;
       if (input.lost_reason !== undefined) payload.lost_reason = input.lost_reason?.trim() || null;
 
       const { data, error } = await supabase

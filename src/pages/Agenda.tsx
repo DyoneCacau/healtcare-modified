@@ -12,7 +12,7 @@ import { MonthView } from '@/components/agenda/MonthView';
 import { AppointmentFormDialog } from '@/components/agenda/AppointmentFormDialog';
 import { CompleteAppointmentDialog } from '@/components/agenda/CompleteAppointmentDialog';
 import { NoShowFeeDialog } from '@/components/agenda/NoShowFeeDialog';
-import { AgendaAppointment, AgendaView, Professional } from '@/types/agenda';
+import { AgendaAppointment, AgendaView, Professional, LeadSource } from '@/types/agenda';
 import { PaymentMethod } from '@/types/financial';
 import { useAppointments, useAppointmentMutations } from '@/hooks/useAppointments';
 import { useProfessionals } from '@/hooks/useProfessionals';
@@ -21,6 +21,7 @@ import { useCommissionRules, useCommissionMutations } from '@/hooks/useCommissio
 import type { CommissionBreakdownItem, BillingDestination } from '@/components/agenda/CompleteAppointmentDialog';
 import { useTransactionMutations } from '@/hooks/useFinancial';
 import { useReceivableMutations } from '@/hooks/useReceivables';
+import { useCrmLeadMutations } from '@/hooks/useCrmLeads';
 import { usePermissions } from '@/hooks/usePermissions';
 import { toast } from 'sonner';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -37,6 +38,12 @@ export default function Agenda() {
   const [editingAppointment, setEditingAppointment] = useState<AgendaAppointment | null>(null);
   const [prefillPatientId, setPrefillPatientId] = useState<string | null>(null);
   const [prefillProcedure, setPrefillProcedure] = useState<string>('');
+  const [prefillLeadSource, setPrefillLeadSource] = useState<LeadSource | ''>('');
+  const [prefillReferralName, setPrefillReferralName] = useState('');
+  const [prefillSellerId, setPrefillSellerId] = useState('');
+  const [prefillNotes, setPrefillNotes] = useState('');
+  const [crmLeadId, setCrmLeadId] = useState<string | null>(null);
+  const [crmTargetStage, setCrmTargetStage] = useState<'scheduled' | 'won'>('scheduled');
   const [prefillSlotDate, setPrefillSlotDate] = useState<Date | null>(null);
   const [prefillSlotStartTime, setPrefillSlotStartTime] = useState<string | null>(null);
   const [completeDialogOpen, setCompleteDialogOpen] = useState(false);
@@ -71,6 +78,7 @@ export default function Agenda() {
   const { createTransaction, syncBookingFeePaymentMethod } = useTransactionMutations();
   const { createReceivable } = useReceivableMutations();
   const { createCommission } = useCommissionMutations();
+  const { updateLead } = useCrmLeadMutations();
   const { rules: commissionRules } = useCommissionRules();
 
   // Mapa de clínicas por ID para preencher os dados da agenda
@@ -173,14 +181,28 @@ export default function Agenda() {
     return filteredAppointments.filter((apt) => apt.date === dateStr);
   }, [filteredAppointments, selectedDate]);
 
-  // Abrir formulário com paciente/procedimento pré-preenchidos (vindo do Alerta de Retorno)
+  // Abrir formulário com paciente/procedimento pré-preenchidos (Alerta de Retorno ou CRM)
   useEffect(() => {
     const patientId = searchParams.get('patientId');
     const procedure = searchParams.get('procedure');
     const fromAlert = searchParams.get('fromAlert');
-    if (fromAlert && patientId) {
+    const fromCrm = searchParams.get('fromCrm');
+    const leadSource = searchParams.get('leadSource') as LeadSource | null;
+    const referralName = searchParams.get('referralName');
+    const sellerId = searchParams.get('sellerId');
+    const notes = searchParams.get('notes');
+    const leadId = searchParams.get('crmLeadId');
+    const targetStage = searchParams.get('crmTargetStage');
+
+    if ((fromAlert || fromCrm) && patientId) {
       setPrefillPatientId(patientId);
-      setPrefillProcedure(procedure || 'Retorno');
+      setPrefillProcedure(procedure || (fromCrm ? '' : 'Retorno'));
+      setPrefillLeadSource(leadSource || '');
+      setPrefillReferralName(referralName || '');
+      setPrefillSellerId(sellerId || '');
+      setPrefillNotes(notes || '');
+      setCrmLeadId(fromCrm ? leadId : null);
+      setCrmTargetStage(targetStage === 'won' ? 'won' : 'scheduled');
       setFormDialogOpen(true);
       setEditingAppointment(null);
       setSearchParams({}, { replace: true });
@@ -401,7 +423,7 @@ export default function Agenda() {
       }
     } else {
       // Create new
-      await createAppointment.mutateAsync({
+      const created = await createAppointment.mutateAsync({
         clinic_id: data.clinic?.id,
         patient_id: data.patientId!,
         professional_id: data.professional!.id,
@@ -420,6 +442,22 @@ export default function Agenda() {
         booking_fee: data.bookingFee ?? null,
         booking_fee_payment_method: data.bookingFeePaymentMethod ?? null,
       });
+
+      // Vínculo de volta ao CRM (origem + paciente + agendamento)
+      if (crmLeadId && created?.id) {
+        try {
+          await updateLead.mutateAsync({
+            id: crmLeadId,
+            patient_id: data.patientId || null,
+            appointment_id: created.id,
+            stage: crmTargetStage,
+          });
+        } catch (err) {
+          console.error('Erro ao vincular lead do CRM:', err);
+        }
+      }
+      setCrmLeadId(null);
+      setCrmTargetStage('scheduled');
     }
   };
 
@@ -546,6 +584,12 @@ export default function Agenda() {
             setEditingAppointment(null);
             setPrefillPatientId(null);
             setPrefillProcedure('');
+            setPrefillLeadSource('');
+            setPrefillReferralName('');
+            setPrefillSellerId('');
+            setPrefillNotes('');
+            setCrmLeadId(null);
+            setCrmTargetStage('scheduled');
             setPrefillSlotDate(null);
             setPrefillSlotStartTime(null);
           }
@@ -557,6 +601,10 @@ export default function Agenda() {
         onSave={handleSave}
         prefillPatientId={prefillPatientId}
         prefillProcedure={prefillProcedure}
+        prefillLeadSource={prefillLeadSource}
+        prefillReferralName={prefillReferralName}
+        prefillSellerId={prefillSellerId}
+        prefillNotes={prefillNotes}
         initialDate={prefillSlotDate ?? selectedDate}
         initialStartTime={prefillSlotStartTime ?? undefined}
       />
