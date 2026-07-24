@@ -113,7 +113,7 @@ export default function Terms() {
         </div>
 
         <Tabs defaultValue="termos" className="space-y-6">
-          <TabsList>
+          <TabsList className="h-auto flex flex-wrap justify-start gap-1">
             <TabsTrigger value="termos" className="gap-2">
               <FileSignature className="h-4 w-4" />
               Meus Termos

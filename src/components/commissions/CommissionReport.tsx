@@ -445,7 +445,7 @@ export function CommissionReport({ calculations, professionals = [] }: Commissio
 
       {/* Tabs for different views */}
       <Tabs defaultValue="by-type" className="space-y-4">
-        <TabsList>
+        <TabsList className="h-auto w-full flex flex-wrap justify-start gap-1">
           <TabsTrigger value="by-type">Por Tipo de Beneficiário</TabsTrigger>
           <TabsTrigger value="charts">Gráficos</TabsTrigger>
           <TabsTrigger value="lead-source">Por Origem do Lead</TabsTrigger>

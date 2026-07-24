@@ -226,63 +226,70 @@ export function DentalChart({ chart, onUpdateChart, readOnly = false }: DentalCh
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-wrap gap-2 justify-center">
-        {Object.entries(TOOTH_STATUS_CONFIG).map(([status, config]) => (
-          <Badge key={status} variant="outline" className={cn(config.bgColor, config.color, 'text-xs')}>
-            {config.label}
-          </Badge>
-        ))}
+      <div className="rounded-lg border bg-muted/30 p-3">
+        <p className="mb-2 text-center text-xs font-medium text-muted-foreground">Legenda de status</p>
+        <div className="flex flex-wrap gap-2 justify-center">
+          {Object.entries(TOOTH_STATUS_CONFIG).map(([status, config]) => (
+            <Badge key={status} variant="outline" className={cn(config.bgColor, config.color, 'text-xs')}>
+              {config.label}
+            </Badge>
+          ))}
+        </div>
       </div>
 
       <Card>
         <CardHeader className="pb-2">
-          <CardTitle className="text-center text-sm text-muted-foreground">Arcada Superior</CardTitle>
+          <CardTitle className="text-center text-sm leading-normal text-muted-foreground">Arcada Superior</CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
-          <div className="flex justify-center gap-1">
-            {ADULT_TEETH.upperRight.map((num) => (
-              <Tooth
-                key={num}
-                tooth={chart.teeth[num]}
-                onClick={() => handleToothClick(num)}
-                position="upper"
-              />
-            ))}
-            <div className="w-4" />
-            {ADULT_TEETH.upperLeft.map((num) => (
-              <Tooth
-                key={num}
-                tooth={chart.teeth[num]}
-                onClick={() => handleToothClick(num)}
-                position="upper"
-              />
-            ))}
+          <div className="overflow-x-auto pb-1">
+            <div className="flex min-w-max justify-center gap-1">
+              {ADULT_TEETH.upperRight.map((num) => (
+                <Tooth
+                  key={num}
+                  tooth={chart.teeth[num]}
+                  onClick={() => handleToothClick(num)}
+                  position="upper"
+                />
+              ))}
+              <div className="w-4" />
+              {ADULT_TEETH.upperLeft.map((num) => (
+                <Tooth
+                  key={num}
+                  tooth={chart.teeth[num]}
+                  onClick={() => handleToothClick(num)}
+                  position="upper"
+                />
+              ))}
+            </div>
           </div>
 
           <div className="border-t border-dashed border-border my-4" />
 
-          <div className="flex justify-center gap-1">
-            {ADULT_TEETH.lowerRight.map((num) => (
-              <Tooth
-                key={num}
-                tooth={chart.teeth[num]}
-                onClick={() => handleToothClick(num)}
-                position="lower"
-              />
-            ))}
-            <div className="w-4" />
-            {ADULT_TEETH.lowerLeft.map((num) => (
-              <Tooth
-                key={num}
-                tooth={chart.teeth[num]}
-                onClick={() => handleToothClick(num)}
-                position="lower"
-              />
-            ))}
+          <div className="overflow-x-auto pb-1">
+            <div className="flex min-w-max justify-center gap-1">
+              {ADULT_TEETH.lowerRight.map((num) => (
+                <Tooth
+                  key={num}
+                  tooth={chart.teeth[num]}
+                  onClick={() => handleToothClick(num)}
+                  position="lower"
+                />
+              ))}
+              <div className="w-4" />
+              {ADULT_TEETH.lowerLeft.map((num) => (
+                <Tooth
+                  key={num}
+                  tooth={chart.teeth[num]}
+                  onClick={() => handleToothClick(num)}
+                  position="lower"
+                />
+              ))}
+            </div>
           </div>
         </CardContent>
         <CardHeader className="pt-0 pb-4">
-          <CardTitle className="text-center text-sm text-muted-foreground">Arcada Inferior</CardTitle>
+          <CardTitle className="text-center text-sm leading-normal text-muted-foreground">Arcada Inferior</CardTitle>
         </CardHeader>
       </Card>
 
@@ -347,7 +354,7 @@ export function DentalChart({ chart, onUpdateChart, readOnly = false }: DentalCh
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
         <DialogContent className="max-w-md">
           <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
+            <DialogTitle className="flex flex-wrap items-center gap-2">
               Dente {selectedTooth?.number}
               {selectedTooth && (
                 <Badge

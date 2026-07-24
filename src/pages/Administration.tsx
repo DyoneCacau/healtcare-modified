@@ -489,7 +489,7 @@ export default function Administration() {
         </div>
 
         <Tabs value={activeTab} onValueChange={(v) => setSearchParams({ tab: v })} className="space-y-4">
-          <TabsList>
+          <TabsList className="h-auto w-full flex flex-wrap justify-start gap-1">
             <TabsTrigger value="clinics" className="flex items-center gap-2">
               <Building2 className="h-4 w-4" />
               Minhas Clínicas

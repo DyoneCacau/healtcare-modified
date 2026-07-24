@@ -42,7 +42,7 @@ export default function Atendimento() {
       </div>
 
       <Tabs defaultValue="inbox" className="space-y-4">
-        <TabsList>
+        <TabsList className="h-auto flex flex-wrap justify-start gap-1">
           <TabsTrigger value="inbox" className="gap-2">
             <MessageSquare className="h-4 w-4" />
             Inbox
