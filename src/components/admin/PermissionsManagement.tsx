@@ -31,6 +31,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { useClinic, useClinics } from '@/hooks/useClinic';
 import { useAuth } from '@/hooks/useAuth';
 import { parsePlanFeatures } from '@/lib/planFeatures';
+import { resolveClinicFeatures } from '@/lib/planModules';
 import {
   SYSTEM_ROLES,
   ROLE_LABELS,
@@ -60,6 +61,7 @@ interface CustomRole {
 
 const ALWAYS_AVAILABLE_FEATURES = ['dashboard', 'configuracoes', 'agenda_todas_clinicas', 'administracao'];
 const FEATURE_ALIASES: Record<string, string[]> = {
+  // legado (planos antigos) → módulos atuais
   pacientes_basico: ['pacientes'],
   financeiro_basico: ['financeiro', 'contas_receber'],
   financeiro: ['contas_receber'],
@@ -256,11 +258,21 @@ export function PermissionsManagement() {
       supabase.from('clinic_role_permissions').select('*').eq('clinic_id', targetClinicId),
       supabase.from('clinic_custom_roles').select('id, name').eq('clinic_id', targetClinicId),
       supabase.from('clinic_custom_role_permissions').select('*'),
-      supabase.from('subscriptions').select('plans(features)').eq('clinic_id', targetClinicId).maybeSingle(),
+      supabase.from('subscriptions').select('features_override, feature_grants, plans(features)').eq('clinic_id', targetClinicId).maybeSingle(),
     ]);
 
-    const planFeatures = (subRes.data as { plans?: { features?: unknown } | null })?.plans?.features;
-    setPlanFeatureIds(expandPlanFeatures(parsePlanFeatures(planFeatures)));
+    const subRow = subRes.data as {
+      features_override?: unknown;
+      feature_grants?: unknown;
+      plans?: { features?: unknown } | null;
+    } | null;
+    setPlanFeatureIds(
+      resolveClinicFeatures({
+        planFeatures: parsePlanFeatures(subRow?.plans?.features),
+        featuresOverride: subRow?.features_override,
+        featureGrants: subRow?.feature_grants,
+      }),
+    );
 
     const byRole: Record<SystemRole, Record<string, Record<ActionKey, boolean>>> = {
       admin: {},

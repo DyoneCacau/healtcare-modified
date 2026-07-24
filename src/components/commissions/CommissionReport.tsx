@@ -61,6 +61,7 @@ const COLORS = ['hsl(var(--success))', 'hsl(var(--info))', 'hsl(var(--warning))'
 const leadSourceIcons: Record<LeadSource, typeof Instagram> = {
   instagram: Instagram,
   whatsapp: MessageCircle,
+  facebook: Share2,
   referral: Share2,
   paid_traffic: Megaphone,
   other: HelpCircle,

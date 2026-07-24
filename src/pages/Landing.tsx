@@ -128,8 +128,8 @@ function formatPlanPrice(value: number): string {
 
 function featureLabel(slug: string): string {
   if (FEATURE_LABELS[slug]) return FEATURE_LABELS[slug];
-  if (slug === "financeiro_basico") return "Caixa (Básico)";
-  if (slug === "pacientes_basico") return "Pacientes (Básico)";
+  if (slug === "financeiro_basico" || slug === "financeiro") return "Caixa";
+  if (slug === "pacientes_basico" || slug === "pacientes") return "Pacientes";
   if (slug === "multi_clinica") return "Multi-Clínica";
   if (slug === "crm") return "CRM de Vendas";
   return slug.replace(/_/g, " ");

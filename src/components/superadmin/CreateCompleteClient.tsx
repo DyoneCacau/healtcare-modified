@@ -30,34 +30,19 @@ import {
   CommercialChecklist,
   buildCommercialChecklistState,
 } from "@/components/superadmin/CommercialChecklist";
+import {
+  PLAN_MODULES,
+  ALWAYS_INCLUDED_MODULES,
+  expandFeatureAliases,
+} from "@/lib/planModules";
 
 // Lista completa de módulos disponíveis (chaves alinhadas com PlansManagement)
-const AVAILABLE_MODULES = [
-  { id: 'dashboard', name: 'Dashboard', description: 'Visão geral da clínica', always: true },
-  { id: 'agenda', name: 'Agenda', description: 'Agendamento de consultas' },
-  { id: 'pacientes', name: 'Pacientes', description: 'Cadastro e prontuários' },
-  { id: 'pacientes_basico', name: 'Pacientes (Básico)', description: 'Cadastro simplificado de pacientes' },
-  { id: 'profissionais', name: 'Profissionais', description: 'Gestão de profissionais' },
-  { id: 'procedimentos', name: 'Procedimentos', description: 'Catálogo de procedimentos e valores' },
-  { id: 'crm', name: 'CRM de Vendas', description: 'Pipeline de leads, follow-up e conversão' },
-  { id: 'financeiro', name: 'Caixa', description: 'Recebimentos do dia e fechamento de caixa' },
-  { id: 'financeiro_basico', name: 'Caixa (Básico)', description: 'Controle de caixa simplificado' },
-  { id: 'contas_receber', name: 'Contas a receber', description: 'Parcelas e cobranças futuras' },
-  { id: 'comissoes', name: 'Comissões', description: 'Cálculo de comissões' },
-  { id: 'estoque', name: 'Estoque', description: 'Controle de materiais' },
-  { id: 'relatorios', name: 'Relatórios', description: 'Relatórios gerenciais' },
-  { id: 'ponto', name: 'Ponto', description: 'Controle de ponto eletrônico' },
-  {
-    id: 'administracao',
-    name: 'Administração',
-    description: 'Usuários, permissões e solicitação de upgrade',
-    always: true,
-  },
-  { id: 'termos', name: 'Termos', description: 'Criação de termos e contratos' },
-  { id: 'multi_clinica', name: 'Multi-Clínica', description: 'Gestão de múltiplas unidades' },
-];
-
-const ALWAYS_INCLUDED_MODULES = AVAILABLE_MODULES.filter((m) => m.always).map((m) => m.id);
+const AVAILABLE_MODULES = PLAN_MODULES.map((m) => ({
+  id: m.id,
+  name: m.name,
+  description: m.description,
+  always: 'always' in m && m.always === true,
+}));
 
 interface ClinicData {
   name: string;
@@ -114,9 +99,9 @@ function planMonthlyPrice(plan: PlanOption): number {
 
 /** Módulos do plano + módulos sempre inclusos (dashboard, administração) */
 function modulesFromPlan(plan: PlanOption | undefined): string[] {
-  const fromPlan = plan ? parsePlanFeatures(plan.features) : [];
+  const fromPlan = plan ? expandFeatureAliases(parsePlanFeatures(plan.features)) : [];
   const knownIds = new Set(AVAILABLE_MODULES.map((m) => m.id));
-  const selected = fromPlan.filter((id) => knownIds.has(id));
+  const selected = fromPlan.filter((id) => knownIds.has(id as (typeof AVAILABLE_MODULES)[number]['id']));
   ALWAYS_INCLUDED_MODULES.forEach((id) => {
     if (!selected.includes(id)) selected.unshift(id);
   });
@@ -262,7 +247,7 @@ export function CreateCompleteClient() {
 
   function toggleModule(moduleId: string) {
     setFormData(prev => {
-      if (ALWAYS_INCLUDED_MODULES.includes(moduleId)) return prev;
+      if ((ALWAYS_INCLUDED_MODULES as readonly string[]).includes(moduleId)) return prev;
 
       const isIncluded = prev.modules.includes(moduleId);
       return {
