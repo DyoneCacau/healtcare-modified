@@ -14,6 +14,7 @@ export const FEATURE_LABELS: Record<string, string> = {
   comissoes: 'Comissões',
   estoque: 'Estoque',
   procedimentos: 'Procedimentos',
+  crm: 'CRM de Vendas',
   relatorios: 'Relatórios',
   ponto: 'Controle de Ponto',
   atendimento: 'Atendimento Omnichannel',
