@@ -1,4 +1,4 @@
-import { FormEvent, useEffect, useState } from "react";
+import { FormEvent, useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import {
   Calendar,
@@ -25,6 +25,8 @@ import {
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
+import { parsePlanFeatures } from "@/lib/planFeatures";
+import { FEATURE_LABELS } from "@/components/subscription/RequireFeature";
 
 const FEATURES = [
   { icon: Calendar, title: "Agenda inteligente", text: "Organize consultas e confirme pacientes sem planilha." },
@@ -66,8 +68,9 @@ const SCREENS = [
   },
 ] as const;
 
-const PLANS = [
+const FALLBACK_PLANS = [
   {
+    id: "fallback-1",
     name: "Plano 1 - Básico",
     price: "189,00",
     description: "Acesso às funcionalidades essenciais.",
@@ -80,6 +83,7 @@ const PLANS = [
     highlight: false,
   },
   {
+    id: "fallback-2",
     name: "Plano 2 - Profissional",
     price: "369,99",
     description: "Funcionalidades avançadas para clínicas em crescimento.",
@@ -92,6 +96,7 @@ const PLANS = [
     highlight: true,
   },
   {
+    id: "fallback-3",
     name: "Plano Premium",
     price: "589,90",
     description: "Acesso completo a todas as funcionalidades.",
@@ -104,6 +109,31 @@ const PLANS = [
     highlight: false,
   },
 ] as const;
+
+type LandingPlanCard = {
+  id: string;
+  name: string;
+  price: string;
+  description: string;
+  features: string[];
+  highlight: boolean;
+};
+
+function formatPlanPrice(value: number): string {
+  return value.toLocaleString("pt-BR", {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  });
+}
+
+function featureLabel(slug: string): string {
+  if (FEATURE_LABELS[slug]) return FEATURE_LABELS[slug];
+  if (slug === "financeiro_basico") return "Caixa (Básico)";
+  if (slug === "pacientes_basico") return "Pacientes (Básico)";
+  if (slug === "multi_clinica") return "Multi-Clínica";
+  if (slug === "crm") return "CRM de Vendas";
+  return slug.replace(/_/g, " ");
+}
 
 const FAQ = [
   {
@@ -133,6 +163,8 @@ export default function Landing() {
   const [menuOpen, setMenuOpen] = useState(false);
   const [activeScreen, setActiveScreen] = useState(0);
   const [submitting, setSubmitting] = useState(false);
+  const [plans, setPlans] = useState<LandingPlanCard[]>([]);
+  const [plansLoading, setPlansLoading] = useState(true);
   const [form, setForm] = useState({
     name: "",
     email: "",
@@ -147,6 +179,73 @@ export default function Landing() {
     }, 4500);
     return () => window.clearInterval(timer);
   }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const { data, error } = await supabase
+          .from("plans")
+          .select(
+            "id, name, slug, description, price_monthly, promo_active, promo_price_monthly, features, is_active",
+          )
+          .eq("is_active", true)
+          .order("price_monthly", { ascending: true });
+
+        if (error) throw error;
+        if (cancelled) return;
+
+        const mapped: LandingPlanCard[] = (data || []).map((plan, index, arr) => {
+          const priceValue =
+            plan.promo_active && plan.promo_price_monthly != null
+              ? Number(plan.promo_price_monthly)
+              : Number(plan.price_monthly);
+          const featureSlugs = parsePlanFeatures(plan.features);
+          const featureNames = featureSlugs
+            .filter((f) => !["dashboard", "configuracoes", "administracao"].includes(f))
+            .map(featureLabel)
+            .slice(0, 6);
+          const mid = Math.floor((arr.length - 1) / 2);
+          return {
+            id: plan.id,
+            name: plan.name,
+            price: formatPlanPrice(priceValue),
+            description: plan.description || "Plano da plataforma HealthCare.",
+            features:
+              featureNames.length > 0
+                ? featureNames
+                : ["Módulos conforme o plano contratado"],
+            highlight:
+              arr.length >= 3
+                ? index === mid
+                : /profissional|pro/i.test(plan.name) || /profissional|pro/i.test(plan.slug || ""),
+          };
+        });
+
+        setPlans(mapped);
+      } catch (err) {
+        console.warn("Landing: não foi possível carregar planos do banco", err);
+        if (!cancelled) setPlans([]);
+      } finally {
+        if (!cancelled) setPlansLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const displayPlans: LandingPlanCard[] = useMemo(() => {
+    if (plans.length > 0) return plans;
+    return FALLBACK_PLANS.map((p) => ({
+      id: p.id,
+      name: p.name,
+      price: p.price,
+      description: p.description,
+      features: [...p.features],
+      highlight: p.highlight,
+    }));
+  }, [plans]);
 
   const handleContactSubmit = async (e: FormEvent) => {
     e.preventDefault();
@@ -409,9 +508,12 @@ export default function Landing() {
           </div>
 
           <div className="mt-12 grid gap-6 lg:grid-cols-3">
-            {PLANS.map((plan) => (
+            {plansLoading && plans.length === 0 ? (
+              <p className="col-span-full text-center text-sm text-slate-500">Carregando planos...</p>
+            ) : (
+              displayPlans.map((plan) => (
               <div
-                key={plan.name}
+                key={plan.id}
                 className={cn(
                   "relative flex flex-col rounded-2xl border p-6",
                   plan.highlight
@@ -452,7 +554,8 @@ export default function Landing() {
                   Solicitar demonstração
                 </Button>
               </div>
-            ))}
+              ))
+            )}
           </div>
         </div>
       </section>
