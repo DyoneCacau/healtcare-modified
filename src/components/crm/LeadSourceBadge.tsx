@@ -3,25 +3,27 @@ import { HelpCircle, Megaphone, Share2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { leadSourceLabels, type LeadSource } from '@/types/agenda';
 
-function InstagramGlyph({ className, gradientId }: { className?: string; gradientId: string }) {
+export function InstagramGlyph({ className, gradientId }: { className?: string; gradientId?: string }) {
+  const fallbackId = useId().replace(/:/g, '');
+  const id = gradientId || `ig-${fallbackId}`;
   return (
     <svg viewBox="0 0 24 24" className={className} aria-hidden>
       <defs>
-        <linearGradient id={gradientId} x1="0%" y1="100%" x2="100%" y2="0%">
+        <linearGradient id={id} x1="0%" y1="100%" x2="100%" y2="0%">
           <stop offset="0%" stopColor="#f58529" />
           <stop offset="30%" stopColor="#dd2a7b" />
           <stop offset="60%" stopColor="#8134af" />
           <stop offset="100%" stopColor="#515bd4" />
         </linearGradient>
       </defs>
-      <rect x="2" y="2" width="20" height="20" rx="5" fill={`url(#${gradientId})`} />
+      <rect x="2" y="2" width="20" height="20" rx="5" fill={`url(#${id})`} />
       <circle cx="12" cy="12" r="4.2" fill="none" stroke="#fff" strokeWidth="1.8" />
       <circle cx="17.2" cy="6.8" r="1.2" fill="#fff" />
     </svg>
   );
 }
 
-function WhatsAppGlyph({ className }: { className?: string }) {
+export function WhatsAppGlyph({ className }: { className?: string }) {
   return (
     <svg viewBox="0 0 24 24" className={className} aria-hidden>
       <circle cx="12" cy="12" r="11" fill="#25D366" />
@@ -33,7 +35,7 @@ function WhatsAppGlyph({ className }: { className?: string }) {
   );
 }
 
-function FacebookGlyph({ className }: { className?: string }) {
+export function FacebookGlyph({ className }: { className?: string }) {
   return (
     <svg viewBox="0 0 24 24" className={className} aria-hidden>
       <circle cx="12" cy="12" r="11" fill="#1877F2" />
@@ -45,34 +47,31 @@ function FacebookGlyph({ className }: { className?: string }) {
   );
 }
 
-const SOURCE_STYLES: Record<
-  LeadSource,
-  { wrap: string; brand?: 'instagram' | 'whatsapp' | 'facebook'; Lucide?: typeof HelpCircle }
-> = {
-  instagram: {
-    wrap: 'border-transparent bg-gradient-to-r from-[#f58529]/15 via-[#dd2a7b]/15 to-[#515bd4]/15 text-[#c13584]',
-    brand: 'instagram',
-  },
-  whatsapp: {
-    wrap: 'border-[#25D366]/30 bg-[#25D366]/15 text-[#128C7E]',
-    brand: 'whatsapp',
-  },
-  facebook: {
-    wrap: 'border-[#1877F2]/30 bg-[#1877F2]/15 text-[#1877F2]',
-    brand: 'facebook',
-  },
-  referral: {
-    wrap: 'border-amber-300/50 bg-amber-50 text-amber-800',
-    Lucide: Share2,
-  },
-  paid_traffic: {
-    wrap: 'border-violet-300/50 bg-violet-50 text-violet-800',
-    Lucide: Megaphone,
-  },
-  other: {
-    wrap: 'border-muted-foreground/20 bg-muted text-muted-foreground',
-    Lucide: HelpCircle,
-  },
+/** Ícone de origem (logo das redes ou ícone genérico). */
+export function LeadSourceIcon({
+  source,
+  className,
+}: {
+  source: LeadSource;
+  className?: string;
+}) {
+  const gradId = useId().replace(/:/g, '');
+  if (source === 'instagram') return <InstagramGlyph className={className} gradientId={`ig-i-${gradId}`} />;
+  if (source === 'whatsapp') return <WhatsAppGlyph className={className} />;
+  if (source === 'facebook') return <FacebookGlyph className={className} />;
+  if (source === 'referral') return <Share2 className={className} />;
+  if (source === 'paid_traffic') return <Megaphone className={className} />;
+  return <HelpCircle className={className} />;
+}
+
+const SOURCE_STYLES: Record<LeadSource, string> = {
+  instagram:
+    'border-transparent bg-gradient-to-r from-[#f58529]/15 via-[#dd2a7b]/15 to-[#515bd4]/15 text-[#c13584]',
+  whatsapp: 'border-[#25D366]/30 bg-[#25D366]/15 text-[#128C7E]',
+  facebook: 'border-[#1877F2]/30 bg-[#1877F2]/15 text-[#1877F2]',
+  referral: 'border-amber-300/50 bg-amber-50 text-amber-800',
+  paid_traffic: 'border-violet-300/50 bg-violet-50 text-violet-800',
+  other: 'border-muted-foreground/20 bg-muted text-muted-foreground',
 };
 
 export function LeadSourceBadge({
@@ -82,28 +81,34 @@ export function LeadSourceBadge({
   source: LeadSource;
   className?: string;
 }) {
-  const gradId = useId().replace(/:/g, '');
-  const style = SOURCE_STYLES[source] ?? SOURCE_STYLES.other;
   const label = leadSourceLabels[source] ?? source;
 
   return (
     <span
       className={cn(
         'inline-flex items-center gap-1 rounded-md border px-1.5 py-0.5 text-[10px] font-medium',
-        style.wrap,
+        SOURCE_STYLES[source] ?? SOURCE_STYLES.other,
         className,
       )}
     >
-      {style.brand === 'instagram' ? (
-        <InstagramGlyph className="h-3 w-3 shrink-0" gradientId={`ig-${gradId}`} />
-      ) : style.brand === 'whatsapp' ? (
-        <WhatsAppGlyph className="h-3 w-3 shrink-0" />
-      ) : style.brand === 'facebook' ? (
-        <FacebookGlyph className="h-3 w-3 shrink-0" />
-      ) : style.Lucide ? (
-        <style.Lucide className="h-3 w-3 shrink-0" />
-      ) : null}
+      <LeadSourceIcon source={source} className="h-3 w-3 shrink-0" />
       {label}
+    </span>
+  );
+}
+
+/** Linha com logo + nome — útil em SelectItem / listas. */
+export function LeadSourceLabel({
+  source,
+  className,
+}: {
+  source: LeadSource;
+  className?: string;
+}) {
+  return (
+    <span className={cn('inline-flex items-center gap-2', className)}>
+      <LeadSourceIcon source={source} className="h-4 w-4 shrink-0" />
+      <span>{leadSourceLabels[source]}</span>
     </span>
   );
 }

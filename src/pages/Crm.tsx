@@ -35,7 +35,7 @@ import {
 } from '@/components/ui/select';
 import { CurrencyInput } from '@/components/ui/currency-input';
 import { DateInput } from '@/components/ui/date-input';
-import { LeadSourceBadge } from '@/components/crm/LeadSourceBadge';
+import { LeadSourceBadge, LeadSourceLabel } from '@/components/crm/LeadSourceBadge';
 import { usePermissions } from '@/hooks/usePermissions';
 import { useAuth } from '@/hooks/useAuth';
 import { useCrmLeads, useCrmLeadMutations } from '@/hooks/useCrmLeads';
@@ -519,7 +519,9 @@ export default function Crm() {
                   <SelectTrigger><SelectValue placeholder="Selecione" /></SelectTrigger>
                   <SelectContent>
                     {(Object.keys(leadSourceLabels) as LeadSource[]).map((key) => (
-                      <SelectItem key={key} value={key}>{leadSourceLabels[key]}</SelectItem>
+                      <SelectItem key={key} value={key}>
+                        <LeadSourceLabel source={key} />
+                      </SelectItem>
                     ))}
                   </SelectContent>
                 </Select>

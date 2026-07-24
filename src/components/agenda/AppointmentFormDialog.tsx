@@ -36,6 +36,7 @@ import {
 } from '@/components/ui/tooltip';
 import { cn } from '@/lib/utils';
 import { AgendaAppointment, Professional, LeadSource, leadSourceLabels } from '@/types/agenda';
+import { LeadSourceLabel } from '@/components/crm/LeadSourceBadge';
 import { Clinic } from '@/types/clinic';
 import { usePatients } from '@/hooks/usePatients';
 import { useClinicProcedures } from '@/hooks/useClinicProcedures';
@@ -615,9 +616,9 @@ export function AppointmentFormDialog({
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="none">Não informado</SelectItem>
-                {(Object.entries(leadSourceLabels) as [LeadSource, string][]).map(([value, label]) => (
+                {(Object.entries(leadSourceLabels) as [LeadSource, string][]).map(([value]) => (
                   <SelectItem key={value} value={value}>
-                    {label}
+                    <LeadSourceLabel source={value} />
                   </SelectItem>
                 ))}
               </SelectContent>
