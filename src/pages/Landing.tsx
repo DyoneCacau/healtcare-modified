@@ -152,7 +152,8 @@ const FALLBACK_PLANS = [
   {
     id: "fallback-1",
     name: "Plano Essencial",
-    price: "189,00",
+    priceMonthly: 189,
+    priceYearly: 1890,
     description: "Agenda, pacientes e caixa para começar organizado.",
     features: ["Agenda", "Pacientes", "Caixa", "Administração"],
     highlight: false,
@@ -160,7 +161,8 @@ const FALLBACK_PLANS = [
   {
     id: "fallback-2",
     name: "Plano Profissional",
-    price: "369,99",
+    priceMonthly: 369.99,
+    priceYearly: 3699,
     description: "Operação completa para clínicas em crescimento.",
     features: ["Agenda e pacientes", "Caixa e contas a receber", "CRM de Vendas", "Profissionais"],
     highlight: true,
@@ -168,7 +170,8 @@ const FALLBACK_PLANS = [
   {
     id: "fallback-3",
     name: "Plano Premium",
-    price: "589,90",
+    priceYearly: 5899,
+    priceMonthly: 589.9,
     description: "Acesso amplo aos módulos da plataforma.",
     features: ["Todos os módulos principais", "Relatórios", "Multi-clínica", "Comissões e estoque"],
     highlight: false,
@@ -178,7 +181,8 @@ const FALLBACK_PLANS = [
 type LandingPlanCard = {
   id: string;
   name: string;
-  price: string;
+  priceMonthly: number;
+  priceYearly: number | null;
   description: string;
   features: string[];
   highlight: boolean;
@@ -189,6 +193,23 @@ function formatPlanPrice(value: number): string {
     minimumFractionDigits: 2,
     maximumFractionDigits: 2,
   });
+}
+
+function yearlySavings(monthly: number, yearly: number | null): {
+  amount: number;
+  percent: number;
+  equivalentMonthly: number;
+} | null {
+  if (!yearly || yearly <= 0 || monthly <= 0) return null;
+  const fullYear = monthly * 12;
+  if (yearly >= fullYear) return null;
+  const amount = fullYear - yearly;
+  const percent = Math.round((amount / fullYear) * 100);
+  return {
+    amount,
+    percent: Math.max(percent, 1),
+    equivalentMonthly: yearly / 12,
+  };
 }
 
 function featureLabel(slug: string): string {
@@ -327,6 +348,7 @@ function FloatingProductStack() {
 export default function Landing() {
   const [menuOpen, setMenuOpen] = useState(false);
   const [activeScreen, setActiveScreen] = useState(0);
+  const [billingPeriod, setBillingPeriod] = useState<"monthly" | "yearly">("yearly");
   const [submitting, setSubmitting] = useState(false);
   const [plans, setPlans] = useState<LandingPlanCard[]>([]);
   const [plansLoading, setPlansLoading] = useState(true);
@@ -352,7 +374,7 @@ export default function Landing() {
         const { data, error } = await supabase
           .from("plans")
           .select(
-            "id, name, slug, description, price_monthly, promo_active, promo_price_monthly, features, is_active",
+            "id, name, slug, description, price_monthly, price_yearly, promo_active, promo_price_monthly, features, is_active",
           )
           .eq("is_active", true)
           .order("price_monthly", { ascending: true });
@@ -361,10 +383,14 @@ export default function Landing() {
         if (cancelled) return;
 
         const mapped: LandingPlanCard[] = (data || []).map((plan, index, arr) => {
-          const priceValue =
+          const priceMonthly =
             plan.promo_active && plan.promo_price_monthly != null
               ? Number(plan.promo_price_monthly)
               : Number(plan.price_monthly);
+          const priceYearly =
+            plan.price_yearly != null && Number(plan.price_yearly) > 0
+              ? Number(plan.price_yearly)
+              : null;
           const featureSlugs = parsePlanFeatures(plan.features);
           const featureNames = featureSlugs
             .filter((f) => !["dashboard", "configuracoes", "administracao"].includes(f))
@@ -374,7 +400,8 @@ export default function Landing() {
           return {
             id: plan.id,
             name: plan.name,
-            price: formatPlanPrice(priceValue),
+            priceMonthly,
+            priceYearly,
             description: plan.description || "Plano da plataforma HealthCare.",
             features:
               featureNames.length > 0
@@ -405,12 +432,23 @@ export default function Landing() {
     return FALLBACK_PLANS.map((p) => ({
       id: p.id,
       name: p.name,
-      price: p.price,
+      priceMonthly: p.priceMonthly,
+      priceYearly: p.priceYearly,
       description: p.description,
       features: [...p.features],
       highlight: p.highlight,
     }));
   }, [plans]);
+
+  const bestYearlySaving = useMemo(() => {
+    let best: { percent: number; name: string } | null = null;
+    for (const plan of displayPlans) {
+      const s = yearlySavings(plan.priceMonthly, plan.priceYearly);
+      if (!s) continue;
+      if (!best || s.percent > best.percent) best = { percent: s.percent, name: plan.name };
+    }
+    return best;
+  }, [displayPlans]);
 
   const handleContactSubmit = async (e: FormEvent) => {
     e.preventDefault();
@@ -453,7 +491,11 @@ export default function Landing() {
       <header className="absolute inset-x-0 top-0 z-40">
         <div className="mx-auto flex max-w-6xl items-center justify-between px-4 py-5 sm:px-6">
           <a href="#topo" className="flex items-center gap-2.5 text-white">
-            <img src="/logo.png" alt="" className="h-9 w-9 rounded-lg object-cover shadow-md" />
+            <img
+              src="/logo-512.png"
+              alt="HealthCare"
+              className="h-9 w-9 rounded-md object-contain bg-white p-0.5 shadow-md"
+            />
             <span className="font-landing text-xl font-semibold tracking-tight">HealthCare</span>
           </a>
 
@@ -743,65 +785,146 @@ export default function Landing() {
               Planos para o tamanho da sua clínica
             </h2>
             <p className="mt-3 text-slate-600">
-              Preços e módulos iguais aos do sistema. Após a demo, ativamos sua unidade com o plano certo.
+              Mensal ou anual — no anual você paga menos no ano e ainda facilita o orçamento da clínica.
             </p>
           </div>
 
-          <div className="mt-12 grid gap-6 lg:grid-cols-3">
+          <div className="mt-8 flex flex-col items-center gap-3">
+            <div className="inline-flex rounded-full bg-slate-100 p-1">
+              <button
+                type="button"
+                onClick={() => setBillingPeriod("monthly")}
+                className={cn(
+                  "rounded-full px-4 py-2 text-sm font-medium transition-colors",
+                  billingPeriod === "monthly"
+                    ? "bg-white text-slate-900 shadow-sm"
+                    : "text-slate-500 hover:text-slate-700",
+                )}
+              >
+                Mensal
+              </button>
+              <button
+                type="button"
+                onClick={() => setBillingPeriod("yearly")}
+                className={cn(
+                  "rounded-full px-4 py-2 text-sm font-medium transition-colors",
+                  billingPeriod === "yearly"
+                    ? "bg-sky-700 text-white shadow-sm"
+                    : "text-slate-500 hover:text-slate-700",
+                )}
+              >
+                Anual
+                <span className="ml-1.5 rounded-full bg-amber-400/90 px-1.5 py-0.5 text-[10px] font-semibold text-slate-900">
+                  economize
+                </span>
+              </button>
+            </div>
+            {bestYearlySaving && (
+              <p className="max-w-lg text-center text-sm text-emerald-700">
+                No plano anual você economiza até{" "}
+                <strong>{bestYearlySaving.percent}%</strong> em relação a 12 mensalidades — o anual
+                compensa.
+              </p>
+            )}
+          </div>
+
+          <div className="mt-10 grid gap-6 lg:grid-cols-3">
             {plansLoading && plans.length === 0 ? (
               <p className="col-span-full text-center text-sm text-slate-500">Carregando planos...</p>
             ) : (
-              displayPlans.map((plan) => (
-                <div
-                  key={plan.id}
-                  className={cn(
-                    "relative flex flex-col rounded-2xl border p-6",
-                    plan.highlight
-                      ? "border-sky-600 bg-sky-700 text-white shadow-xl shadow-sky-700/20"
-                      : "border-slate-200 bg-slate-50 text-slate-900",
-                  )}
-                >
-                  {plan.highlight && (
-                    <span className="absolute -top-3 left-6 rounded-full bg-amber-400 px-3 py-1 text-xs font-semibold text-slate-900">
-                      Mais popular
-                    </span>
-                  )}
-                  <h3 className="font-landing text-xl font-semibold">{plan.name}</h3>
-                  <p className={cn("mt-1 text-sm", plan.highlight ? "text-sky-100" : "text-slate-600")}>
-                    {plan.description}
-                  </p>
-                  <p className="mt-5">
-                    <span className="font-landing text-4xl font-semibold">R$ {plan.price}</span>
-                    <span className={cn("text-sm", plan.highlight ? "text-sky-100" : "text-slate-500")}>
-                      /mês
-                    </span>
-                  </p>
-                  <ul className="mt-6 flex-1 space-y-2.5 text-sm">
-                    {plan.features.map((feature) => (
-                      <li key={feature} className="flex gap-2">
-                        <Check
-                          className={cn(
-                            "mt-0.5 h-4 w-4 shrink-0",
-                            plan.highlight ? "text-amber-300" : "text-sky-600",
-                          )}
-                        />
-                        {feature}
-                      </li>
-                    ))}
-                  </ul>
-                  <Button
+              displayPlans.map((plan) => {
+                const savings = yearlySavings(plan.priceMonthly, plan.priceYearly);
+                const showYearly = billingPeriod === "yearly" && plan.priceYearly != null;
+                const mainPrice = showYearly ? plan.priceYearly! : plan.priceMonthly;
+                const periodLabel = showYearly ? "/ano" : "/mês";
+
+                return (
+                  <div
+                    key={plan.id}
                     className={cn(
-                      "mt-8 w-full",
+                      "relative flex flex-col rounded-2xl border p-6",
                       plan.highlight
-                        ? "bg-white text-sky-800 hover:bg-sky-50"
-                        : "bg-sky-700 text-white hover:bg-sky-800",
+                        ? "border-sky-600 bg-sky-700 text-white shadow-xl shadow-sky-700/20"
+                        : "border-slate-200 bg-slate-50 text-slate-900",
                     )}
-                    onClick={() => scrollToId("contato")}
                   >
-                    Solicitar demonstração
-                  </Button>
-                </div>
-              ))
+                    {plan.highlight && (
+                      <span className="absolute -top-3 left-6 rounded-full bg-amber-400 px-3 py-1 text-xs font-semibold text-slate-900">
+                        Mais popular
+                      </span>
+                    )}
+                    <h3 className="font-landing text-xl font-semibold">{plan.name}</h3>
+                    <p className={cn("mt-1 text-sm", plan.highlight ? "text-sky-100" : "text-slate-600")}>
+                      {plan.description}
+                    </p>
+                    <div className="mt-5">
+                      <p>
+                        <span className="font-landing text-4xl font-semibold">
+                          R$ {formatPlanPrice(mainPrice)}
+                        </span>
+                        <span className={cn("text-sm", plan.highlight ? "text-sky-100" : "text-slate-500")}>
+                          {periodLabel}
+                        </span>
+                      </p>
+                      {showYearly && savings ? (
+                        <div className="mt-2 space-y-1">
+                          <p className={cn("text-sm", plan.highlight ? "text-amber-200" : "text-emerald-700")}>
+                            Equivale a R$ {formatPlanPrice(savings.equivalentMonthly)}/mês
+                          </p>
+                          <p
+                            className={cn(
+                              "inline-flex rounded-md px-2 py-0.5 text-xs font-semibold",
+                              plan.highlight
+                                ? "bg-amber-400/20 text-amber-100"
+                                : "bg-emerald-50 text-emerald-800",
+                            )}
+                          >
+                            Economize {savings.percent}% (R$ {formatPlanPrice(savings.amount)} no ano)
+                          </p>
+                          <p className={cn("text-xs line-through", plan.highlight ? "text-sky-200/70" : "text-slate-400")}>
+                            12× R$ {formatPlanPrice(plan.priceMonthly)} = R${" "}
+                            {formatPlanPrice(plan.priceMonthly * 12)}
+                          </p>
+                        </div>
+                      ) : plan.priceYearly ? (
+                        <p className={cn("mt-2 text-sm", plan.highlight ? "text-sky-100" : "text-slate-500")}>
+                          ou R$ {formatPlanPrice(plan.priceYearly)}/ano
+                          {savings ? ` — economize ${savings.percent}%` : ""}
+                        </p>
+                      ) : null}
+                      {!showYearly && billingPeriod === "yearly" && !plan.priceYearly && (
+                        <p className={cn("mt-2 text-xs", plan.highlight ? "text-sky-100" : "text-slate-500")}>
+                          Preço anual sob consulta na demonstração
+                        </p>
+                      )}
+                    </div>
+                    <ul className="mt-6 flex-1 space-y-2.5 text-sm">
+                      {plan.features.map((feature) => (
+                        <li key={feature} className="flex gap-2">
+                          <Check
+                            className={cn(
+                              "mt-0.5 h-4 w-4 shrink-0",
+                              plan.highlight ? "text-amber-300" : "text-sky-600",
+                            )}
+                          />
+                          {feature}
+                        </li>
+                      ))}
+                    </ul>
+                    <Button
+                      className={cn(
+                        "mt-8 w-full",
+                        plan.highlight
+                          ? "bg-white text-sky-800 hover:bg-sky-50"
+                          : "bg-sky-700 text-white hover:bg-sky-800",
+                      )}
+                      onClick={() => scrollToId("contato")}
+                    >
+                      Solicitar demonstração
+                    </Button>
+                  </div>
+                );
+              })
             )}
           </div>
         </div>
@@ -919,7 +1042,11 @@ export default function Landing() {
       <footer className="border-t border-slate-800 bg-[#0b1726] py-10 text-slate-300">
         <div className="mx-auto flex max-w-6xl flex-col gap-6 px-4 sm:flex-row sm:items-center sm:justify-between sm:px-6">
           <div className="flex items-center gap-2.5">
-            <img src="/logo.png" alt="" className="h-8 w-8 rounded-lg object-cover" />
+            <img
+              src="/logo-512.png"
+              alt="HealthCare"
+              className="h-8 w-8 rounded-md object-contain bg-white p-0.5"
+            />
             <span className="font-landing text-lg font-semibold text-white">HealthCare</span>
           </div>
           <div className="flex flex-wrap gap-4 text-sm">

@@ -287,9 +287,9 @@ export function Sidebar() {
         {!collapsed && (
           <div className="flex items-center gap-2">
             <img
-              src="/logo.png"
+              src="/logo-512.png"
               alt="HealthCare"
-              className="h-8 w-8 rounded-lg object-cover"
+              className="h-8 w-8 rounded-md object-contain bg-white/95 p-0.5"
             />
             <span className="text-lg font-semibold text-sidebar-foreground">
               HealthCare
@@ -298,9 +298,9 @@ export function Sidebar() {
         )}
         {collapsed && (
           <img
-            src="/logo.png"
+            src="/logo-512.png"
             alt="HealthCare"
-            className="mx-auto h-8 w-8 rounded-lg object-cover"
+            className="mx-auto h-8 w-8 rounded-md object-contain bg-white/95 p-0.5"
           />
         )}
       </div>
