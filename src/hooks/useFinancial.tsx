@@ -279,23 +279,41 @@ export function useAuditEvents(enabled: boolean) {
       }
 
       const entries = (auditData || []) as AuditEvent[];
-      const userIds = Array.from(new Set(entries.map((e) => e.user_id)));
+      const userIds = Array.from(new Set(entries.map((e) => e.user_id).filter(Boolean)));
       if (userIds.length === 0) return entries;
 
-      const { data: profilesData } = await supabase
-        .from('profiles')
-        .select('user_id, name, email')
-        .in('user_id', userIds);
+      const [{ data: profilesData }, { data: rolesData }] = await Promise.all([
+        supabase.from('profiles').select('user_id, name, email').in('user_id', userIds),
+        supabase
+          .from('user_roles')
+          .select('user_id, role')
+          .in('user_id', userIds)
+          .eq('role', 'superadmin'),
+      ]);
 
       const profileMap = new Map(
-        (profilesData || []).map((p: { user_id: string; name: string; email: string }) => [p.user_id, p])
+        (profilesData || []).map((p: { user_id: string; name: string | null; email: string | null }) => [
+          p.user_id,
+          p,
+        ]),
       );
+      const superadminIds = new Set((rolesData || []).map((r: { user_id: string }) => r.user_id));
 
-      return entries.map((entry) => ({
-        ...entry,
-        user_name: profileMap.get(entry.user_id)?.name || null,
-        user_email: profileMap.get(entry.user_id)?.email || null,
-      }));
+      return entries.map((entry) => {
+        const profile = profileMap.get(entry.user_id);
+        const isSuperadminUser = superadminIds.has(entry.user_id);
+        const resolvedName =
+          (profile?.name && profile.name.trim()) ||
+          (isSuperadminUser ? 'Superadmin' : null) ||
+          (profile?.email && profile.email.trim()) ||
+          null;
+
+        return {
+          ...entry,
+          user_name: resolvedName,
+          user_email: profile?.email || null,
+        };
+      });
     },
     enabled: enabled && !!clinicId,
   });
