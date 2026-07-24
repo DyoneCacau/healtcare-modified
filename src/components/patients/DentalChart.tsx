@@ -1,7 +1,7 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { format, parseISO } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
-import { Plus, Check, Clock, Pencil, Trash2 } from 'lucide-react';
+import { Plus, Check, Clock, Pencil, Trash2, Image as ImageIcon, Paperclip } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -32,23 +32,29 @@ import {
   ADULT_TEETH,
   TOOTH_STATUS_CONFIG,
 } from '@/types/dental';
+import { PatientFile, PATIENT_FILE_CATEGORY_LABELS } from '@/types/patientFile';
 import { toast } from 'sonner';
 
 interface DentalChartProps {
   chart: DentalChartType;
   onUpdateChart: (chart: DentalChartType) => void;
   readOnly?: boolean;
+  /** Arquivos clínicos vinculados a dentes (ex.: raio-X do dente 12). */
+  linkedFiles?: PatientFile[];
+  onOpenLinkedFile?: (file: PatientFile) => void;
 }
 
 interface ToothProps {
   tooth: ToothRecord;
   onClick: () => void;
   position: 'upper' | 'lower';
+  linkedFileCount?: number;
 }
 
-function Tooth({ tooth, onClick, position }: ToothProps) {
+function Tooth({ tooth, onClick, position, linkedFileCount = 0 }: ToothProps) {
   const config = TOOTH_STATUS_CONFIG[tooth.status];
   const hasPendingProcedures = tooth.procedures.some((p) => p.status !== 'completed');
+  const hasLinkedFiles = linkedFileCount > 0;
 
   return (
     <button
@@ -57,9 +63,14 @@ function Tooth({ tooth, onClick, position }: ToothProps) {
         'relative flex flex-col items-center justify-center w-10 h-14 rounded-lg border-2 transition-all hover:scale-110 hover:shadow-lg',
         config.bgColor,
         tooth.status === 'extracted' ? 'opacity-50' : '',
-        hasPendingProcedures && 'ring-2 ring-amber-400 ring-offset-1'
+        hasPendingProcedures && 'ring-2 ring-amber-400 ring-offset-1',
+        hasLinkedFiles && !hasPendingProcedures && 'ring-2 ring-sky-400 ring-offset-1'
       )}
-      title={`Dente ${tooth.number} - ${config.label}`}
+      title={
+        hasLinkedFiles
+          ? `Dente ${tooth.number} - ${config.label} • ${linkedFileCount} arquivo(s)`
+          : `Dente ${tooth.number} - ${config.label}`
+      }
     >
       <div
         className={cn(
@@ -78,11 +89,28 @@ function Tooth({ tooth, onClick, position }: ToothProps) {
       {hasPendingProcedures && (
         <span className="absolute -top-1 -right-1 w-3 h-3 bg-amber-500 rounded-full animate-pulse" />
       )}
+      {hasLinkedFiles && (
+        <span
+          className={cn(
+            'absolute -bottom-1 -right-1 min-w-4 h-4 px-0.5 rounded-full bg-sky-500 text-white text-[9px] font-bold flex items-center justify-center',
+            hasPendingProcedures && '-left-1 right-auto'
+          )}
+          aria-label={`${linkedFileCount} arquivo(s) vinculado(s)`}
+        >
+          {linkedFileCount > 1 ? linkedFileCount : <Paperclip className="h-2.5 w-2.5" />}
+        </span>
+      )}
     </button>
   );
 }
 
-export function DentalChart({ chart, onUpdateChart, readOnly = false }: DentalChartProps) {
+export function DentalChart({
+  chart,
+  onUpdateChart,
+  readOnly = false,
+  linkedFiles = [],
+  onOpenLinkedFile,
+}: DentalChartProps) {
   const [selectedTooth, setSelectedTooth] = useState<ToothRecord | null>(null);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [procedureDialogOpen, setProcedureDialogOpen] = useState(false);
@@ -216,6 +244,20 @@ export function DentalChart({ chart, onUpdateChart, readOnly = false }: DentalCh
     toast.success('Procedimento removido');
   };
 
+  const filesByTooth = useMemo(() => {
+    const map = new Map<number, PatientFile[]>();
+    for (const file of linkedFiles) {
+      if (file.toothNumber == null) continue;
+      const list = map.get(file.toothNumber) || [];
+      list.push(file);
+      map.set(file.toothNumber, list);
+    }
+    return map;
+  }, [linkedFiles]);
+
+  const selectedToothFiles =
+    selectedTooth != null ? filesByTooth.get(selectedTooth.number) || [] : [];
+
   const pendingTeeth = Object.values(chart.teeth).filter(
     (t) => t.status === 'pending' || t.status === 'cavity' || t.procedures.some((p) => p.status !== 'completed')
   );
@@ -223,6 +265,10 @@ export function DentalChart({ chart, onUpdateChart, readOnly = false }: DentalCh
   const completedTeeth = Object.values(chart.teeth).filter(
     (t) => t.status === 'treated' || t.status === 'implant' || t.status === 'prosthesis'
   );
+
+  const teethWithFiles = Array.from(filesByTooth.entries())
+    .map(([toothNumber, files]) => ({ toothNumber, files }))
+    .sort((a, b) => a.toothNumber - b.toothNumber);
 
   return (
     <div className="space-y-6">
@@ -232,6 +278,10 @@ export function DentalChart({ chart, onUpdateChart, readOnly = false }: DentalCh
             {config.label}
           </Badge>
         ))}
+        <Badge variant="outline" className="bg-sky-100 text-sky-700 text-xs gap-1">
+          <Paperclip className="h-3 w-3" />
+          Com arquivo
+        </Badge>
       </div>
 
       <Card>
@@ -246,6 +296,7 @@ export function DentalChart({ chart, onUpdateChart, readOnly = false }: DentalCh
                 tooth={chart.teeth[num]}
                 onClick={() => handleToothClick(num)}
                 position="upper"
+                linkedFileCount={filesByTooth.get(num)?.length || 0}
               />
             ))}
             <div className="w-4" />
@@ -255,6 +306,7 @@ export function DentalChart({ chart, onUpdateChart, readOnly = false }: DentalCh
                 tooth={chart.teeth[num]}
                 onClick={() => handleToothClick(num)}
                 position="upper"
+                linkedFileCount={filesByTooth.get(num)?.length || 0}
               />
             ))}
           </div>
@@ -268,6 +320,7 @@ export function DentalChart({ chart, onUpdateChart, readOnly = false }: DentalCh
                 tooth={chart.teeth[num]}
                 onClick={() => handleToothClick(num)}
                 position="lower"
+                linkedFileCount={filesByTooth.get(num)?.length || 0}
               />
             ))}
             <div className="w-4" />
@@ -277,6 +330,7 @@ export function DentalChart({ chart, onUpdateChart, readOnly = false }: DentalCh
                 tooth={chart.teeth[num]}
                 onClick={() => handleToothClick(num)}
                 position="lower"
+                linkedFileCount={filesByTooth.get(num)?.length || 0}
               />
             ))}
           </div>
@@ -344,6 +398,44 @@ export function DentalChart({ chart, onUpdateChart, readOnly = false }: DentalCh
         </Card>
       </div>
 
+      <Card className="border-sky-200">
+        <CardHeader className="pb-2">
+          <CardTitle className="text-sm flex items-center gap-2 text-sky-700">
+            <ImageIcon className="h-4 w-4" />
+            Dentes com arquivo ({teethWithFiles.length})
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          {teethWithFiles.length === 0 ? (
+            <p className="text-sm text-muted-foreground">
+              Nenhum arquivo vinculado a dente. Em Arquivos, escolha o dente ao anexar a radiografia.
+            </p>
+          ) : (
+            <div className="space-y-2">
+              {teethWithFiles.map(({ toothNumber, files }) => (
+                <div key={toothNumber} className="flex items-center justify-between gap-2 text-sm">
+                  <span className="font-medium">Dente {toothNumber}</span>
+                  <div className="flex items-center gap-2">
+                    <Badge variant="outline" className="bg-sky-100 text-sky-700">
+                      {files.length} arquivo{files.length > 1 ? 's' : ''}
+                    </Badge>
+                    {onOpenLinkedFile && (
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => onOpenLinkedFile(files[0])}
+                      >
+                        Ver
+                      </Button>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
         <DialogContent className="max-w-md">
           <DialogHeader>
@@ -381,6 +473,44 @@ export function DentalChart({ chart, onUpdateChart, readOnly = false }: DentalCh
                   </Select>
                 </div>
               )}
+
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <Label>Arquivos clínicos</Label>
+                  <Badge variant="outline" className="bg-sky-100 text-sky-700">
+                    {selectedToothFiles.length}
+                  </Badge>
+                </div>
+                {selectedToothFiles.length === 0 ? (
+                  <p className="text-sm text-muted-foreground py-2">
+                    Nenhum arquivo vinculado a este dente.
+                  </p>
+                ) : (
+                  <div className="space-y-2">
+                    {selectedToothFiles.map((file) => (
+                      <Card key={file.id} className="p-3">
+                        <div className="flex items-start justify-between gap-3">
+                          <div className="min-w-0">
+                            <p className="font-medium text-sm truncate">{file.name}</p>
+                            <p className="text-xs text-muted-foreground">
+                              {PATIENT_FILE_CATEGORY_LABELS[file.category]}
+                            </p>
+                          </div>
+                          {onOpenLinkedFile && (
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => onOpenLinkedFile(file)}
+                            >
+                              Abrir
+                            </Button>
+                          )}
+                        </div>
+                      </Card>
+                    ))}
+                  </div>
+                )}
+              </div>
 
               <div className="space-y-2">
                 <div className="flex items-center justify-between">

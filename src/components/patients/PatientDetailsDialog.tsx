@@ -26,10 +26,14 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { Patient } from '@/types/patient';
 import { AppointmentWithClinic } from '@/types/clinic';
 import { DentalChart as DentalChartType } from '@/types/dental';
+import { PatientFile } from '@/types/patientFile';
 import { DentalChart } from './DentalChart';
 import { PatientEvolutionsTab } from './PatientEvolutionsTab';
 import { PatientFilesTab } from './PatientFilesTab';
+import { PatientFileViewer } from './PatientFileViewer';
 import { useDentalChart, useDentalChartMutations } from '@/hooks/useDentalCharts';
+import { usePatientEvolutions } from '@/hooks/usePatientEvolutions';
+import { usePatientFileMutations, usePatientFiles } from '@/hooks/usePatientFiles';
 import { format, parseISO, differenceInYears } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 
@@ -62,8 +66,12 @@ export const PatientDetailsDialog = ({
   appointments,
 }: PatientDetailsDialogProps) => {
   const [activeTab, setActiveTab] = useState('info');
+  const [viewerFile, setViewerFile] = useState<PatientFile | null>(null);
   const { chart } = useDentalChart(patient?.id);
   const { updateChart } = useDentalChartMutations();
+  const { files } = usePatientFiles(patient?.id);
+  const { evolutions } = usePatientEvolutions(patient?.id);
+  const { updateFile } = usePatientFileMutations(patient?.id);
 
   if (!patient) return null;
 
@@ -233,6 +241,8 @@ export const PatientDetailsDialog = ({
                 <DentalChart
                   chart={chart}
                   onUpdateChart={handleUpdateChart}
+                  linkedFiles={files}
+                  onOpenLinkedFile={(file) => setViewerFile(file)}
                 />
               )}
               </div>
@@ -389,6 +399,19 @@ export const PatientDetailsDialog = ({
             </TabsContent>
           </Tabs>
         </div>
+
+        <PatientFileViewer
+          open={!!viewerFile}
+          onOpenChange={(isOpen) => !isOpen && setViewerFile(null)}
+          file={viewerFile}
+          evolutions={evolutions}
+          isSaving={updateFile.isPending}
+          onSave={(input) => {
+            updateFile.mutate(input, {
+              onSuccess: () => setViewerFile(null),
+            });
+          }}
+        />
       </DialogContent>
     </Dialog>
   );
