@@ -284,16 +284,36 @@ Deno.serve(async (req) => {
     }
     const input = validatePayload(decoded)
 
-    const { data: profileRows, error: profileError } = await supabase.rpc('get_admin_by_email', {
-      p_email: input.adminEmail,
-    })
-    if (profileError) throw new Error(dbErrorMessage('Falha ao buscar administrador', profileError))
-    const profile = Array.isArray(profileRows) && profileRows.length > 0
-      ? profileRows[0] as { user_id: string; name?: string | null }
-      : null
+    // Service role: busca direta (RPC antiga barrava service_role com "Acesso negado")
+    let profile: { user_id: string; name?: string | null } | null = null
+
+    const { data: profileByEmail, error: profileError } = await supabase
+      .from('profiles')
+      .select('user_id, name, email')
+      .ilike('email', input.adminEmail)
+      .limit(1)
+      .maybeSingle()
+    if (profileError) {
+      throw new Error(dbErrorMessage('Falha ao buscar administrador em profiles', profileError))
+    }
+    if (profileByEmail?.user_id) {
+      profile = { user_id: profileByEmail.user_id, name: profileByEmail.name }
+    } else {
+      // Fallback RPC (após PRODUCAO_18 aceita service_role)
+      const { data: profileRows, error: rpcError } = await supabase.rpc('get_admin_by_email', {
+        p_email: input.adminEmail,
+      })
+      if (rpcError) {
+        throw new Error(dbErrorMessage('Falha ao buscar administrador', rpcError))
+      }
+      const row = Array.isArray(profileRows) && profileRows.length > 0
+        ? profileRows[0] as { user_id: string; name?: string | null }
+        : null
+      if (row?.user_id) profile = row
+    }
     if (!profile?.user_id) throw new HttpError(404, 'Administrador não encontrado')
 
-    const ownerUserId = profile.user_id as string
+    const ownerUserId = profile.user_id
 
     const { data: ownedClinics, error: ownedError } = await supabase
       .from('clinics')
