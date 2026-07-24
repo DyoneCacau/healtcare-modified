@@ -1981,6 +1981,8 @@ export type Database = {
           status: string
           trial_ends_at: string | null
           updated_at: string
+          features_override: Json
+          feature_grants: Json
         }
         Insert: {
           admin_notes?: string | null
@@ -1990,6 +1992,8 @@ export type Database = {
           billing_day?: number
           billing_defer_days?: number
           billing_first_due_date?: string | null
+          features_override?: Json
+          feature_grants?: Json
           billing_mode?: string
           billing_status?: string | null
           clinic_id: string
@@ -2028,6 +2032,8 @@ export type Database = {
           created_at?: string
           current_period_end?: string | null
           current_period_start?: string | null
+          features_override?: Json
+          feature_grants?: Json
           id?: string
           last_payment_at?: string | null
           monthly_fee?: number | null

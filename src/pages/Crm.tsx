@@ -35,6 +35,7 @@ import {
 } from '@/components/ui/select';
 import { CurrencyInput } from '@/components/ui/currency-input';
 import { DateInput } from '@/components/ui/date-input';
+import { LeadSourceBadge, LeadSourceLabel } from '@/components/crm/LeadSourceBadge';
 import { usePermissions } from '@/hooks/usePermissions';
 import { useAuth } from '@/hooks/useAuth';
 import { useCrmLeads, useCrmLeadMutations } from '@/hooks/useCrmLeads';
@@ -393,9 +394,7 @@ export default function Crm() {
                         )}
                         <div className="mt-2 flex flex-wrap gap-1">
                           {lead.leadSource && (
-                            <Badge variant="outline" className="text-[10px]">
-                              {leadSourceLabels[lead.leadSource]}
-                            </Badge>
+                            <LeadSourceBadge source={lead.leadSource} />
                           )}
                           {overdue && (
                             <Badge variant="destructive" className="text-[10px]">Atrasado</Badge>
@@ -520,7 +519,9 @@ export default function Crm() {
                   <SelectTrigger><SelectValue placeholder="Selecione" /></SelectTrigger>
                   <SelectContent>
                     {(Object.keys(leadSourceLabels) as LeadSource[]).map((key) => (
-                      <SelectItem key={key} value={key}>{leadSourceLabels[key]}</SelectItem>
+                      <SelectItem key={key} value={key}>
+                        <LeadSourceLabel source={key} />
+                      </SelectItem>
                     ))}
                   </SelectContent>
                 </Select>

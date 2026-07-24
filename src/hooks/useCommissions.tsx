@@ -15,6 +15,7 @@ export type CommissionWithLeadSource = CommissionRow & {
 function isLeadSource(value: string | null): value is LeadSource {
   return value === 'instagram' ||
     value === 'whatsapp' ||
+    value === 'facebook' ||
     value === 'referral' ||
     value === 'paid_traffic' ||
     value === 'other';

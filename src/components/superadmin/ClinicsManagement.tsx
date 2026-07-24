@@ -29,8 +29,9 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
-import { MoreHorizontal, Search, Building2, Mail, Phone, Key, Power, PowerOff, Eye, EyeOff, Pencil } from "lucide-react";
+import { MoreHorizontal, Search, Building2, Mail, Phone, Key, Power, PowerOff, Eye, EyeOff, Pencil, Puzzle } from "lucide-react";
 import { ClinicDisplayName } from "@/components/common/ClinicDisplayName";
+import { ClinicModulesDialog } from "@/components/superadmin/ClinicModulesDialog";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
 
@@ -67,6 +68,7 @@ export function ClinicsManagement() {
   const [searchTerm, setSearchTerm] = useState("");
   const [isResetPasswordDialogOpen, setIsResetPasswordDialogOpen] = useState(false);
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
+  const [isModulesDialogOpen, setIsModulesDialogOpen] = useState(false);
   const [selectedClinic, setSelectedClinic] = useState<ClinicWithSubscription | null>(null);
   const [newPassword, setNewPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
@@ -279,6 +281,15 @@ export function ClinicsManagement() {
                           >
                             <Pencil className="h-4 w-4 mr-2" />
                             Editar
+                          </DropdownMenuItem>
+                          <DropdownMenuItem
+                            onClick={() => {
+                              setSelectedClinic(clinic);
+                              setIsModulesDialogOpen(true);
+                            }}
+                          >
+                            <Puzzle className="h-4 w-4 mr-2" />
+                            Módulos / presentear
                           </DropdownMenuItem>
                           <DropdownMenuItem onClick={() => toggleClinicStatus(clinic)}>
                             {clinic.is_active ? (
@@ -586,6 +597,17 @@ export function ClinicsManagement() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <ClinicModulesDialog
+        open={isModulesDialogOpen}
+        onOpenChange={(open) => {
+          setIsModulesDialogOpen(open);
+          if (!open) setSelectedClinic(null);
+        }}
+        clinicId={selectedClinic?.id ?? null}
+        clinicName={selectedClinic?.name}
+        onSaved={fetchClinics}
+      />
     </Card>
   );
 }

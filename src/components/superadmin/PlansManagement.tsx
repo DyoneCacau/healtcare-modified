@@ -41,12 +41,10 @@ interface Plan {
 const AVAILABLE_MODULES = [
   { key: 'agenda', label: 'Agenda' },
   { key: 'pacientes', label: 'Pacientes' },
-  { key: 'pacientes_basico', label: 'Pacientes (Básico)' },
   { key: 'profissionais', label: 'Profissionais' },
   { key: 'procedimentos', label: 'Procedimentos' },
   { key: 'crm', label: 'CRM de Vendas' },
   { key: 'financeiro', label: 'Caixa' },
-  { key: 'financeiro_basico', label: 'Caixa (Básico)' },
   { key: 'contas_receber', label: 'Contas a receber' },
   { key: 'comissoes', label: 'Comissões' },
   { key: 'estoque', label: 'Estoque' },
@@ -59,8 +57,6 @@ const AVAILABLE_MODULES = [
     fixed: true,
     hint: 'Sempre incluída — local do upgrade de módulos',
   },
-  // TODO(go-live): Atendimento omnichannel
-  // { key: 'atendimento', label: 'Atendimento Omnichannel' },
   { key: 'multi_clinica', label: 'Multi-Clínica' },
 ] as const;
 
@@ -71,7 +67,7 @@ const FIXED_PLAN_FEATURES: PlanModuleKey[] = AVAILABLE_MODULES
   .map((m) => m.key);
 
 function ensureFixedFeatures(features: string[]): string[] {
-  const next = new Set(features);
+  const next = new Set(features.filter((f) => f !== 'dashboard' && f !== 'pacientes_basico' && f !== 'financeiro_basico'));
   FIXED_PLAN_FEATURES.forEach((key) => next.add(key));
   return Array.from(next);
 }

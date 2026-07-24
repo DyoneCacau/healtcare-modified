@@ -41,7 +41,8 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
 import { Checkbox } from '@/components/ui/checkbox';
-import { AgendaAppointment, leadSourceLabels } from '@/types/agenda';
+import { AgendaAppointment } from '@/types/agenda';
+import { LeadSourceBadge } from '@/components/crm/LeadSourceBadge';
 import { PaymentMethod } from '@/types/financial';
 import { CommissionRule, beneficiaryTypeLabels, calculationUnitLabels } from '@/types/commission';
 import {
@@ -258,7 +259,7 @@ export function CompleteAppointmentDialog({
                     <div className="flex items-center gap-1">
                       <TrendingUp className="h-3 w-3 text-muted-foreground" />
                       <span className="text-muted-foreground">Origem:</span>
-                      <span className="font-medium">{leadSourceLabels[appointment.leadSource]}</span>
+                      <LeadSourceBadge source={appointment.leadSource} className="text-[11px]" />
                     </div>
                   )}
                 </div>
