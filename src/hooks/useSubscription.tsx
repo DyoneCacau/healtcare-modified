@@ -68,14 +68,14 @@ const ROUTE_FEATURE_MAP: Record<string, string> = {
 };
 
 // Features que sempre estão disponíveis (não dependem do plano)
-const ALWAYS_AVAILABLE = ['dashboard', 'configuracoes', 'procedimentos'];
+// Administração fica sempre liberada para o admin solicitar upgrade de módulos.
+const ALWAYS_AVAILABLE = ['dashboard', 'configuracoes', 'administracao'];
 
 // Features que equivalem a outras (ex.: versoes basicas liberam o modulo principal)
 const FEATURE_ALIASES: Record<string, string[]> = {
   pacientes_basico: ['pacientes'],
   financeiro_basico: ['financeiro', 'contas_receber'],
   financeiro: ['contas_receber'],
-  administracao: ['procedimentos'],
 };
 
 // Lista completa de features do sistema para referência
