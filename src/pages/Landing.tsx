@@ -152,6 +152,7 @@ const FALLBACK_PLANS = [
   {
     id: "fallback-1",
     name: "Plano Essencial",
+    listPriceMonthly: 189,
     priceMonthly: 189,
     priceYearly: 1890,
     description: "Agenda, pacientes e caixa para começar organizado.",
@@ -161,6 +162,7 @@ const FALLBACK_PLANS = [
   {
     id: "fallback-2",
     name: "Plano Profissional",
+    listPriceMonthly: 369.99,
     priceMonthly: 369.99,
     priceYearly: 3699,
     description: "Operação completa para clínicas em crescimento.",
@@ -170,8 +172,9 @@ const FALLBACK_PLANS = [
   {
     id: "fallback-3",
     name: "Plano Premium",
-    priceYearly: 5899,
+    listPriceMonthly: 589.9,
     priceMonthly: 589.9,
+    priceYearly: 5899,
     description: "Acesso amplo aos módulos da plataforma.",
     features: ["Todos os módulos principais", "Relatórios", "Multi-clínica", "Comissões e estoque"],
     highlight: false,
@@ -181,6 +184,9 @@ const FALLBACK_PLANS = [
 type LandingPlanCard = {
   id: string;
   name: string;
+  /** Preço de tabela mensal (antes) */
+  listPriceMonthly: number;
+  /** Preço mensal vigente (promo ou tabela) */
   priceMonthly: number;
   priceYearly: number | null;
   description: string;
@@ -383,10 +389,11 @@ export default function Landing() {
         if (cancelled) return;
 
         const mapped: LandingPlanCard[] = (data || []).map((plan, index, arr) => {
+          const listPriceMonthly = Number(plan.price_monthly) || 0;
           const priceMonthly =
             plan.promo_active && plan.promo_price_monthly != null
               ? Number(plan.promo_price_monthly)
-              : Number(plan.price_monthly);
+              : listPriceMonthly;
           const priceYearly =
             plan.price_yearly != null && Number(plan.price_yearly) > 0
               ? Number(plan.price_yearly)
@@ -400,6 +407,7 @@ export default function Landing() {
           return {
             id: plan.id,
             name: plan.name,
+            listPriceMonthly,
             priceMonthly,
             priceYearly,
             description: plan.description || "Plano da plataforma HealthCare.",
@@ -432,6 +440,7 @@ export default function Landing() {
     return FALLBACK_PLANS.map((p) => ({
       id: p.id,
       name: p.name,
+      listPriceMonthly: p.listPriceMonthly,
       priceMonthly: p.priceMonthly,
       priceYearly: p.priceYearly,
       description: p.description,
@@ -443,7 +452,7 @@ export default function Landing() {
   const bestYearlySaving = useMemo(() => {
     let best: { percent: number; name: string } | null = null;
     for (const plan of displayPlans) {
-      const s = yearlySavings(plan.priceMonthly, plan.priceYearly);
+      const s = yearlySavings(plan.listPriceMonthly || plan.priceMonthly, plan.priceYearly);
       if (!s) continue;
       if (!best || s.percent > best.percent) best = { percent: s.percent, name: plan.name };
     }
@@ -814,16 +823,17 @@ export default function Landing() {
                 )}
               >
                 Anual
-                <span className="ml-1.5 rounded-full bg-amber-400/90 px-1.5 py-0.5 text-[10px] font-semibold text-slate-900">
-                  economize
-                </span>
+                {bestYearlySaving && (
+                  <span className="ml-1.5 rounded-full bg-amber-400/90 px-1.5 py-0.5 text-[10px] font-semibold text-slate-900">
+                    {bestYearlySaving.percent}% OFF
+                  </span>
+                )}
               </button>
             </div>
-            {bestYearlySaving && (
-              <p className="max-w-lg text-center text-sm text-emerald-700">
-                No plano anual você economiza até{" "}
-                <strong>{bestYearlySaving.percent}%</strong> em relação a 12 mensalidades — o anual
-                compensa.
+            {bestYearlySaving && billingPeriod === "yearly" && (
+              <p className="max-w-lg text-center text-sm text-slate-500">
+                No anual o valor em destaque é a mensalidade equivalente — você economiza até{" "}
+                <strong className="text-emerald-700">{bestYearlySaving.percent}%</strong> no ano.
               </p>
             )}
           </div>
@@ -833,10 +843,16 @@ export default function Landing() {
               <p className="col-span-full text-center text-sm text-slate-500">Carregando planos...</p>
             ) : (
               displayPlans.map((plan) => {
-                const savings = yearlySavings(plan.priceMonthly, plan.priceYearly);
-                const showYearly = billingPeriod === "yearly" && plan.priceYearly != null;
-                const mainPrice = showYearly ? plan.priceYearly! : plan.priceMonthly;
-                const periodLabel = showYearly ? "/ano" : "/mês";
+                const compareMonthly = plan.listPriceMonthly || plan.priceMonthly;
+                const savings = yearlySavings(compareMonthly, plan.priceYearly);
+                const yearlyMode = billingPeriod === "yearly" && plan.priceYearly != null && savings;
+                const promoMonthly =
+                  plan.priceMonthly < compareMonthly - 0.009 ? plan.priceMonthly : null;
+
+                // Destaque sempre é R$/mês
+                const displayMonthly = yearlyMode ? savings!.equivalentMonthly : plan.priceMonthly;
+                const showBeforeAfter = yearlyMode || promoMonthly != null;
+                const beforePrice = yearlyMode ? compareMonthly : compareMonthly;
 
                 return (
                   <div
@@ -857,47 +873,77 @@ export default function Landing() {
                     <p className={cn("mt-1 text-sm", plan.highlight ? "text-sky-100" : "text-slate-600")}>
                       {plan.description}
                     </p>
+
                     <div className="mt-5">
-                      <p>
-                        <span className="font-landing text-4xl font-semibold">
-                          R$ {formatPlanPrice(mainPrice)}
+                      {showBeforeAfter && (
+                        <p
+                          className={cn(
+                            "text-sm",
+                            plan.highlight ? "text-sky-100/80" : "text-slate-500",
+                          )}
+                        >
+                          De{" "}
+                          <span className="line-through">
+                            R$ {formatPlanPrice(beforePrice)}
+                          </span>{" "}
+                          por
+                        </p>
+                      )}
+                      <p className="mt-0.5">
+                        <span className="font-landing text-4xl font-semibold tracking-tight">
+                          R$ {formatPlanPrice(displayMonthly)}
                         </span>
-                        <span className={cn("text-sm", plan.highlight ? "text-sky-100" : "text-slate-500")}>
-                          {periodLabel}
+                        <span
+                          className={cn(
+                            "ml-1 text-base font-normal",
+                            plan.highlight ? "text-sky-100" : "text-slate-500",
+                          )}
+                        >
+                          /mês
                         </span>
                       </p>
-                      {showYearly && savings ? (
-                        <div className="mt-2 space-y-1">
-                          <p className={cn("text-sm", plan.highlight ? "text-amber-200" : "text-emerald-700")}>
-                            Equivale a R$ {formatPlanPrice(savings.equivalentMonthly)}/mês
-                          </p>
-                          <p
-                            className={cn(
-                              "inline-flex rounded-md px-2 py-0.5 text-xs font-semibold",
-                              plan.highlight
-                                ? "bg-amber-400/20 text-amber-100"
-                                : "bg-emerald-50 text-emerald-800",
-                            )}
-                          >
-                            Economize {savings.percent}% (R$ {formatPlanPrice(savings.amount)} no ano)
-                          </p>
-                          <p className={cn("text-xs line-through", plan.highlight ? "text-sky-200/70" : "text-slate-400")}>
-                            12× R$ {formatPlanPrice(plan.priceMonthly)} = R${" "}
-                            {formatPlanPrice(plan.priceMonthly * 12)}
-                          </p>
-                        </div>
+
+                      {yearlyMode ? (
+                        <p
+                          className={cn(
+                            "mt-1.5 text-xs",
+                            plan.highlight ? "text-sky-200/80" : "text-slate-400",
+                          )}
+                        >
+                          Total de R$ {formatPlanPrice(plan.priceYearly!)} no ano · cobrado anualmente
+                        </p>
                       ) : plan.priceYearly ? (
-                        <p className={cn("mt-2 text-sm", plan.highlight ? "text-sky-100" : "text-slate-500")}>
+                        <p
+                          className={cn(
+                            "mt-1.5 text-xs",
+                            plan.highlight ? "text-sky-200/80" : "text-slate-400",
+                          )}
+                        >
                           ou R$ {formatPlanPrice(plan.priceYearly)}/ano
-                          {savings ? ` — economize ${savings.percent}%` : ""}
+                          {savings ? ` (${savings.percent}% off)` : ""}
                         </p>
                       ) : null}
-                      {!showYearly && billingPeriod === "yearly" && !plan.priceYearly && (
+
+                      {yearlyMode && savings && (
+                        <p
+                          className={cn(
+                            "mt-2 inline-flex rounded-md px-2 py-0.5 text-[11px] font-semibold",
+                            plan.highlight
+                              ? "bg-white/15 text-amber-100"
+                              : "bg-emerald-50 text-emerald-700",
+                          )}
+                        >
+                          {savings.percent}% OFF no anual
+                        </p>
+                      )}
+
+                      {billingPeriod === "yearly" && !plan.priceYearly && (
                         <p className={cn("mt-2 text-xs", plan.highlight ? "text-sky-100" : "text-slate-500")}>
                           Preço anual sob consulta na demonstração
                         </p>
                       )}
                     </div>
+
                     <ul className="mt-6 flex-1 space-y-2.5 text-sm">
                       {plan.features.map((feature) => (
                         <li key={feature} className="flex gap-2">
