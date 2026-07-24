@@ -800,23 +800,43 @@ export default function Administration() {
                           const entryAny = entry as any;
                           const createdAt = entryAny.created_at || entryAny.createdAt;
                           const userFromList = users.find((u) => u.id === entry.user_id);
-                          const entryUserId = entry.user_id ?? entryAny.userId ?? '';
-                          const isCurrentUser = !!user?.id && String(entryUserId) === String(user.id);
-                          const currentUserLabel = isCurrentUser
-                            ? (profile?.name || user?.email || (isSuperAdmin ? 'Superadmin' : 'Você'))
-                            : null;
-                          let userLabel =
-                            currentUserLabel ||
-                            entryAny.user_name ||
-                            entryAny.userName ||
-                            userFromList?.name ||
-                            entryAny.user_email ||
-                            entryAny.userEmail ||
-                            entryAny.user_id ||
-                            entryAny.userId;
-                          if (typeof userLabel === 'string' && user?.id && String(userLabel) === String(user.id)) {
-                            userLabel = profile?.name || user?.email || (isSuperAdmin ? 'Superadmin' : 'Você');
+                          const entryUserId = String(entry.user_id ?? entryAny.userId ?? '');
+                          const isCurrentUser = !!user?.id && entryUserId === String(user.id);
+                          const looksLikeUuid =
+                            /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
+                              entryUserId,
+                            );
+
+                          let userLabel: string | null = null;
+                          if (isCurrentUser && isSuperAdmin) {
+                            userLabel = 'Superadmin';
+                          } else if (isCurrentUser) {
+                            userLabel = profile?.name || user?.email || 'Você';
+                          } else if (
+                            entryAny.user_name &&
+                            !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
+                              String(entryAny.user_name),
+                            )
+                          ) {
+                            userLabel = entryAny.user_name;
+                          } else if (
+                            entryAny.userName &&
+                            !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
+                              String(entryAny.userName),
+                            )
+                          ) {
+                            userLabel = entryAny.userName;
+                          } else if (userFromList?.name) {
+                            userLabel = userFromList.name;
+                          } else if (entryAny.user_email || entryAny.userEmail) {
+                            userLabel = entryAny.user_email || entryAny.userEmail;
+                          } else if (looksLikeUuid) {
+                            // UUID sem perfil na clínica: quase sempre ação do superadmin
+                            userLabel = 'Superadmin';
+                          } else {
+                            userLabel = entryUserId || null;
                           }
+
                           const { label, beforeText, afterText } = formatAudit(entry);
                           return (
                             <TableRow key={entry.id}>
