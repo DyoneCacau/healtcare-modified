@@ -20,10 +20,20 @@ export interface ToothProcedure {
   date: string;
   procedure: string;
   professional: string;
-  status: 'completed' | 'pending' | 'scheduled';
+  status: 'completed' | 'pending' | 'scheduled' | 'preexisting';
   notes?: string;
   appointmentId?: string | null;
 }
+
+export const TOOTH_PROCEDURE_STATUS_LABELS: Record<
+  ToothProcedure['status'],
+  string
+> = {
+  pending: 'A realizar',
+  scheduled: 'Agendado',
+  completed: 'Realizado',
+  preexisting: 'Pré-existente',
+};
 
 export interface DentalChart {
   patientId: string;

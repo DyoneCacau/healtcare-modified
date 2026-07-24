@@ -42,19 +42,38 @@ const AVAILABLE_MODULES = [
   { key: 'agenda', label: 'Agenda' },
   { key: 'pacientes', label: 'Pacientes' },
   { key: 'pacientes_basico', label: 'Pacientes (Básico)' },
-  { key: 'financeiro', label: 'Financeiro' },
-  { key: 'financeiro_basico', label: 'Financeiro (Básico)' },
-  { key: 'relatorios', label: 'Relatórios' },
   { key: 'profissionais', label: 'Profissionais' },
+  { key: 'procedimentos', label: 'Procedimentos' },
+  { key: 'financeiro', label: 'Caixa' },
+  { key: 'financeiro_basico', label: 'Caixa (Básico)' },
+  { key: 'contas_receber', label: 'Contas a receber' },
   { key: 'comissoes', label: 'Comissões' },
   { key: 'estoque', label: 'Estoque' },
-  { key: 'termos', label: 'Termos e Contratos' },
-  { key: 'administracao', label: 'Administracao' },
+  { key: 'relatorios', label: 'Relatórios' },
   { key: 'ponto', label: 'Ponto Eletrônico' },
+  { key: 'termos', label: 'Termos e Contratos' },
+  {
+    key: 'administracao',
+    label: 'Administração',
+    fixed: true,
+    hint: 'Sempre incluída — local do upgrade de módulos',
+  },
   // TODO(go-live): Atendimento omnichannel
   // { key: 'atendimento', label: 'Atendimento Omnichannel' },
   { key: 'multi_clinica', label: 'Multi-Clínica' },
-];
+] as const;
+
+type PlanModuleKey = (typeof AVAILABLE_MODULES)[number]['key'];
+
+const FIXED_PLAN_FEATURES: PlanModuleKey[] = AVAILABLE_MODULES
+  .filter((m): m is (typeof AVAILABLE_MODULES)[number] & { fixed: true } => 'fixed' in m && m.fixed === true)
+  .map((m) => m.key);
+
+function ensureFixedFeatures(features: string[]): string[] {
+  const next = new Set(features);
+  FIXED_PLAN_FEATURES.forEach((key) => next.add(key));
+  return Array.from(next);
+}
 
 export function PlansManagement() {
   const [plans, setPlans] = useState<Plan[]>([]);
@@ -112,7 +131,7 @@ export function PlansManagement() {
       price_yearly: plan.price_yearly ? String(plan.price_yearly) : "",
       max_users: plan.max_users ? String(plan.max_users) : "",
       max_patients: plan.max_patients ? String(plan.max_patients) : "",
-      features: plan.features,
+      features: ensureFixedFeatures(plan.features),
       is_active: plan.is_active,
       discount_pix_percent: plan.discount_pix_percent ? String(plan.discount_pix_percent) : "",
       promo_price_monthly: plan.promo_price_monthly ? String(plan.promo_price_monthly) : "",
@@ -132,7 +151,7 @@ export function PlansManagement() {
       price_yearly: "",
       max_users: "",
       max_patients: "",
-      features: [],
+      features: ensureFixedFeatures([]),
       is_active: true,
       discount_pix_percent: "",
       promo_price_monthly: "",
@@ -152,7 +171,7 @@ export function PlansManagement() {
         price_yearly: formData.price_yearly ? parseFloat(formData.price_yearly) : null,
         max_users: formData.max_users ? parseInt(formData.max_users) : null,
         max_patients: formData.max_patients ? parseInt(formData.max_patients) : null,
-        features: formData.features,
+        features: ensureFixedFeatures(formData.features),
         is_active: formData.is_active,
         discount_pix_percent: formData.discount_pix_percent ? parseFloat(formData.discount_pix_percent) : 0,
         promo_price_monthly: formData.promo_price_monthly ? parseFloat(formData.promo_price_monthly) : null,
@@ -201,6 +220,7 @@ export function PlansManagement() {
   }
 
   function toggleFeature(feature: string) {
+    if (FIXED_PLAN_FEATURES.includes(feature as PlanModuleKey)) return;
     setFormData(prev => ({
       ...prev,
       features: prev.features.includes(feature)
@@ -392,27 +412,39 @@ export function PlansManagement() {
 
             <div className="space-y-2">
               <Label>Módulos Incluídos</Label>
+              <p className="text-xs text-muted-foreground">
+                Administração vem sempre marcada: é onde o admin da clínica solicita upgrade.
+              </p>
               <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
-                {AVAILABLE_MODULES.map((module) => (
-                  <div
-                    key={module.key}
-                    className={`flex items-center gap-2 p-2 rounded-lg border cursor-pointer transition-colors ${
-                      formData.features.includes(module.key)
-                        ? 'bg-primary/10 border-primary'
-                        : 'hover:bg-muted'
-                    }`}
-                    onClick={() => toggleFeature(module.key)}
-                  >
-                    <input
-                      type="checkbox"
-                      checked={formData.features.includes(module.key)}
-                      onClick={(event) => event.stopPropagation()}
-                      onChange={() => toggleFeature(module.key)}
-                      className="rounded"
-                    />
-                    <span className="text-sm">{module.label}</span>
-                  </div>
-                ))}
+                {AVAILABLE_MODULES.map((module) => {
+                  const isFixed = 'fixed' in module && module.fixed === true;
+                  const checked = formData.features.includes(module.key);
+                  return (
+                    <div
+                      key={module.key}
+                      className={`flex items-center gap-2 p-2 rounded-lg border transition-colors ${
+                        checked
+                          ? 'bg-primary/10 border-primary'
+                          : 'hover:bg-muted'
+                      } ${isFixed ? 'cursor-default opacity-95' : 'cursor-pointer'}`}
+                      onClick={() => !isFixed && toggleFeature(module.key)}
+                      title={isFixed && 'hint' in module ? module.hint : undefined}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={checked}
+                        disabled={isFixed}
+                        onClick={(event) => event.stopPropagation()}
+                        onChange={() => !isFixed && toggleFeature(module.key)}
+                        className="rounded"
+                      />
+                      <span className="text-sm">
+                        {module.label}
+                        {isFixed ? ' *' : ''}
+                      </span>
+                    </div>
+                  );
+                })}
               </div>
             </div>
 

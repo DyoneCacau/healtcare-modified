@@ -18,8 +18,9 @@ import { useAppointments, useAppointmentMutations } from '@/hooks/useAppointment
 import { useProfessionals } from '@/hooks/useProfessionals';
 import { useClinic, useClinics, useClinicsOfSameOwner } from '@/hooks/useClinic';
 import { useCommissionRules, useCommissionMutations } from '@/hooks/useCommissions';
-import type { CommissionBreakdownItem } from '@/components/agenda/CompleteAppointmentDialog';
+import type { CommissionBreakdownItem, BillingDestination } from '@/components/agenda/CompleteAppointmentDialog';
 import { useTransactionMutations } from '@/hooks/useFinancial';
+import { useReceivableMutations } from '@/hooks/useReceivables';
 import { usePermissions } from '@/hooks/usePermissions';
 import { toast } from 'sonner';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -68,6 +69,7 @@ export default function Agenda() {
   const { activeProfessionals, isLoading: isLoadingProfessionals } = useProfessionals();
   const { createAppointment, updateAppointment } = useAppointmentMutations();
   const { createTransaction, syncBookingFeePaymentMethod } = useTransactionMutations();
+  const { createReceivable } = useReceivableMutations();
   const { createCommission } = useCommissionMutations();
   const { rules: commissionRules } = useCommissionRules();
 
@@ -263,27 +265,42 @@ export default function Agenda() {
     commissionBreakdown: CommissionBreakdownItem[],
     scheduleReturn?: boolean,
     adjustmentReason?: string,
+    billingDestination: BillingDestination = 'cash',
+    dueDate?: string,
   ) => {
-    // Update appointment status
+    const isReceivable = billingDestination === 'receivable';
+
     await updateAppointment.mutateAsync({
       id: appointment.id,
       status: 'completed',
-      payment_status: 'paid',
+      payment_status: isReceivable ? 'pending' : 'paid',
     });
 
-    // Create financial transaction
-    await createTransaction.mutateAsync({
-      type: 'income',
-      amount: serviceValue,
-      description: [
-        `${appointment.procedure} - ${appointment.patientName}`,
-        adjustmentReason ? `Ajuste: ${adjustmentReason}` : null,
-      ].filter(Boolean).join(' | '),
-      category: 'Procedimento',
-      payment_method: paymentMethod,
-      reference_type: 'appointment',
-      reference_id: appointment.id,
-    });
+    if (isReceivable) {
+      await createReceivable.mutateAsync({
+        patient_id: appointment.patientId || null,
+        appointment_id: appointment.id,
+        description: [
+          `${appointment.procedure} - ${appointment.patientName}`,
+          adjustmentReason ? `Ajuste: ${adjustmentReason}` : null,
+        ].filter(Boolean).join(' | '),
+        amount: serviceValue,
+        due_date: dueDate || format(new Date(), 'yyyy-MM-dd'),
+      });
+    } else {
+      await createTransaction.mutateAsync({
+        type: 'income',
+        amount: serviceValue,
+        description: [
+          `${appointment.procedure} - ${appointment.patientName}`,
+          adjustmentReason ? `Ajuste: ${adjustmentReason}` : null,
+        ].filter(Boolean).join(' | '),
+        category: 'Procedimento',
+        payment_method: paymentMethod,
+        reference_type: 'appointment',
+        reference_id: appointment.id,
+      });
+    }
 
     // Registrar comissões no banco
     try {
@@ -322,7 +339,11 @@ export default function Agenda() {
       return;
     }
 
-    toast.success(`Atendimento finalizado! Valor: R$ ${serviceValue.toFixed(2)}`);
+    if (isReceivable) {
+      toast.success(`Atendimento finalizado. Valor de R$ ${serviceValue.toFixed(2)} lançado em Contas a receber.`);
+    } else {
+      toast.success(`Atendimento finalizado! Valor: R$ ${serviceValue.toFixed(2)} no Caixa.`);
+    }
 
     if (scheduleReturn) {
       setCompleteDialogOpen(false);

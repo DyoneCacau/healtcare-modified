@@ -38,16 +38,25 @@ const AVAILABLE_MODULES = [
   { id: 'pacientes', name: 'Pacientes', description: 'Cadastro e prontuários' },
   { id: 'pacientes_basico', name: 'Pacientes (Básico)', description: 'Cadastro simplificado de pacientes' },
   { id: 'profissionais', name: 'Profissionais', description: 'Gestão de profissionais' },
-  { id: 'financeiro', name: 'Financeiro', description: 'Controle financeiro completo' },
-  { id: 'financeiro_basico', name: 'Financeiro (Básico)', description: 'Controle financeiro simplificado' },
+  { id: 'procedimentos', name: 'Procedimentos', description: 'Catálogo de procedimentos e valores' },
+  { id: 'financeiro', name: 'Caixa', description: 'Recebimentos do dia e fechamento de caixa' },
+  { id: 'financeiro_basico', name: 'Caixa (Básico)', description: 'Controle de caixa simplificado' },
+  { id: 'contas_receber', name: 'Contas a receber', description: 'Parcelas e cobranças futuras' },
   { id: 'comissoes', name: 'Comissões', description: 'Cálculo de comissões' },
   { id: 'estoque', name: 'Estoque', description: 'Controle de materiais' },
   { id: 'relatorios', name: 'Relatórios', description: 'Relatórios gerenciais' },
   { id: 'ponto', name: 'Ponto', description: 'Controle de ponto eletrônico' },
-  { id: 'administracao', name: 'Administração', description: 'Gestão de usuários' },
+  {
+    id: 'administracao',
+    name: 'Administração',
+    description: 'Usuários, permissões e solicitação de upgrade',
+    always: true,
+  },
   { id: 'termos', name: 'Termos', description: 'Criação de termos e contratos' },
   { id: 'multi_clinica', name: 'Multi-Clínica', description: 'Gestão de múltiplas unidades' },
 ];
+
+const ALWAYS_INCLUDED_MODULES = AVAILABLE_MODULES.filter((m) => m.always).map((m) => m.id);
 
 interface ClinicData {
   name: string;
@@ -102,12 +111,14 @@ function planMonthlyPrice(plan: PlanOption): number {
   );
 }
 
-/** Módulos do plano + dashboard sempre incluso */
+/** Módulos do plano + módulos sempre inclusos (dashboard, administração) */
 function modulesFromPlan(plan: PlanOption | undefined): string[] {
   const fromPlan = plan ? parsePlanFeatures(plan.features) : [];
   const knownIds = new Set(AVAILABLE_MODULES.map((m) => m.id));
   const selected = fromPlan.filter((id) => knownIds.has(id));
-  if (!selected.includes("dashboard")) selected.unshift("dashboard");
+  ALWAYS_INCLUDED_MODULES.forEach((id) => {
+    if (!selected.includes(id)) selected.unshift(id);
+  });
   return Array.from(new Set(selected));
 }
 
@@ -156,7 +167,7 @@ export function CreateCompleteClient() {
       email: ""
     }],
     planId: "",
-    modules: ['dashboard'], // Dashboard sempre incluído
+    modules: [...ALWAYS_INCLUDED_MODULES], // Dashboard + Administração sempre
     monthlyFee: 0,
     setupFee: 0,
     billingDay: DEFAULT_BILLING_DAY,
@@ -248,14 +259,11 @@ export function CreateCompleteClient() {
     }));
   }
 
-  // Toggle módulo
   function toggleModule(moduleId: string) {
     setFormData(prev => {
+      if (ALWAYS_INCLUDED_MODULES.includes(moduleId)) return prev;
+
       const isIncluded = prev.modules.includes(moduleId);
-      
-      // Dashboard sempre incluído
-      if (moduleId === 'dashboard') return prev;
-      
       return {
         ...prev,
         modules: isIncluded
@@ -368,7 +376,7 @@ export function CreateCompleteClient() {
           email: ""
         }],
         planId: "",
-        modules: ['dashboard'],
+        modules: [...ALWAYS_INCLUDED_MODULES],
         monthlyFee: 0,
         setupFee: 0,
         billingDay: DEFAULT_BILLING_DAY,
@@ -680,14 +688,17 @@ export function CreateCompleteClient() {
                 <div className="space-y-1">
                   <Label>Módulos Contratados</Label>
                   <p className="text-xs text-muted-foreground">
-                    Preenchidos automaticamente pelo plano. Você pode liberar módulos extras nesta tela.
+                    Preenchidos automaticamente pelo plano. Dashboard e Administração são fixos
+                    (Administração é onde o admin solicita upgrade).
                   </p>
                 </div>
                 <div className="grid grid-cols-2 gap-3">
                   {AVAILABLE_MODULES.map(module => (
                     <label
                       key={module.id}
-                      className="flex items-start gap-2 p-3 border rounded-lg cursor-pointer hover:bg-accent/50"
+                      className={`flex items-start gap-2 p-3 border rounded-lg ${
+                        module.always ? 'cursor-default bg-muted/40' : 'cursor-pointer hover:bg-accent/50'
+                      }`}
                     >
                       <Checkbox
                         checked={formData.modules.includes(module.id)}
@@ -695,7 +706,10 @@ export function CreateCompleteClient() {
                         disabled={module.always}
                       />
                       <div className="flex-1">
-                        <div className="font-medium">{module.name}</div>
+                        <div className="font-medium">
+                          {module.name}
+                          {module.always ? ' *' : ''}
+                        </div>
                         <div className="text-xs text-muted-foreground">{module.description}</div>
                       </div>
                     </label>

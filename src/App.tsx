@@ -19,6 +19,7 @@ const ResetPassword = React.lazy(() => import("./pages/ResetPassword"));
 const Patients = React.lazy(() => import("./pages/Patients"));
 const Agenda = React.lazy(() => import("./pages/Agenda"));
 const Financial = React.lazy(() => import("./pages/Financial"));
+const Receivables = React.lazy(() => import("./pages/Receivables"));
 const Terms = React.lazy(() => import("./pages/Terms"));
 const Reports = React.lazy(() => import("./pages/Reports"));
 const Commissions = React.lazy(() => import("./pages/Commissions"));
@@ -185,6 +186,15 @@ function AppRoutes() {
           element={
             <RequireFeature feature="financeiro">
               <Financial />
+            </RequireFeature>
+          }
+        />
+
+        <Route
+          path="/contas-a-receber"
+          element={
+            <RequireFeature feature="contas_receber">
+              <Receivables />
             </RequireFeature>
           }
         />
