@@ -39,6 +39,7 @@ const AVAILABLE_MODULES = [
   { id: 'pacientes_basico', name: 'Pacientes (Básico)', description: 'Cadastro simplificado de pacientes' },
   { id: 'profissionais', name: 'Profissionais', description: 'Gestão de profissionais' },
   { id: 'procedimentos', name: 'Procedimentos', description: 'Catálogo de procedimentos e valores' },
+  { id: 'crm', name: 'CRM de Vendas', description: 'Pipeline de leads, follow-up e conversão' },
   { id: 'financeiro', name: 'Caixa', description: 'Recebimentos do dia e fechamento de caixa' },
   { id: 'financeiro_basico', name: 'Caixa (Básico)', description: 'Controle de caixa simplificado' },
   { id: 'contas_receber', name: 'Contas a receber', description: 'Parcelas e cobranças futuras' },

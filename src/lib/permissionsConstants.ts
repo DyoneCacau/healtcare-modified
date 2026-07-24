@@ -21,6 +21,7 @@ export const PERMISSION_FEATURES = [
   { id: 'comissoes', label: 'Comissões' },
   { id: 'estoque', label: 'Estoque' },
   { id: 'procedimentos', label: 'Procedimentos' },
+  { id: 'crm', label: 'CRM de Vendas' },
   { id: 'atendimento', label: 'Atendimento' },
   { id: 'relatorios', label: 'Relatórios' },
   { id: 'ponto', label: 'Ponto' },
@@ -137,6 +138,16 @@ export const PERMISSION_GROUPS: PermissionGroup[] = [
     ],
   },
   {
+    id: 'gr_crm',
+    label: 'CRM de Vendas',
+    children: [
+      { feature: 'crm', label: 'Ver pipeline', actions: ['can_view'] },
+      { feature: 'crm', label: 'Criar lead', actions: ['can_create'] },
+      { feature: 'crm', label: 'Editar / mover etapa', actions: ['can_edit'] },
+      { feature: 'crm', label: 'Excluir lead', actions: ['can_delete'] },
+    ],
+  },
+  {
     id: 'gr_atendimento',
     label: 'Atendimento',
     children: [
@@ -224,17 +235,22 @@ export function getDefaultPermissionsForRole(role: SystemRole): PermissionRow[] 
 
   if (role === 'receptionist') {
     return base.map((p) => {
-      if (['agenda', 'pacientes', 'atendimento', 'dashboard', 'configuracoes', 'financeiro'].includes(p.feature)) {
+      if (['agenda', 'pacientes', 'atendimento', 'dashboard', 'configuracoes', 'financeiro', 'crm'].includes(p.feature)) {
         return { ...p, can_view: true, can_create: true, can_edit: true, can_delete: false };
       }
-      // Contas a receber e relatórios ficam com o admin
       return p;
     });
   }
   if (role === 'seller') {
     return base.map((p) =>
-      ['comissoes', 'dashboard', 'configuracoes', 'pacientes'].includes(p.feature)
-        ? { ...p, can_view: true, can_create: p.feature === 'comissoes', can_edit: true, can_delete: false }
+      ['comissoes', 'dashboard', 'configuracoes', 'pacientes', 'crm'].includes(p.feature)
+        ? {
+            ...p,
+            can_view: true,
+            can_create: p.feature === 'comissoes' || p.feature === 'crm',
+            can_edit: true,
+            can_delete: false,
+          }
         : p
     );
   }

@@ -21,6 +21,7 @@ import {
   FileText,
   Crown,
   Lock,
+  KanbanSquare,
   // MessageSquare, // TODO(go-live): Atendimento omnichannel
 } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -65,6 +66,7 @@ const menuEntries: MenuEntry[] = [
   { icon: Users, label: "Pacientes", path: "/pacientes", feature: "pacientes" },
   { icon: Stethoscope, label: "Profissionais", path: "/profissionais", feature: "profissionais" },
   { icon: ListPlus, label: "Procedimentos", path: "/procedimentos", feature: "procedimentos" },
+  { icon: KanbanSquare, label: "CRM", path: "/crm", feature: "crm" },
   {
     type: "group",
     id: "financeiro",

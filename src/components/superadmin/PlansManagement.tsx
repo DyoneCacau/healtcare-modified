@@ -44,6 +44,7 @@ const AVAILABLE_MODULES = [
   { key: 'pacientes_basico', label: 'Pacientes (Básico)' },
   { key: 'profissionais', label: 'Profissionais' },
   { key: 'procedimentos', label: 'Procedimentos' },
+  { key: 'crm', label: 'CRM de Vendas' },
   { key: 'financeiro', label: 'Caixa' },
   { key: 'financeiro_basico', label: 'Caixa (Básico)' },
   { key: 'contas_receber', label: 'Contas a receber' },
