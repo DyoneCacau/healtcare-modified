@@ -61,7 +61,8 @@ interface CustomRole {
 const ALWAYS_AVAILABLE_FEATURES = ['dashboard', 'configuracoes', 'agenda_todas_clinicas', 'procedimentos'];
 const FEATURE_ALIASES: Record<string, string[]> = {
   pacientes_basico: ['pacientes'],
-  financeiro_basico: ['financeiro'],
+  financeiro_basico: ['financeiro', 'contas_receber'],
+  financeiro: ['contas_receber'],
 };
 
 /** Filhos de um módulo pai (ex.: Agenda - todas as clínicas fica dentro de Agenda) */

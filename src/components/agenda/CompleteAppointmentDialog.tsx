@@ -14,6 +14,7 @@ import {
   Users,
   TrendingUp,
   CalendarPlus,
+  Wallet,
 } from 'lucide-react';
 import {
   Dialog,
@@ -32,6 +33,7 @@ import {
 } from '@/components/ui/select';
 import { Input } from '@/components/ui/input';
 import { CurrencyInput } from '@/components/ui/currency-input';
+import { DateInput } from '@/components/ui/date-input';
 import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
 import { Button } from '@/components/ui/button';
@@ -56,6 +58,8 @@ export interface CommissionBreakdownItem {
   amount: number;
 }
 
+export type BillingDestination = 'cash' | 'receivable';
+
 interface CompleteAppointmentDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -68,6 +72,8 @@ interface CompleteAppointmentDialogProps {
     commissionBreakdown: CommissionBreakdownItem[],
     scheduleReturn?: boolean,
     adjustmentReason?: string,
+    billingDestination?: BillingDestination,
+    dueDate?: string,
   ) => void;
   commissionRules?: CommissionRule[];
 }
@@ -84,6 +90,8 @@ export function CompleteAppointmentDialog({
 }: CompleteAppointmentDialogProps) {
   const [serviceValue, setServiceValue] = useState(0);
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('pix');
+  const [billingDestination, setBillingDestination] = useState<BillingDestination>('cash');
+  const [dueDate, setDueDate] = useState(format(new Date(), 'yyyy-MM-dd'));
   const [quantity, setQuantity] = useState(1);
   const [applicableRules, setApplicableRules] = useState<CommissionRule[]>([]);
   const [commissionBreakdown, setCommissionBreakdown] = useState<{rule: CommissionRule; amount: number}[]>([]);
@@ -99,6 +107,9 @@ export function CompleteAppointmentDialog({
       setScheduleReturn(false);
       setAdjustmentReason('');
       setQuantity(1);
+      setBillingDestination('cash');
+      setDueDate(format(new Date(), 'yyyy-MM-dd'));
+      setPaymentMethod('pix');
       
       // Validate appointment completion
       const validationResult = validateAppointmentCompletion(
@@ -167,6 +178,8 @@ export function CompleteAppointmentDialog({
       commissionBreakdown,
       scheduleReturn,
       adjustmentReason.trim() || undefined,
+      billingDestination,
+      billingDestination === 'receivable' ? dueDate : undefined,
     );
     onOpenChange(false);
   };
@@ -189,7 +202,7 @@ export function CompleteAppointmentDialog({
             Finalizar Atendimento
           </DialogTitle>
           <DialogDescription>
-            Registre o pagamento e calcule as comissões
+            Escolha receber agora no Caixa ou lançar em Contas a receber
           </DialogDescription>
         </DialogHeader>
 
@@ -304,24 +317,70 @@ export function CompleteAppointmentDialog({
             </div>
 
             <div className="grid gap-2">
-              <Label>Forma de Pagamento</Label>
-              <Select
-                value={paymentMethod}
-                onValueChange={(v) => setPaymentMethod(v as PaymentMethod)}
-                disabled={validation.errorCode === 'DUPLICATE'}
-              >
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="cash">Dinheiro</SelectItem>
-                  <SelectItem value="credit">Cartão Crédito</SelectItem>
-                  <SelectItem value="debit">Cartão Débito</SelectItem>
-                  <SelectItem value="pix">PIX</SelectItem>
-                  <SelectItem value="voucher">Voucher</SelectItem>
-                </SelectContent>
-              </Select>
+              <Label>Destino do valor</Label>
+              <div className="grid grid-cols-2 gap-2">
+                <Button
+                  type="button"
+                  variant={billingDestination === 'cash' ? 'default' : 'outline'}
+                  className="justify-start h-auto py-3"
+                  disabled={validation.errorCode === 'DUPLICATE'}
+                  onClick={() => setBillingDestination('cash')}
+                >
+                  <DollarSign className="mr-2 h-4 w-4 shrink-0" />
+                  <span className="text-left">
+                    <span className="block text-sm font-medium">Receber agora</span>
+                    <span className="block text-xs font-normal opacity-80">Lança no Caixa</span>
+                  </span>
+                </Button>
+                <Button
+                  type="button"
+                  variant={billingDestination === 'receivable' ? 'default' : 'outline'}
+                  className="justify-start h-auto py-3"
+                  disabled={validation.errorCode === 'DUPLICATE'}
+                  onClick={() => setBillingDestination('receivable')}
+                >
+                  <Wallet className="mr-2 h-4 w-4 shrink-0" />
+                  <span className="text-left">
+                    <span className="block text-sm font-medium">Contas a receber</span>
+                    <span className="block text-xs font-normal opacity-80">Cobrar depois</span>
+                  </span>
+                </Button>
+              </div>
             </div>
+
+            {billingDestination === 'cash' ? (
+              <div className="grid gap-2">
+                <Label>Forma de Pagamento</Label>
+                <Select
+                  value={paymentMethod}
+                  onValueChange={(v) => setPaymentMethod(v as PaymentMethod)}
+                  disabled={validation.errorCode === 'DUPLICATE'}
+                >
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="cash">Dinheiro</SelectItem>
+                    <SelectItem value="credit">Cartão Crédito</SelectItem>
+                    <SelectItem value="debit">Cartão Débito</SelectItem>
+                    <SelectItem value="pix">PIX</SelectItem>
+                    <SelectItem value="voucher">Voucher</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            ) : (
+              <div className="grid gap-2">
+                <Label>Vencimento</Label>
+                <DateInput
+                  value={dueDate}
+                  onChange={setDueDate}
+                  disabled={validation.errorCode === 'DUPLICATE'}
+                />
+                <p className="text-xs text-muted-foreground">
+                  O valor fica em aberto até a baixa em Contas a receber (que gera o lançamento no Caixa).
+                </p>
+              </div>
+            )}
           </div>
 
           <Separator />
@@ -474,7 +533,7 @@ export function CompleteAppointmentDialog({
             )}
           >
             <CheckCircle className="mr-2 h-4 w-4" />
-            Finalizar e Registrar
+            {billingDestination === 'receivable' ? 'Finalizar e lançar a receber' : 'Finalizar e Registrar'}
           </Button>
         </DialogFooter>
       </DialogContent>

@@ -16,7 +16,8 @@ export const PERMISSION_FEATURES = [
   { id: 'agenda_todas_clinicas', label: 'Agenda - todas as clínicas' },
   { id: 'pacientes', label: 'Pacientes' },
   { id: 'profissionais', label: 'Profissionais' },
-  { id: 'financeiro', label: 'Financeiro' },
+  { id: 'financeiro', label: 'Caixa' },
+  { id: 'contas_receber', label: 'Contas a receber' },
   { id: 'comissoes', label: 'Comissões' },
   { id: 'estoque', label: 'Estoque' },
   { id: 'procedimentos', label: 'Procedimentos' },
@@ -69,12 +70,22 @@ export const PERMISSION_GROUPS: PermissionGroup[] = [
   },
   {
     id: 'gr_financeiro',
-    label: 'Financeiro',
+    label: 'Caixa',
     children: [
-      { feature: 'financeiro', label: 'Acessar financeiro / caixa', actions: ['can_view'] },
+      { feature: 'financeiro', label: 'Acessar caixa do dia', actions: ['can_view'] },
       { feature: 'financeiro', label: 'Incluir e retirar', actions: ['can_create'] },
       { feature: 'financeiro', label: 'Editar e estorno', actions: ['can_edit'] },
       { feature: 'financeiro', label: 'Apagar registro', actions: ['can_delete'] },
+    ],
+  },
+  {
+    id: 'gr_contas_receber',
+    label: 'Contas a receber',
+    children: [
+      { feature: 'contas_receber', label: 'Ver contas', actions: ['can_view'] },
+      { feature: 'contas_receber', label: 'Criar lançamento', actions: ['can_create'] },
+      { feature: 'contas_receber', label: 'Dar baixa / editar', actions: ['can_edit'] },
+      { feature: 'contas_receber', label: 'Cancelar', actions: ['can_delete'] },
     ],
   },
   {
@@ -212,11 +223,13 @@ export function getDefaultPermissionsForRole(role: SystemRole): PermissionRow[] 
   }));
 
   if (role === 'receptionist') {
-    return base.map((p) =>
-      ['agenda', 'pacientes', 'atendimento', 'dashboard', 'configuracoes'].includes(p.feature)
-        ? { ...p, can_view: true, can_create: true, can_edit: true, can_delete: false }
-        : p
-    );
+    return base.map((p) => {
+      if (['agenda', 'pacientes', 'atendimento', 'dashboard', 'configuracoes', 'financeiro'].includes(p.feature)) {
+        return { ...p, can_view: true, can_create: true, can_edit: true, can_delete: false };
+      }
+      // Contas a receber e relatórios ficam com o admin
+      return p;
+    });
   }
   if (role === 'seller') {
     return base.map((p) =>
