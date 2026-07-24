@@ -90,6 +90,44 @@ function isValidCnpj(digits: string): boolean {
   return digits.endsWith(`${first}${second}`)
 }
 
+function dbErrorMessage(
+  step: string,
+  error: { message?: string; code?: string; details?: string; hint?: string } | null,
+): string {
+  const parts = [step, error?.code, error?.message, error?.details, error?.hint]
+    .filter((part): part is string => Boolean(part && String(part).trim()))
+  return parts.join(' | ')
+}
+
+function slugifyClinicName(name: string): string {
+  const base = name
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .slice(0, 40)
+  const suffix = crypto.randomUUID().replace(/-/g, '').slice(0, 8)
+  return `${base || 'clinica'}-${suffix}`
+}
+
+function parseModules(raw: unknown): string[] {
+  if (Array.isArray(raw)) {
+    return raw.filter((item): item is string => typeof item === 'string' && item.trim().length > 0)
+  }
+  if (typeof raw === 'string') {
+    try {
+      const parsed = JSON.parse(raw)
+      if (Array.isArray(parsed)) {
+        return parsed.filter((item): item is string => typeof item === 'string' && item.trim().length > 0)
+      }
+    } catch {
+      /* ignore */
+    }
+  }
+  return []
+}
+
 function serviceClient(): SupabaseClient {
   const url = Deno.env.get('SUPABASE_URL')
   const key = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')
@@ -110,7 +148,7 @@ async function requireSuperadmin(req: Request, supabase: SupabaseClient): Promis
     .eq('user_id', user.id)
     .eq('role', 'superadmin')
     .maybeSingle()
-  if (roleError) throw new Error('Failed to verify requester role')
+  if (roleError) throw new Error(dbErrorMessage('Falha ao verificar perfil', roleError))
   if (!role) throw new HttpError(403, 'Operação permitida apenas para superadmin')
 }
 
@@ -249,7 +287,7 @@ Deno.serve(async (req) => {
     const { data: profileRows, error: profileError } = await supabase.rpc('get_admin_by_email', {
       p_email: input.adminEmail,
     })
-    if (profileError) throw new Error('Failed to lookup admin')
+    if (profileError) throw new Error(dbErrorMessage('Falha ao buscar administrador', profileError))
     const profile = Array.isArray(profileRows) && profileRows.length > 0
       ? profileRows[0] as { user_id: string; name?: string | null }
       : null
@@ -261,7 +299,7 @@ Deno.serve(async (req) => {
       .from('clinics')
       .select('id, organization_id')
       .eq('owner_user_id', ownerUserId)
-    if (ownedError) throw new Error('Failed to count clinics')
+    if (ownedError) throw new Error(dbErrorMessage('Falha ao listar clínicas do dono', ownedError))
 
     let unitCount = ownedClinics?.length ?? 0
     if (unitCount === 0) {
@@ -270,7 +308,9 @@ Deno.serve(async (req) => {
         .select('clinic_id')
         .eq('user_id', ownerUserId)
         .eq('is_owner', true)
-      if (membershipError) throw new Error('Failed to count clinic memberships')
+      if (membershipError) {
+        throw new Error(dbErrorMessage('Falha ao listar memberships', membershipError))
+      }
       unitCount = memberships?.length ?? 0
       if (unitCount === 0) {
         throw new HttpError(409, 'Administrador não é dono de nenhuma clínica')
@@ -290,14 +330,19 @@ Deno.serve(async (req) => {
       throw new HttpError(409, 'Não foi possível localizar a clínica de referência')
     }
 
-    const { data: referenceSub, error: subError } = await supabase
+    const { data: referenceRows, error: subError } = await supabase
       .from('subscriptions')
-      .select('plan_id, features_override, plans(id, name, price_monthly, promo_active, promo_price_monthly, max_clinics)')
+      .select(
+        'plan_id, features_override, plans(id, name, price_monthly, promo_active, promo_price_monthly, max_clinics)',
+      )
       .eq('clinic_id', referenceClinicId)
       .order('created_at', { ascending: false })
       .limit(1)
-      .maybeSingle()
-    if (subError) throw new Error('Failed to load reference subscription')
+    if (subError) throw new Error(dbErrorMessage('Falha ao carregar assinatura de referência', subError))
+
+    const referenceSub = Array.isArray(referenceRows) && referenceRows.length > 0
+      ? referenceRows[0]
+      : null
     if (!referenceSub?.plan_id) {
       throw new HttpError(409, 'Cliente sem plano. Use Criar Cliente Completo.')
     }
@@ -336,11 +381,19 @@ Deno.serve(async (req) => {
         p_name: `${profile.name || input.name} — Grupo`,
       },
     )
-    if (orgError || !organizationId) throw new Error('Failed to ensure organization')
+    if (orgError || !organizationId) {
+      throw new Error(
+        dbErrorMessage(
+          'Falha ao garantir organização (rode PRODUCAO_03_ORGANIZATIONS.sql se ainda não rodou)',
+          orgError,
+        ),
+      )
+    }
 
     const { data: clinicRow, error: clinicError } = await supabase.from('clinics').insert({
       name: input.name,
       unit_name: input.unit_name,
+      slug: slugifyClinicName(input.name),
       cnpj: input.cnpj,
       address: input.address,
       address_number: input.address_number,
@@ -353,7 +406,9 @@ Deno.serve(async (req) => {
       owner_user_id: ownerUserId,
       organization_id: organizationId,
     }).select('id').single()
-    if (clinicError || !clinicRow) throw new Error('Failed to create clinic')
+    if (clinicError || !clinicRow) {
+      throw new Error(dbErrorMessage('Falha ao criar clínica', clinicError))
+    }
     createdClinicId = clinicRow.id
 
     const { error: membershipError } = await supabase.from('clinic_users').insert({
@@ -361,20 +416,20 @@ Deno.serve(async (req) => {
       user_id: ownerUserId,
       is_owner: true,
     })
-    if (membershipError) throw new Error('Failed to create clinic membership')
+    if (membershipError) {
+      throw new Error(dbErrorMessage('Falha ao vincular dono à clínica', membershipError))
+    }
 
-    const modules = Array.isArray(referenceSub.features_override)
-      ? referenceSub.features_override
-      : ['dashboard']
+    const modules = parseModules(referenceSub.features_override)
 
     const { data: subscription, error: createSubError } = await supabase.from('subscriptions').insert({
       clinic_id: clinicRow.id,
       plan_id: referenceSub.plan_id,
       status: 'pending',
-      billing_mode: input.billingProvider === 'asaas' ? 'manual' : 'manual',
+      billing_mode: 'manual',
       billing_status: 'pending',
       payment_status: 'pending',
-      features_override: modules,
+      features_override: modules.length > 0 ? modules : ['dashboard', 'administracao'],
       monthly_fee: monthlyFee,
       setup_fee: input.setupFee,
       billing_day: input.billingDay,
@@ -382,7 +437,9 @@ Deno.serve(async (req) => {
       billing_first_due_date: input.billingFirstDueDate,
       admin_notes: 'Nova unidade — cobrança própria por clínica',
     }).select('id').single()
-    if (createSubError || !subscription) throw new Error('Failed to create subscription')
+    if (createSubError || !subscription) {
+      throw new Error(dbErrorMessage('Falha ao criar assinatura da unidade', createSubError))
+    }
 
     return json(req, {
       clinic_id: clinicRow.id,
@@ -401,10 +458,8 @@ Deno.serve(async (req) => {
       await supabase.from('clinics').delete().eq('id', createdClinicId)
     }
     if (error instanceof HttpError) return json(req, { error: error.message }, error.status)
-    console.error(
-      'Unexpected add-clinic-unit error',
-      error instanceof Error ? error.message : 'unknown',
-    )
-    return json(req, { error: 'Não foi possível criar a unidade' }, 500)
+    const message = error instanceof Error ? error.message : 'Não foi possível criar a unidade'
+    console.error('Unexpected add-clinic-unit error', message)
+    return json(req, { error: message }, 500)
   }
 })
