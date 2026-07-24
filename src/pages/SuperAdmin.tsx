@@ -91,7 +91,7 @@ export default function SuperAdmin() {
         </div>
 
         <Tabs value={currentTab} onValueChange={setTab} className="space-y-6">
-          <TabsList className="grid w-full grid-cols-8 lg:w-auto lg:inline-grid">
+          <TabsList className="grid h-auto w-full grid-cols-4 gap-1 sm:grid-cols-8 lg:w-auto lg:inline-grid">
             <TabsTrigger value="dashboard" className="flex items-center gap-2">
               <LayoutDashboard className="h-4 w-4" />
               <span className="hidden sm:inline">Dashboard</span>
@@ -100,7 +100,7 @@ export default function SuperAdmin() {
               <UserPlus className="h-4 w-4" />
               <span className="hidden sm:inline">Solicitações</span>
               {pendingContacts > 0 && (
-                <Badge variant="secondary" className="h-5 w-5 p-0 flex items-center justify-center text-xs absolute -top-1 -right-1">
+                <Badge variant="secondary" className="h-5 w-5 p-0 flex items-center justify-center text-xs absolute top-0 right-0 translate-x-1/3 -translate-y-1/3">
                   {pendingContacts > 9 ? '9+' : pendingContacts}
                 </Badge>
               )}
@@ -125,7 +125,7 @@ export default function SuperAdmin() {
               <MessageSquare className="h-4 w-4" />
               <span className="hidden sm:inline">Suporte</span>
               {openTickets > 0 && (
-                <Badge variant="destructive" className="h-5 w-5 p-0 flex items-center justify-center text-xs absolute -top-1 -right-1">
+                <Badge variant="destructive" className="h-5 w-5 p-0 flex items-center justify-center text-xs absolute top-0 right-0 translate-x-1/3 -translate-y-1/3">
                   {openTickets > 9 ? '9+' : openTickets}
                 </Badge>
               )}
