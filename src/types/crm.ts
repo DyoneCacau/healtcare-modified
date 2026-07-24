@@ -25,7 +25,7 @@ export interface CrmLead {
 }
 
 export interface CrmLeadInput {
-  name: string;
+  name?: string;
   phone?: string | null;
   email?: string | null;
   stage?: CrmLeadStage;
@@ -37,6 +37,7 @@ export interface CrmLeadInput {
   notes?: string | null;
   owner_user_id?: string | null;
   patient_id?: string | null;
+  appointment_id?: string | null;
   lost_reason?: string | null;
 }
 
