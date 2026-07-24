@@ -29,6 +29,7 @@ const typeLabels: Record<ClinicDocumentType, string> = {
   declaracao: 'Declaração',
   termo_ciencia: 'Termo de Ciência',
   recibo: 'Recibo',
+  receituario: 'Receituário',
   outro: 'Outro',
 };
 

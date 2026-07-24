@@ -17,7 +17,7 @@ import {
 import { Label } from '@/components/ui/label';
 import { toast } from 'sonner';
 
-export type DocumentPrintType = 'atestado' | 'declaracao' | 'termo_ciencia' | 'recibo';
+export type DocumentPrintType = 'atestado' | 'declaracao' | 'termo_ciencia' | 'recibo' | 'receituario';
 
 export interface ProfessionalOption {
   id: string;
@@ -96,6 +96,10 @@ export function DocumentPrintPreview(props: DocumentPrintPreviewProps) {
   const [declaracaoHoraInicio, setDeclaracaoHoraInicio] = useState('14:00');
   const [declaracaoHoraFim, setDeclaracaoHoraFim] = useState('16:00');
   const [termoConteudo, setTermoConteudo] = useState('');
+  const [receituarioPaciente, setReceituarioPaciente] = useState('');
+  const [receituarioCpf, setReceituarioCpf] = useState('');
+  const [receituarioConteudo, setReceituarioConteudo] = useState('');
+  const [receituarioUso, setReceituarioUso] = useState('');
 
   const selectedProf = professionals.find((p) => p.id === selectedProfId) || professionals[0];
   const profName = selectedProf?.name || '________________';
@@ -108,8 +112,19 @@ export function DocumentPrintPreview(props: DocumentPrintPreviewProps) {
       setAtestadoEndereco(patient.address || '');
       setDeclaracaoPaciente(patient.name);
       setDeclaracaoCpf(patient.cpf || '');
+      setReceituarioPaciente(patient.name);
+      setReceituarioCpf(patient.cpf || '');
     }
   }, [patient]);
+
+  useEffect(() => {
+    if (open && type === 'receituario') {
+      setReceituarioConteudo(
+        'Rp.\n\n1. _______________________________________________\n   Uso: ___________________________________________\n\n2. _______________________________________________\n   Uso: ___________________________________________'
+      );
+      setReceituarioUso('');
+    }
+  }, [open, type]);
 
   useEffect(() => {
     if (professionals.length > 0 && !selectedProfId) {
@@ -166,6 +181,7 @@ export function DocumentPrintPreview(props: DocumentPrintPreviewProps) {
     declaracao: 'Declaracao',
     termo_ciencia: 'Termo de Ciencia',
     recibo: 'Recibo de Pagamento',
+    receituario: 'Receituario',
   };
 
   const renderDocumentContent = (forPrint: boolean) => {
@@ -307,6 +323,63 @@ export function DocumentPrintPreview(props: DocumentPrintPreviewProps) {
       );
     }
 
+    if (type === 'receituario') {
+      return (
+        <div className="space-y-4 text-justify">
+          <p>
+            Paciente:{' '}
+            {forPrint ? (
+              <span className="font-semibold">{receituarioPaciente || patient?.name || '________________'}</span>
+            ) : (
+              <InlineInput
+                value={receituarioPaciente}
+                onChange={setReceituarioPaciente}
+                placeholder="Nome do paciente"
+                className="min-w-[220px]"
+              />
+            )}
+          </p>
+          <p>
+            CPF:{' '}
+            {forPrint ? (
+              <span>{receituarioCpf || patient?.cpf || '________________'}</span>
+            ) : (
+              <InlineInput value={receituarioCpf} onChange={setReceituarioCpf} placeholder="CPF" />
+            )}
+          </p>
+          <div className="mt-4">
+            <p className="font-semibold mb-2">Prescricao:</p>
+            {forPrint ? (
+              <div className="whitespace-pre-wrap min-h-[160px]">{receituarioConteudo}</div>
+            ) : (
+              <textarea
+                value={receituarioConteudo}
+                onChange={(e) => setReceituarioConteudo(e.target.value)}
+                className="w-full min-h-[180px] border border-border rounded p-3 bg-transparent resize-y"
+                placeholder="Medicamentos, dosagem e posologia..."
+              />
+            )}
+          </div>
+          {(receituarioUso || !forPrint) && (
+            <div>
+              <p className="font-semibold mb-2">Orientacoes:</p>
+              {forPrint ? (
+                <div className="whitespace-pre-wrap">{receituarioUso}</div>
+              ) : (
+                <textarea
+                  value={receituarioUso}
+                  onChange={(e) => setReceituarioUso(e.target.value)}
+                  className="w-full min-h-[80px] border border-border rounded p-3 bg-transparent resize-y"
+                  placeholder="Orientacoes ao paciente (opcional)"
+                />
+              )}
+            </div>
+          )}
+          <p className="text-right mt-6">{currentDate}</p>
+        </div>
+      );
+    }
+
     return null;
   };
 
@@ -320,7 +393,7 @@ export function DocumentPrintPreview(props: DocumentPrintPreviewProps) {
           </DialogDescription>
         </DialogHeader>
 
-        {type !== 'recibo' && professionals.length > 1 && (
+        {type !== 'recibo' && professionals.length >= 1 && (
           <div className="flex items-center gap-2">
             <Label>Profissional responsavel:</Label>
             <Select value={selectedProfId} onValueChange={setSelectedProfId}>

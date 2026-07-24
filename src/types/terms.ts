@@ -26,7 +26,7 @@ export interface SignedTerm {
   clinicId: string;
 }
 
-export type ClinicDocumentType = 'atestado' | 'declaracao' | 'termo_ciencia' | 'recibo' | 'outro';
+export type ClinicDocumentType = 'atestado' | 'declaracao' | 'termo_ciencia' | 'recibo' | 'receituario' | 'outro';
 
 export interface ClinicDocument {
   id: string;

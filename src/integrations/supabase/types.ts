@@ -1357,6 +1357,67 @@ export type Database = {
           },
         ]
       }
+      patient_evolutions: {
+        Row: {
+          clinic_id: string
+          content: string
+          created_at: string
+          created_by: string | null
+          evolution_date: string
+          id: string
+          patient_id: string
+          professional_id: string | null
+          professional_name: string
+          updated_at: string
+        }
+        Insert: {
+          clinic_id: string
+          content?: string
+          created_at?: string
+          created_by?: string | null
+          evolution_date?: string
+          id?: string
+          patient_id: string
+          professional_id?: string | null
+          professional_name?: string
+          updated_at?: string
+        }
+        Update: {
+          clinic_id?: string
+          content?: string
+          created_at?: string
+          created_by?: string | null
+          evolution_date?: string
+          id?: string
+          patient_id?: string
+          professional_id?: string | null
+          professional_name?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "patient_evolutions_clinic_id_fkey"
+            columns: ["clinic_id"]
+            isOneToOne: false
+            referencedRelation: "clinics"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "patient_evolutions_patient_id_fkey"
+            columns: ["patient_id"]
+            isOneToOne: false
+            referencedRelation: "patients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "patient_evolutions_professional_id_fkey"
+            columns: ["professional_id"]
+            isOneToOne: false
+            referencedRelation: "professionals"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       patients: {
         Row: {
           address: string | null

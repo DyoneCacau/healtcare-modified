@@ -27,6 +27,7 @@ import { Patient } from '@/types/patient';
 import { AppointmentWithClinic } from '@/types/clinic';
 import { DentalChart as DentalChartType } from '@/types/dental';
 import { DentalChart } from './DentalChart';
+import { PatientEvolutionsTab } from './PatientEvolutionsTab';
 import { useDentalChart, useDentalChartMutations } from '@/hooks/useDentalCharts';
 import { format, parseISO, differenceInYears } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
@@ -126,6 +127,9 @@ export const PatientDetailsDialog = ({
             </TabsTrigger>
             <TabsTrigger value="dental" className="flex-1 min-w-[140px]">
               Odontograma
+            </TabsTrigger>
+            <TabsTrigger value="evolucoes" className="flex-1 min-w-[140px]">
+              Evoluções
             </TabsTrigger>
             <TabsTrigger value="clinical" className="flex-1 min-w-[140px]">
               Dados Clínicos
@@ -228,6 +232,10 @@ export const PatientDetailsDialog = ({
                 />
               )}
               </div>
+            </TabsContent>
+
+            <TabsContent value="evolucoes" className="mt-4">
+              <PatientEvolutionsTab patientId={patient.id} />
             </TabsContent>
 
             <TabsContent value="clinical" className="mt-4">

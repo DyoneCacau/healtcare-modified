@@ -21,13 +21,49 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 
 const MODEL_TYPES: { value: DocumentPrintType; label: string }[] = [
   { value: 'atestado', label: 'Atestado' },
   { value: 'declaracao', label: 'Declaracao' },
   { value: 'termo_ciencia', label: 'Termo de Ciencia' },
   { value: 'recibo', label: 'Recibo de Pagamento' },
+  { value: 'receituario', label: 'Receituario' },
 ];
+
+function mapDbPatient(p: {
+  id: string;
+  name: string;
+  cpf: string | null;
+  phone: string | null;
+  email: string | null;
+  address: string | null;
+  birth_date: string | null;
+  clinical_notes: string | null;
+  allergies: string[] | null;
+  created_at: string;
+  status: string;
+}): Patient {
+  return {
+    id: p.id,
+    name: p.name,
+    cpf: p.cpf || '',
+    phone: p.phone || '',
+    email: p.email || '',
+    address: p.address || '',
+    birthDate: p.birth_date || '',
+    clinicalNotes: p.clinical_notes || '',
+    allergies: p.allergies || [],
+    createdAt: p.created_at,
+    status: p.status as 'active' | 'inactive',
+  };
+}
 
 export function DocumentsAndModelsTab() {
   const { clinic } = useClinic();
@@ -40,37 +76,44 @@ export function DocumentsAndModelsTab() {
   const [reciboValue, setReciboValue] = useState('');
   const [reciboDesc, setReciboDesc] = useState('Servicos odontologicos');
   const [reciboDialogOpen, setReciboDialogOpen] = useState(false);
+  const [patientDialogOpen, setPatientDialogOpen] = useState(false);
+  const [pendingType, setPendingType] = useState<DocumentPrintType | null>(null);
+  const [patientSelectId, setPatientSelectId] = useState('');
 
-  const samplePatient: Patient | null = patients[0]
-    ? {
-        id: patients[0].id,
-        name: patients[0].name,
-        cpf: patients[0].cpf || '',
-        phone: patients[0].phone || '',
-        email: patients[0].email || '',
-        address: patients[0].address || '',
-        birthDate: patients[0].birth_date || '',
-        clinicalNotes: patients[0].clinical_notes || '',
-        allergies: patients[0].allergies || [],
-        createdAt: patients[0].created_at,
-        status: patients[0].status as 'active' | 'inactive',
-      }
-    : null;
+  const samplePatient: Patient | null = patients[0] ? mapDbPatient(patients[0]) : null;
 
   const handlePrintModel = (type: DocumentPrintType) => {
     setPrintType(type);
-    setSelectedPatient(samplePatient);
     if (type === 'recibo') {
+      setSelectedPatient(samplePatient);
       setReciboValue('');
       setReciboDesc('Servicos odontologicos');
       setReciboDialogOpen(true);
-    } else {
-      setPrintOpen(true);
+      return;
     }
+
+    if (type === 'receituario') {
+      setPendingType(type);
+      setPatientSelectId(patients[0]?.id || '');
+      setPatientDialogOpen(true);
+      return;
+    }
+
+    setSelectedPatient(samplePatient);
+    setPrintOpen(true);
   };
 
   const handleReciboConfirm = () => {
     setReciboDialogOpen(false);
+    setPrintOpen(true);
+  };
+
+  const handlePatientConfirm = () => {
+    const dbPatient = patients.find((p) => p.id === patientSelectId);
+    setSelectedPatient(dbPatient ? mapDbPatient(dbPatient) : samplePatient);
+    setPrintType(pendingType || 'receituario');
+    setPatientDialogOpen(false);
+    setPendingType(null);
     setPrintOpen(true);
   };
 
@@ -91,11 +134,11 @@ export function DocumentsAndModelsTab() {
             Modelos para Impressão
           </CardTitle>
           <p className="text-sm text-muted-foreground">
-            Atestados, declarações, termos de ciência e recibo de pagamento. Dados da clínica (CNPJ, razão social) vêm de Configuração - Dados da Clínica.
+            Atestados, declarações, termos de ciência, recibo e receituário. Dados da clínica (CNPJ, razão social) vêm de Configuração - Dados da Clínica.
           </p>
         </CardHeader>
         <CardContent>
-          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
             {MODEL_TYPES.map((m) => (
               <Button
                 key={m.value}
@@ -147,6 +190,43 @@ export function DocumentsAndModelsTab() {
           <DialogFooter>
             <Button variant="outline" onClick={() => setReciboDialogOpen(false)}>Cancelar</Button>
             <Button onClick={handleReciboConfirm}>Imprimir Recibo</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={patientDialogOpen} onOpenChange={setPatientDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Receituário</DialogTitle>
+            <DialogDescription>
+              Selecione o paciente para preencher o receituário. Você poderá editar os medicamentos antes de gerar o PDF.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <Label>Paciente</Label>
+              <Select value={patientSelectId} onValueChange={setPatientSelectId}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Selecione o paciente" />
+                </SelectTrigger>
+                <SelectContent>
+                  {patients.map((p) => (
+                    <SelectItem key={p.id} value={p.id}>
+                      {p.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              {patients.length === 0 && (
+                <p className="text-sm text-muted-foreground">
+                  Nenhum paciente cadastrado. Você ainda pode emitir o receituário e preencher o nome manualmente.
+                </p>
+              )}
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setPatientDialogOpen(false)}>Cancelar</Button>
+            <Button onClick={handlePatientConfirm}>Continuar</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

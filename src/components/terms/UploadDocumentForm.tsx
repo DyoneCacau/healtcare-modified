@@ -75,6 +75,7 @@ export function UploadDocumentForm() {
                 <SelectItem value="declaracao">Declaração</SelectItem>
                 <SelectItem value="termo_ciencia">Termo de Ciência</SelectItem>
                 <SelectItem value="recibo">Recibo</SelectItem>
+                <SelectItem value="receituario">Receituário</SelectItem>
                 <SelectItem value="outro">Outro</SelectItem>
               </SelectContent>
             </Select>
