@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Navigate } from 'react-router-dom';
 import {
   CircleDollarSign,
@@ -8,7 +8,9 @@ import {
   Search,
   Stethoscope,
   Sparkles,
+  Trash2,
 } from 'lucide-react';
+import { toast } from 'sonner';
 import { MainLayout } from '@/components/layout/MainLayout';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
@@ -47,6 +49,11 @@ import {
   useClinicProcedures,
   useClinicProcedureMutations,
 } from '@/hooks/useClinicProcedures';
+import {
+  useProcedureMaterials,
+  useProcedureMaterialMutations,
+} from '@/hooks/useProcedureMaterials';
+import { useInventoryProducts } from '@/hooks/useInventory';
 import type {
   ClinicProcedure,
   ClinicProcedureInput,
@@ -54,6 +61,7 @@ import type {
 } from '@/types/clinicProcedure';
 import { CurrencyInput } from '@/components/ui/currency-input';
 import { BILLING_UNIT_LABELS } from '@/types/clinicProcedure';
+import { parseQuantityInput } from '@/lib/quantityInput';
 
 const EMPTY_FORM: ClinicProcedureInput = {
   name: '',
@@ -75,12 +83,16 @@ export default function Procedures() {
   const { can, isLoading: permissionsLoading } = usePermissions();
   const { procedures, isLoading, error } = useClinicProcedures();
   const { createProcedure, updateProcedure } = useClinicProcedureMutations();
+  const { replaceProcedureMaterials } = useProcedureMaterialMutations();
+  const { activeProducts } = useInventoryProducts();
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editing, setEditing] = useState<ClinicProcedure | null>(null);
   const [form, setForm] = useState<ClinicProcedureInput>(EMPTY_FORM);
   const [search, setSearch] = useState('');
   const [category, setCategory] = useState('all');
   const [status, setStatus] = useState('all');
+  const [materialRows, setMaterialRows] = useState<Array<{ key: string; productId: string; quantity: string }>>([]);
+  const { materials: editingMaterials } = useProcedureMaterials(editing?.id);
 
   const canView = isSuperAdmin || can('procedimentos', 'can_view');
   const canCreate = isSuperAdmin || can('procedimentos', 'can_create');
@@ -102,10 +114,26 @@ export default function Procedures() {
     });
   }, [procedures, search, category, status]);
 
+  useEffect(() => {
+    if (!dialogOpen) return;
+    if (!editing) {
+      setMaterialRows([]);
+      return;
+    }
+    setMaterialRows(
+      editingMaterials.map((m) => ({
+        key: m.id,
+        productId: m.product_id,
+        quantity: String(m.default_quantity).replace('.', ','),
+      })),
+    );
+  }, [dialogOpen, editing, editingMaterials]);
+
   const openNew = () => {
     if (!canCreate) return;
     setEditing(null);
     setForm(EMPTY_FORM);
+    setMaterialRows([]);
     setDialogOpen(true);
   };
 
@@ -135,10 +163,43 @@ export default function Procedures() {
       category: form.category.trim() || 'Outros',
       description: form.description?.trim() || null,
     };
+
+    const materialItems: Array<{ productId: string; defaultQuantity: number }> = [];
+    for (const row of materialRows) {
+      if (!row.productId && !row.quantity.trim()) continue;
+      if (!row.productId) {
+        toast.error('Selecione o produto em todas as linhas de material');
+        return;
+      }
+      const qty = parseQuantityInput(row.quantity);
+      if (qty == null) {
+        toast.error('Quantidade de material inválida. Use valores como 1 ou 0,2');
+        return;
+      }
+      if (materialItems.some((item) => item.productId === row.productId)) {
+        toast.error('Produto duplicado na composição. Remova a linha repetida.');
+        return;
+      }
+      materialItems.push({ productId: row.productId, defaultQuantity: qty });
+    }
+
+    let procedureId = editing?.id;
     if (editing) {
       await updateProcedure.mutateAsync({ id: editing.id, ...payload });
     } else {
-      await createProcedure.mutateAsync(payload);
+      const created = await createProcedure.mutateAsync(payload);
+      procedureId = created?.id;
+    }
+
+    if (procedureId) {
+      try {
+        await replaceProcedureMaterials.mutateAsync({
+          procedureId,
+          items: materialItems,
+        });
+      } catch {
+        // toast já tratado no hook
+      }
     }
     setDialogOpen(false);
   };
@@ -294,11 +355,11 @@ export default function Procedures() {
       </div>
 
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-        <DialogContent className="max-w-2xl">
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>{editing ? 'Editar procedimento' : 'Novo procedimento'}</DialogTitle>
             <DialogDescription>
-              O preço será sugerido ao finalizar o atendimento e poderá ser alterado.
+              Cadastre preço e materiais sugeridos (odonto/estética). Na finalização a recepção confirma quantidade real (ml, un, etc.).
             </DialogDescription>
           </DialogHeader>
 
@@ -387,13 +448,101 @@ export default function Procedures() {
                 placeholder="Observações internas sobre o serviço"
               />
             </div>
+
+            <div className="space-y-3 sm:col-span-2 rounded-lg border p-3">
+              <div className="flex items-center justify-between gap-2">
+                <div>
+                  <Label>Materiais sugeridos (composição)</Label>
+                  <p className="text-xs text-muted-foreground">
+                    Ex.: Toxina Renova 0,2 ml, seringa 1 un. Pode ajustar na finalização.
+                  </p>
+                </div>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() =>
+                    setMaterialRows((rows) => [
+                      ...rows,
+                      { key: crypto.randomUUID(), productId: '', quantity: '' },
+                    ])
+                  }
+                >
+                  <Plus className="mr-1 h-3.5 w-3.5" />
+                  Material
+                </Button>
+              </div>
+
+              {activeProducts.length === 0 && (
+                <p className="text-xs text-amber-700">
+                  Cadastre produtos em Estoque para montar a composição.
+                </p>
+              )}
+
+              {materialRows.length === 0 ? (
+                <p className="text-xs text-muted-foreground">Nenhum material sugerido.</p>
+              ) : (
+                <div className="space-y-2">
+                  {materialRows.map((row) => (
+                    <div key={row.key} className="grid gap-2 sm:grid-cols-[1.4fr_0.7fr_auto]">
+                      <Select
+                        value={row.productId || undefined}
+                        onValueChange={(productId) =>
+                          setMaterialRows((rows) =>
+                            rows.map((r) => (r.key === row.key ? { ...r, productId } : r)),
+                          )
+                        }
+                      >
+                        <SelectTrigger>
+                          <SelectValue placeholder="Produto / marca" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {activeProducts.map((p) => (
+                            <SelectItem key={p.id} value={p.id}>
+                              {p.name} ({p.unit || 'un'})
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      <Input
+                        inputMode="decimal"
+                        value={row.quantity}
+                        onChange={(e) =>
+                          setMaterialRows((rows) =>
+                            rows.map((r) =>
+                              r.key === row.key ? { ...r, quantity: e.target.value } : r,
+                            ),
+                          )
+                        }
+                        placeholder="Qtd (ex.: 0,2)"
+                      />
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon"
+                        onClick={() =>
+                          setMaterialRows((rows) => rows.filter((r) => r.key !== row.key))
+                        }
+                      >
+                        <Trash2 className="h-4 w-4 text-destructive" />
+                      </Button>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
           </div>
 
           <DialogFooter>
             <Button variant="outline" onClick={() => setDialogOpen(false)}>Cancelar</Button>
             <Button
               onClick={handleSave}
-              disabled={!form.name.trim() || createProcedure.isPending || updateProcedure.isPending}
+              disabled={
+                !form.name.trim()
+                || createProcedure.isPending
+                || updateProcedure.isPending
+                || replaceProcedureMaterials.isPending
+              }
             >
               Salvar procedimento
             </Button>

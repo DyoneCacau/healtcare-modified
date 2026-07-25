@@ -1,4 +1,4 @@
-﻿import { useState } from 'react';
+﻿import { useMemo, useState } from 'react';
 import {
   User,
   Phone,
@@ -12,6 +12,7 @@ import {
   XCircle,
   Timer,
   Building2,
+  Package,
 } from 'lucide-react';
 import {
   Dialog,
@@ -36,6 +37,8 @@ import { PatientFileViewer } from './PatientFileViewer';
 import { useDentalChart, useDentalChartMutations } from '@/hooks/useDentalCharts';
 import { usePatientEvolutions } from '@/hooks/usePatientEvolutions';
 import { usePatientFileMutations, usePatientFiles } from '@/hooks/usePatientFiles';
+import { useAppointmentMaterials } from '@/hooks/useProcedureMaterials';
+import { formatQuantity } from '@/lib/quantityInput';
 import { format, parseISO, differenceInYears } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 
@@ -74,6 +77,20 @@ export const PatientDetailsDialog = ({
   const { files } = usePatientFiles(patient?.id);
   const { evolutions } = usePatientEvolutions(patient?.id);
   const { updateFile } = usePatientFileMutations(patient?.id);
+  const appointmentIds = useMemo(
+    () => (patient ? appointments.map((a) => a.id) : []),
+    [patient, appointments],
+  );
+  const { materials: appointmentMaterials } = useAppointmentMaterials(appointmentIds);
+  const materialsByAppointment = useMemo(() => {
+    const map = new Map<string, typeof appointmentMaterials>();
+    for (const material of appointmentMaterials) {
+      const list = map.get(material.appointment_id) || [];
+      list.push(material);
+      map.set(material.appointment_id, list);
+    }
+    return map;
+  }, [appointmentMaterials]);
 
   if (!patient) return null;
 
@@ -350,6 +367,20 @@ export const PatientDetailsDialog = ({
                                         <p className="text-sm text-muted-foreground mt-2 p-2 bg-muted/50 rounded">
                                           {appointment.notes}
                                         </p>
+                                      )}
+                                      {(materialsByAppointment.get(appointment.id) || []).length > 0 && (
+                                        <div className="mt-2 rounded-md border bg-muted/40 p-2 text-xs space-y-1">
+                                          <p className="font-medium flex items-center gap-1 text-muted-foreground">
+                                            <Package className="h-3.5 w-3.5" />
+                                            Materiais utilizados
+                                          </p>
+                                          {(materialsByAppointment.get(appointment.id) || []).map((m) => (
+                                            <p key={m.id}>
+                                              {m.product_name}: {formatQuantity(m.quantity)} {m.product_unit || 'un'}
+                                              {m.overridden ? ' (liberado sem saldo)' : ''}
+                                            </p>
+                                          ))}
+                                        </div>
                                       )}
                                     </div>
                                     <div className="shrink-0 text-right text-sm">

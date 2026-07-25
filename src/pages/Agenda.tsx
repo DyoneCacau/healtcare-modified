@@ -27,6 +27,8 @@ import { toast } from 'sonner';
 import { Skeleton } from '@/components/ui/skeleton';
 import { prepareAgendaWhatsAppMessage } from '@/utils/whatsapp';
 import { remainingAfterBookingFee } from '@/lib/bookingFee';
+import { useProcedureMaterialMutations } from '@/hooks/useProcedureMaterials';
+import type { AppointmentMaterialUsageInput } from '@/types/procedureMaterial';
 
 export default function Agenda() {
   const [searchParams, setSearchParams] = useSearchParams();
@@ -84,6 +86,7 @@ export default function Agenda() {
   } = useTransactionMutations();
   const { createReceivable } = useReceivableMutations();
   const { createCommission } = useCommissionMutations();
+  const { recordAppointmentMaterials } = useProcedureMaterialMutations();
   const { updateLead } = useCrmLeadMutations();
   const { rules: commissionRules } = useCommissionRules();
 
@@ -350,6 +353,7 @@ export default function Agenda() {
     adjustmentReason?: string,
     billingDestination: BillingDestination = 'cash',
     dueDate?: string,
+    materialsUsage: AppointmentMaterialUsageInput[] = [],
   ) => {
     const isReceivable = billingDestination === 'receivable';
     const bookingFee = appointment.bookingFee ?? 0;
@@ -445,6 +449,20 @@ export default function Agenda() {
       setCompleteDialogOpen(false);
       setCompletingAppointment(null);
       return;
+    }
+
+    if (materialsUsage.length > 0) {
+      try {
+        await recordAppointmentMaterials.mutateAsync({
+          appointmentId: appointment.id,
+          patientName: appointment.patientName,
+          procedureName: appointment.procedure,
+          items: materialsUsage,
+        });
+        toast.success(`${materialsUsage.length} material(is) baixado(s) do estoque e registrados no histórico.`);
+      } catch (err) {
+        console.error('Erro ao baixar materiais:', err);
+      }
     }
 
     if (remaining <= 0 && bookingFee > 0) {
