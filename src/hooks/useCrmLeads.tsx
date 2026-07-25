@@ -10,6 +10,7 @@ type CrmLeadRow = {
   id: string;
   clinic_id: string;
   name: string;
+  cpf: string | null;
   phone: string | null;
   email: string | null;
   stage: CrmLeadStage;
@@ -19,6 +20,7 @@ type CrmLeadRow = {
   estimated_value: number | null;
   next_follow_up: string | null;
   notes: string | null;
+  allergies: string[] | null;
   owner_user_id: string | null;
   patient_id: string | null;
   appointment_id: string | null;
@@ -32,6 +34,7 @@ function mapRow(row: CrmLeadRow, ownerName?: string | null): CrmLead {
     id: row.id,
     clinicId: row.clinic_id,
     name: row.name,
+    cpf: row.cpf ?? null,
     phone: row.phone,
     email: row.email,
     stage: row.stage,
@@ -41,6 +44,7 @@ function mapRow(row: CrmLeadRow, ownerName?: string | null): CrmLead {
     estimatedValue: row.estimated_value == null ? null : Number(row.estimated_value),
     nextFollowUp: row.next_follow_up,
     notes: row.notes,
+    allergies: row.allergies ?? [],
     ownerUserId: row.owner_user_id,
     ownerName: ownerName ?? null,
     patientId: row.patient_id,
@@ -49,6 +53,20 @@ function mapRow(row: CrmLeadRow, ownerName?: string | null): CrmLead {
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };
+}
+
+/**
+ * Propaga o nome do lead para o paciente vinculado (crm_leads.patient_id).
+ * Silencioso: falha aqui não pode impedir a atualização do lead.
+ */
+async function syncNameToLinkedPatient(patientId: string, name: string) {
+  const { error } = await supabase
+    .from('patients')
+    .update({ name })
+    .eq('id', patientId);
+  if (error) {
+    console.error('Failed to sync lead name to linked patient', error);
+  }
 }
 
 export function useCrmLeads() {
@@ -118,6 +136,7 @@ export function useCrmLeadMutations() {
         .insert({
           clinic_id: clinicId,
           name: input.name.trim(),
+          cpf: input.cpf?.trim() || null,
           phone: input.phone?.trim() || null,
           email: input.email?.trim() || null,
           stage: input.stage || 'new',
@@ -127,6 +146,7 @@ export function useCrmLeadMutations() {
           estimated_value: input.estimated_value ?? null,
           next_follow_up: input.next_follow_up || null,
           notes: input.notes?.trim() || null,
+          allergies: input.allergies ?? [],
           owner_user_id: input.owner_user_id || user.id,
           patient_id: input.patient_id ?? null,
           lost_reason: input.lost_reason?.trim() || null,
@@ -153,6 +173,7 @@ export function useCrmLeadMutations() {
         updated_at: new Date().toISOString(),
       };
       if (input.name != null) payload.name = input.name.trim();
+      if (input.cpf !== undefined) payload.cpf = input.cpf?.trim() || null;
       if (input.phone !== undefined) payload.phone = input.phone?.trim() || null;
       if (input.email !== undefined) payload.email = input.email?.trim() || null;
       if (input.stage !== undefined) payload.stage = input.stage;
@@ -162,6 +183,7 @@ export function useCrmLeadMutations() {
       if (input.estimated_value !== undefined) payload.estimated_value = input.estimated_value;
       if (input.next_follow_up !== undefined) payload.next_follow_up = input.next_follow_up || null;
       if (input.notes !== undefined) payload.notes = input.notes?.trim() || null;
+      if (input.allergies !== undefined) payload.allergies = input.allergies;
       if (input.owner_user_id !== undefined) payload.owner_user_id = input.owner_user_id;
       if (input.patient_id !== undefined) payload.patient_id = input.patient_id;
       if (input.appointment_id !== undefined) payload.appointment_id = input.appointment_id;
@@ -175,7 +197,14 @@ export function useCrmLeadMutations() {
         .single();
 
       if (error) throw error;
-      return mapRow(data as unknown as CrmLeadRow);
+      const updated = mapRow(data as unknown as CrmLeadRow);
+
+      // Sincroniza o nome de volta para o paciente vinculado (se houver)
+      if (typeof payload.name === 'string' && updated.patientId) {
+        await syncNameToLinkedPatient(updated.patientId, payload.name);
+      }
+
+      return updated;
     },
     onSuccess: () => {
       invalidate();

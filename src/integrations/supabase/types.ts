@@ -1505,8 +1505,10 @@ export type Database = {
           created_at: string
           email: string | null
           id: string
+          lead_source: string | null
           name: string
           phone: string | null
+          referral_name: string | null
           status: string
           updated_at: string
         }
@@ -1520,8 +1522,10 @@ export type Database = {
           created_at?: string
           email?: string | null
           id?: string
+          lead_source?: string | null
           name: string
           phone?: string | null
+          referral_name?: string | null
           status?: string
           updated_at?: string
         }
@@ -1535,8 +1539,10 @@ export type Database = {
           created_at?: string
           email?: string | null
           id?: string
+          lead_source?: string | null
           name?: string
           phone?: string | null
+          referral_name?: string | null
           status?: string
           updated_at?: string
         }

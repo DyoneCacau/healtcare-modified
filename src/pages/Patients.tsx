@@ -23,6 +23,8 @@ interface UIPatient {
   birthDate: string;
   clinicalNotes: string;
   allergies: string[];
+  leadSource: string | null;
+  referralName: string | null;
   createdAt: string;
   status: 'active' | 'inactive';
 }
@@ -37,6 +39,8 @@ const transformPatient = (p: PatientData): UIPatient => ({
   birthDate: p.birth_date || '',
   clinicalNotes: p.clinical_notes || '',
   allergies: p.allergies || [],
+  leadSource: p.lead_source || null,
+  referralName: p.referral_name || null,
   createdAt: p.created_at.split('T')[0],
   status: p.status as 'active' | 'inactive',
 });
@@ -125,6 +129,8 @@ const Patients = () => {
         birth_date: patientData.birthDate || null,
         clinical_notes: patientData.clinicalNotes,
         allergies: patientData.allergies,
+        lead_source: patientData.leadSource || null,
+        referral_name: patientData.referralName || null,
         status: patientData.status,
       });
     } else {
@@ -138,6 +144,8 @@ const Patients = () => {
         birth_date: patientData.birthDate || null,
         clinical_notes: patientData.clinicalNotes,
         allergies: patientData.allergies,
+        lead_source: patientData.leadSource || null,
+        referral_name: patientData.referralName || null,
         status: patientData.status,
       });
     }

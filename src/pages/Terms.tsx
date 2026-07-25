@@ -40,6 +40,8 @@ export default function Terms() {
     birthDate: patients[0].birth_date || '',
     clinicalNotes: patients[0].clinical_notes || '',
     allergies: patients[0].allergies || [],
+    leadSource: patients[0].lead_source || null,
+    referralName: patients[0].referral_name || null,
     createdAt: patients[0].created_at,
     status: patients[0].status as 'active' | 'inactive',
   } : null;

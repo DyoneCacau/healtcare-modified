@@ -31,6 +31,8 @@ export function QuickActions() {
       birth_date: patientData.birthDate || null,
       clinical_notes: patientData.clinicalNotes,
       allergies: patientData.allergies,
+      lead_source: patientData.leadSource || null,
+      referral_name: patientData.referralName || null,
       status: patientData.status,
     });
     setPatientDialogOpen(false);

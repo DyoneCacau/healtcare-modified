@@ -10,6 +10,7 @@ import {
   Plus,
   Search,
   UserRound,
+  X,
 } from 'lucide-react';
 import { MainLayout } from '@/components/layout/MainLayout';
 import { Button } from '@/components/ui/button';
@@ -53,6 +54,7 @@ import { toast } from 'sonner';
 
 const emptyForm = {
   name: '',
+  cpf: '',
   phone: '',
   email: '',
   stage: 'new' as CrmLeadStage,
@@ -62,8 +64,18 @@ const emptyForm = {
   estimated_value: 0,
   next_follow_up: '',
   notes: '',
+  allergies: [] as string[],
   owner_user_id: '',
   lost_reason: '',
+};
+
+const formatCPF = (value: string) => {
+  const numbers = value.replace(/\D/g, '');
+  return numbers
+    .replace(/(\d{3})(\d)/, '$1.$2')
+    .replace(/(\d{3})(\d)/, '$1.$2')
+    .replace(/(\d{3})(\d{1,2})/, '$1-$2')
+    .slice(0, 14);
 };
 
 export default function Crm() {
@@ -84,6 +96,7 @@ export default function Crm() {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editing, setEditing] = useState<CrmLead | null>(null);
   const [form, setForm] = useState(emptyForm);
+  const [newAllergy, setNewAllergy] = useState('');
   const [convertingId, setConvertingId] = useState<string | null>(null);
   const [dragLeadId, setDragLeadId] = useState<string | null>(null);
   const [dragOverStage, setDragOverStage] = useState<CrmLeadStage | null>(null);
@@ -128,7 +141,20 @@ export default function Crm() {
       ...emptyForm,
       owner_user_id: user?.id || '',
     });
+    setNewAllergy('');
     setDialogOpen(true);
+  };
+
+  const handleAddAllergy = () => {
+    const value = newAllergy.trim();
+    if (value && !form.allergies.includes(value)) {
+      setForm((prev) => ({ ...prev, allergies: [...prev.allergies, value] }));
+      setNewAllergy('');
+    }
+  };
+
+  const handleRemoveAllergy = (allergy: string) => {
+    setForm((prev) => ({ ...prev, allergies: prev.allergies.filter((a) => a !== allergy) }));
   };
 
   const openEdit = (lead: CrmLead) => {
@@ -136,6 +162,7 @@ export default function Crm() {
     setFormError('');
     setForm({
       name: lead.name,
+      cpf: lead.cpf ? formatCPF(lead.cpf) : '',
       phone: lead.phone || '',
       email: lead.email || '',
       stage: lead.stage,
@@ -145,9 +172,11 @@ export default function Crm() {
       estimated_value: lead.estimatedValue || 0,
       next_follow_up: lead.nextFollowUp || '',
       notes: lead.notes || '',
+      allergies: lead.allergies || [],
       owner_user_id: lead.ownerUserId || '',
       lost_reason: lead.lostReason || '',
     });
+    setNewAllergy('');
     setDialogOpen(true);
   };
 
@@ -159,6 +188,7 @@ export default function Crm() {
     setFormError('');
     const payload = {
       name: form.name.trim(),
+      cpf: form.cpf.replace(/\D/g, '') ? form.cpf.trim() : null,
       phone: form.phone.trim(),
       email: form.email || null,
       stage: form.stage,
@@ -168,6 +198,7 @@ export default function Crm() {
       estimated_value: form.estimated_value > 0 ? form.estimated_value : null,
       next_follow_up: form.next_follow_up || null,
       notes: form.notes || null,
+      allergies: form.allergies,
       owner_user_id: form.owner_user_id || user?.id || null,
       lost_reason: form.stage === 'lost' ? form.lost_reason || null : null,
     };
@@ -186,23 +217,22 @@ export default function Crm() {
     try {
       let patientId = lead.patientId;
       if (!patientId) {
-        const originLabel = lead.leadSource ? leadSourceLabels[lead.leadSource] : null;
         const created = await createPatient.mutateAsync({
           name: lead.name,
-          cpf: null,
+          cpf: lead.cpf || null,
           phone: lead.phone,
           email: lead.email,
           address: null,
           birth_date: null,
           clinical_notes: [
-            originLabel ? `Origem (CRM): ${originLabel}` : null,
-            lead.referralName ? `Indicação: ${lead.referralName}` : null,
             lead.interest ? `Interesse: ${lead.interest}` : null,
             lead.notes || null,
           ]
             .filter(Boolean)
             .join('\n') || null,
-          allergies: [],
+          allergies: lead.allergies || [],
+          lead_source: lead.leadSource || null,
+          referral_name: lead.referralName || null,
           status: 'active',
         });
         patientId = created.id;
@@ -495,6 +525,18 @@ export default function Crm() {
                 />
               </div>
             </div>
+            <div className="space-y-2">
+              <Label>CPF</Label>
+              <Input
+                value={form.cpf}
+                onChange={(e) => setForm({ ...form, cpf: formatCPF(e.target.value) })}
+                placeholder="000.000.000-00 (opcional)"
+                maxLength={14}
+              />
+              <p className="text-xs text-muted-foreground">
+                Se informado, vai automaticamente para o cadastro do paciente ao converter o lead.
+              </p>
+            </div>
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-2">
                 <Label>Etapa</Label>
@@ -588,6 +630,43 @@ export default function Crm() {
                 />
               </div>
             )}
+            <div className="space-y-2">
+              <Label>Alergias</Label>
+              <div className="flex gap-2">
+                <Input
+                  value={newAllergy}
+                  onChange={(e) => setNewAllergy(e.target.value)}
+                  placeholder="Digite uma alergia"
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      e.preventDefault();
+                      handleAddAllergy();
+                    }
+                  }}
+                />
+                <Button type="button" variant="outline" onClick={handleAddAllergy}>
+                  <Plus className="h-4 w-4" />
+                </Button>
+              </div>
+              {form.allergies.length > 0 && (
+                <div className="flex flex-wrap gap-2 mt-1">
+                  {form.allergies.map((allergy) => (
+                    <Badge
+                      key={allergy}
+                      variant="destructive"
+                      className="flex items-center gap-1 cursor-pointer"
+                      onClick={() => handleRemoveAllergy(allergy)}
+                    >
+                      {allergy}
+                      <X className="h-3 w-3" />
+                    </Badge>
+                  ))}
+                </div>
+              )}
+              <p className="text-xs text-muted-foreground">
+                Também vai automaticamente para o cadastro do paciente ao converter o lead.
+              </p>
+            </div>
             <div className="space-y-2">
               <Label>Observações</Label>
               <Textarea

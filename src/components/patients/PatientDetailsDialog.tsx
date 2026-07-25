@@ -25,6 +25,8 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Patient } from '@/types/patient';
 import { AppointmentWithClinic } from '@/types/clinic';
+import { LeadSourceBadge } from '@/components/crm/LeadSourceBadge';
+import type { LeadSource } from '@/types/agenda';
 import { DentalChart as DentalChartType } from '@/types/dental';
 import { PatientFile } from '@/types/patientFile';
 import { DentalChart } from './DentalChart';
@@ -202,6 +204,20 @@ export const PatientDetailsDialog = ({
                       {format(parseISO(patient.createdAt), "dd/MM/yyyy", { locale: ptBR })}
                     </span>
                   </div>
+                  {patient.leadSource && (
+                    <div className="flex items-center gap-3">
+                      <User className="h-4 w-4 text-muted-foreground" />
+                      <span className="flex items-center gap-2">
+                        Origem: <LeadSourceBadge source={patient.leadSource as LeadSource} />
+                      </span>
+                    </div>
+                  )}
+                  {patient.referralName && (
+                    <div className="flex items-center gap-3">
+                      <User className="h-4 w-4 text-muted-foreground" />
+                      <span>Indicado por: {patient.referralName}</span>
+                    </div>
+                  )}
                 </CardContent>
               </Card>
 

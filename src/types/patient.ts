@@ -8,6 +8,8 @@ export interface Patient {
   birthDate: string;
   clinicalNotes: string;
   allergies: string[];
+  leadSource: string | null;
+  referralName: string | null;
   createdAt: string;
   status: 'active' | 'inactive';
 }

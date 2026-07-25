@@ -61,6 +61,8 @@ function mapDbPatient(p: {
     birthDate: p.birth_date || '',
     clinicalNotes: p.clinical_notes || '',
     allergies: p.allergies || [],
+    leadSource: null,
+    referralName: null,
     createdAt: p.created_at,
     status: p.status as 'active' | 'inactive',
   };

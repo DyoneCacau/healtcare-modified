@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
-import { CalendarIcon, HelpCircle } from 'lucide-react';
+import { CalendarIcon, HelpCircle, AlertTriangle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Calendar } from '@/components/ui/calendar';
 import {
@@ -281,6 +281,7 @@ export function AppointmentFormDialog({
   };
 
   const activePatients = patients.filter((p) => p.status === 'active');
+  const selectedPatientAllergies = patients.find((p) => p.id === patientId)?.allergies || [];
 
   const procedureSelectValue = procedureId
     || (procedure === 'Outros' ? '__custom__' : procedure ? `legacy:${procedure}` : '');
@@ -355,6 +356,14 @@ export function AppointmentFormDialog({
                 )}
               </SelectContent>
             </Select>
+            {selectedPatientAllergies.length > 0 && (
+              <div className="flex items-start gap-2 rounded-md border border-destructive/30 bg-destructive/5 px-3 py-2 text-xs text-destructive">
+                <AlertTriangle className="h-4 w-4 shrink-0 mt-0.5" />
+                <span>
+                  <strong>Alergias:</strong> {selectedPatientAllergies.join(', ')}
+                </span>
+              </div>
+            )}
           </div>
 
           <div className="grid grid-cols-2 gap-4">

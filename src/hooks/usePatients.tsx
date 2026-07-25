@@ -15,9 +15,26 @@ export interface PatientData {
   birth_date: string | null;
   clinical_notes: string | null;
   allergies: string[];
+  lead_source: string | null;
+  referral_name: string | null;
   status: string;
   created_at: string;
   updated_at: string;
+}
+
+/**
+ * Propaga o nome do paciente para os leads do CRM vinculados a ele
+ * (crm_leads.patient_id). Silencioso: não deve quebrar a atualização do
+ * paciente caso o módulo de CRM não esteja habilitado/instalado na clínica.
+ */
+async function syncNameToLinkedLeads(patientId: string, name: string) {
+  const { error } = await supabase
+    .from('crm_leads' as any)
+    .update({ name, updated_at: new Date().toISOString() })
+    .eq('patient_id', patientId);
+  if (error && (error as { code?: string }).code !== '42P01') {
+    console.error('Failed to sync patient name to linked CRM leads', error);
+  }
 }
 
 export function usePatients() {
@@ -115,6 +132,11 @@ export function usePatientMutations() {
         .single();
 
       if (error) throw error;
+
+      // Sincroniza o nome de volta para o lead do CRM vinculado (se houver)
+      if (data.name != null && data.name !== beforeData?.name) {
+        await syncNameToLinkedLeads(id, data.name);
+      }
 
       if (clinicId && user?.id) {
         const { error: eventError } = await supabase.from('audit_events').insert({

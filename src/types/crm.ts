@@ -6,6 +6,7 @@ export interface CrmLead {
   id: string;
   clinicId: string;
   name: string;
+  cpf: string | null;
   phone: string | null;
   email: string | null;
   stage: CrmLeadStage;
@@ -15,6 +16,7 @@ export interface CrmLead {
   estimatedValue: number | null;
   nextFollowUp: string | null;
   notes: string | null;
+  allergies: string[];
   ownerUserId: string | null;
   ownerName?: string | null;
   patientId: string | null;
@@ -26,6 +28,7 @@ export interface CrmLead {
 
 export interface CrmLeadInput {
   name?: string;
+  cpf?: string | null;
   phone?: string | null;
   email?: string | null;
   stage?: CrmLeadStage;
@@ -35,6 +38,7 @@ export interface CrmLeadInput {
   estimated_value?: number | null;
   next_follow_up?: string | null;
   notes?: string | null;
+  allergies?: string[];
   owner_user_id?: string | null;
   patient_id?: string | null;
   appointment_id?: string | null;
