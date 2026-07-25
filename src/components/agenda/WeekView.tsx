@@ -3,6 +3,8 @@ import { ptBR } from 'date-fns/locale';
 import { cn } from '@/lib/utils';
 import { AgendaAppointment } from '@/types/agenda';
 import { AppointmentCard } from './AppointmentCard';
+import { CurrentTimeIndicator } from './CurrentTimeIndicator';
+import { useCurrentTime } from '@/hooks/useCurrentTime';
 
 interface WeekViewProps {
   date: Date;
@@ -33,9 +35,23 @@ export function WeekView({
   onWhatsApp,
   onSlotClick,
 }: WeekViewProps) {
+  const now = useCurrentTime();
   const weekStart = startOfWeek(date, { weekStartsOn: 1 });
   const weekDays = Array.from({ length: 7 }, (_, i) => addDays(weekStart, i));
-  const today = new Date();
+  const today = now;
+
+  // Linha "agora": só quando a semana exibida inclui hoje, e dentro do intervalo de horários.
+  const currentTimeInfo = (() => {
+    if (!weekDays.some((d) => isSameDay(d, now))) return null;
+    const nowMinutes = now.getHours() * 60 + now.getMinutes();
+    const firstSlotMinutes = 8 * 60;
+    const lastSlotEndMinutes = 19 * 60;
+    if (nowMinutes < firstSlotMinutes || nowMinutes >= lastSlotEndMinutes) return null;
+
+    const slotIndex = Math.min(Math.floor((nowMinutes - firstSlotMinutes) / 60), timeSlots.length - 1);
+    const slotStart = firstSlotMinutes + slotIndex * 60;
+    return { slot: timeSlots[slotIndex], fraction: (nowMinutes - slotStart) / 60 };
+  })();
 
   const getAppointmentsForDayAndSlot = (day: Date, slot: string) => {
     const dayStr = format(day, 'yyyy-MM-dd');
@@ -92,7 +108,10 @@ export function WeekView({
       {/* Time slots grid */}
       <div className="max-h-[600px] overflow-y-auto">
         {timeSlots.map((slot) => (
-          <div key={slot} className="grid grid-cols-8 border-b border-border last:border-b-0">
+          <div key={slot} className="relative grid grid-cols-8 border-b border-border last:border-b-0">
+            {currentTimeInfo?.slot === slot && (
+              <CurrentTimeIndicator fraction={currentTimeInfo.fraction} offsetClassName="ml-20" />
+            )}
             <div className="w-20 border-r border-border px-2 py-3">
               <span className="text-xs font-medium text-muted-foreground">
                 {slot}
