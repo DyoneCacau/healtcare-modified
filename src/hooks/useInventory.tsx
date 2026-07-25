@@ -57,7 +57,8 @@ export function useInventoryProducts() {
 
   return { 
     products: products || [], 
-    activeProducts: (products || []).filter(p => p.is_active),
+    // null/undefined conta como ativo (produtos antigos podem não ter a flag)
+    activeProducts: (products || []).filter((p) => p.is_active !== false),
     isLoading, 
     error,
     refetch 
