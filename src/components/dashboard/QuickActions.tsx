@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { CalendarPlus, UserPlus, Receipt, FileText } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { FeatureButton } from "@/components/subscription/FeatureButton";
 import { Label } from "@/components/ui/label";
 import {
   Dialog,
@@ -207,6 +208,7 @@ export function QuickActions() {
       label: "Emitir Documento",
       description: "Atestado, declaração ou receituário",
       onClick: openDocumentDialog,
+      feature: "termos",
     },
   ];
 
@@ -221,25 +223,43 @@ export function QuickActions() {
           <div className="grid grid-cols-2 gap-3">
             {actions.map((action) => {
               const Icon = action.icon;
+              const buttonClassName = "flex h-auto w-full flex-col items-center gap-2 p-4 hover:border-primary hover:bg-accent";
+              const content = (
+                <>
+                  <div className="rounded-lg bg-primary/10 p-2">
+                    <Icon className="h-5 w-5 text-primary" />
+                  </div>
+                  <div className="text-center w-full space-y-0.5">
+                    <p className="text-sm font-medium leading-tight">
+                      {action.label}
+                    </p>
+                    <p className="text-xs text-muted-foreground leading-tight">
+                      {action.description}
+                    </p>
+                  </div>
+                </>
+              );
               return (
                 <div key={action.label} className="min-w-0">
-                  <Button
-                    variant="outline"
-                    className="flex h-auto w-full flex-col items-center gap-2 p-4 hover:border-primary hover:bg-accent"
-                    onClick={action.onClick}
-                  >
-                    <div className="rounded-lg bg-primary/10 p-2">
-                      <Icon className="h-5 w-5 text-primary" />
-                    </div>
-                    <div className="text-center w-full space-y-0.5">
-                      <p className="text-sm font-medium leading-tight">
-                        {action.label}
-                      </p>
-                      <p className="text-xs text-muted-foreground leading-tight">
-                        {action.description}
-                      </p>
-                    </div>
-                  </Button>
+                  {action.feature ? (
+                    <FeatureButton
+                      feature={action.feature}
+                      variant="outline"
+                      className={buttonClassName}
+                      onClick={action.onClick}
+                      lockedMessage={`Emitir documentos não está disponível no seu plano atual`}
+                    >
+                      {content}
+                    </FeatureButton>
+                  ) : (
+                    <Button
+                      variant="outline"
+                      className={buttonClassName}
+                      onClick={action.onClick}
+                    >
+                      {content}
+                    </Button>
+                  )}
                 </div>
               );
             })}
