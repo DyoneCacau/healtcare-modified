@@ -546,7 +546,7 @@ export function DocumentPrintPreview(props: DocumentPrintPreviewProps) {
           )}
           {(atestadoCid || !forPrint) && (
             <div className="mt-2">
-              <p className="font-medium mb-1">CID (opcional):</p>
+              <p className="font-medium mb-1">CID:</p>
               {forPrint ? (
                 atestadoCid && <span>{atestadoCid}</span>
               ) : (
