@@ -365,6 +365,9 @@ export default function Agenda() {
       id: appointment.id,
       status: 'completed',
       payment_status: paymentStatus,
+      procedure: appointment.procedure,
+      procedure_id: appointment.procedureId ?? null,
+      procedure_price: appointment.procedurePrice ?? null,
     });
 
     const feeNote = bookingFee > 0

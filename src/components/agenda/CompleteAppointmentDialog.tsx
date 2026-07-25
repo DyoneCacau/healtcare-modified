@@ -1,11 +1,9 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import {
   CheckCircle,
   DollarSign,
-  Percent,
-  AlertTriangle,
   User,
   Stethoscope,
   Calculator,
@@ -57,6 +55,7 @@ import { remainingAfterBookingFee } from '@/lib/bookingFee';
 import { AppointmentMaterialsEditor } from '@/components/agenda/AppointmentMaterialsEditor';
 import { useProcedureMaterials } from '@/hooks/useProcedureMaterials';
 import { useInventoryProducts } from '@/hooks/useInventory';
+import { useClinicProcedures } from '@/hooks/useClinicProcedures';
 import { usePermissions } from '@/hooks/usePermissions';
 import { useAuth } from '@/hooks/useAuth';
 import { parseQuantityInput } from '@/lib/quantityInput';
@@ -113,12 +112,20 @@ export function CompleteAppointmentDialog({
   const [materialDrafts, setMaterialDrafts] = useState<ProcedureMaterialDraft[]>([]);
   const [overrideEnabled, setOverrideEnabled] = useState(false);
   const [overrideReason, setOverrideReason] = useState('');
+  const [selectedProcedureId, setSelectedProcedureId] = useState<string>('');
+  const [materialsTouched, setMaterialsTouched] = useState(false);
 
   const { isSuperAdmin } = useAuth();
   const { can } = usePermissions();
   const canOverrideStock = isSuperAdmin || can('estoque_liberar', 'can_edit');
-  const { materials: templateMaterials } = useProcedureMaterials(appointment?.procedureId);
+  const { activeProcedures } = useClinicProcedures();
+  const { materials: templateMaterials } = useProcedureMaterials(selectedProcedureId || null);
   const { activeProducts } = useInventoryProducts();
+
+  const selectedProcedure = useMemo(
+    () => activeProcedures.find((p) => p.id === selectedProcedureId) || null,
+    [activeProcedures, selectedProcedureId],
+  );
 
   useEffect(() => {
     if (appointment) {
@@ -133,6 +140,12 @@ export function CompleteAppointmentDialog({
       setOverrideEnabled(false);
       setOverrideReason('');
       setMaterialDrafts([]);
+      setMaterialsTouched(false);
+
+      const matchedByName = activeProcedures.find(
+        (p) => p.name.trim().toLowerCase() === (appointment.procedure || '').trim().toLowerCase(),
+      );
+      setSelectedProcedureId(appointment.procedureId || matchedByName?.id || '');
       
       // Validate appointment completion
       const validationResult = validateAppointmentCompletion(
@@ -147,7 +160,7 @@ export function CompleteAppointmentDialog({
       // editável abaixo para descontos, indicação ou negociação.
       // Agendamentos legados não têm snapshot do catálogo; mantêm o
       // comportamento anterior de R$ 150 como sugestão, sempre editável.
-      const suggestedPrice = appointment.procedurePrice ?? 150;
+      const suggestedPrice = appointment.procedurePrice ?? matchedByName?.default_price ?? 150;
       setServiceValue(suggestedPrice);
 
       // Find ALL applicable commission rules (professional + seller + reception)
@@ -168,27 +181,39 @@ export function CompleteAppointmentDialog({
       }));
       setCommissionBreakdown(breakdown);
     }
-  }, [appointment, commissionRules]);
+  }, [appointment, commissionRules, activeProcedures]);
 
   useEffect(() => {
-    if (!appointment) return;
-    if (templateMaterials.length === 0) {
-      // Mantém linhas manuais já adicionadas; só preenche template na abertura
+    if (!appointment || materialsTouched) return;
+
+    if (templateMaterials.length > 0) {
+      setMaterialDrafts(
+        templateMaterials.map((m) => ({
+          key: m.id,
+          productId: m.product_id,
+          productName: m.product_name || '',
+          productUnit: m.product_unit || 'un',
+          quantity: String(m.default_quantity).replace('.', ','),
+          currentStock: Number(m.current_stock) || 0,
+          fromTemplate: true,
+        })),
+      );
       return;
     }
-    setMaterialDrafts((prev) => {
-      if (prev.length > 0 && prev.some((p) => !p.fromTemplate)) return prev;
-      return templateMaterials.map((m) => ({
-        key: m.id,
-        productId: m.product_id,
-        productName: m.product_name || '',
-        productUnit: m.product_unit || 'un',
-        quantity: String(m.default_quantity).replace('.', ','),
-        currentStock: Number(m.current_stock) || 0,
-        fromTemplate: true,
-      }));
-    });
-  }, [appointment, templateMaterials]);
+
+    // Sem composição no cadastro: deixa uma linha pronta para preencher na hora
+    setMaterialDrafts([
+      {
+        key: crypto.randomUUID(),
+        productId: '',
+        productName: '',
+        productUnit: 'un',
+        quantity: '',
+        currentStock: 0,
+        fromTemplate: false,
+      },
+    ]);
+  }, [appointment, templateMaterials, materialsTouched, selectedProcedureId]);
 
   useEffect(() => {
     if (applicableRules.length > 0 && serviceValue > 0) {
@@ -241,12 +266,30 @@ export function CompleteAppointmentDialog({
     return usage;
   };
 
+  const handleProcedureChange = (procedureId: string) => {
+    setSelectedProcedureId(procedureId);
+    setMaterialsTouched(false);
+    setMaterialDrafts([]);
+    const proc = activeProcedures.find((p) => p.id === procedureId);
+    if (proc) {
+      setServiceValue(proc.default_price);
+    }
+  };
+
   const handleComplete = () => {
     if (!appointment || !canComplete()) return;
     const materialsUsage = buildMaterialsUsage();
     if (materialsUsage == null) return;
+
+    const completedAppointment: AgendaAppointment = {
+      ...appointment,
+      procedureId: selectedProcedureId || appointment.procedureId,
+      procedure: selectedProcedure?.name || appointment.procedure,
+      procedurePrice: selectedProcedure?.default_price ?? appointment.procedurePrice,
+    };
+
     onComplete(
-      appointment,
+      completedAppointment,
       serviceValue,
       paymentMethod,
       quantity,
@@ -315,7 +358,7 @@ export function CompleteAppointmentDialog({
                 <Stethoscope className="h-4 w-4 text-muted-foreground" />
                 <span>{appointment.professional.name}</span>
                 <Badge variant="outline" className="ml-auto">
-                  {appointment.procedure}
+                  {selectedProcedure?.name || appointment.procedure}
                 </Badge>
               </div>
               <div className="text-sm text-muted-foreground">
@@ -345,6 +388,52 @@ export function CompleteAppointmentDialog({
               )}
             </CardContent>
           </Card>
+
+          <Separator />
+
+          <div className="space-y-2">
+            <Label>Procedimento realizado</Label>
+            <Select
+              value={selectedProcedureId || undefined}
+              onValueChange={handleProcedureChange}
+              disabled={validation.errorCode === 'DUPLICATE'}
+            >
+              <SelectTrigger>
+                <SelectValue placeholder="Selecione o procedimento" />
+              </SelectTrigger>
+              <SelectContent>
+                {activeProcedures.map((proc) => (
+                  <SelectItem key={proc.id} value={proc.id}>
+                    {proc.name}
+                    {proc.category ? ` · ${proc.category}` : ''}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <p className="text-xs text-muted-foreground">
+              Ao trocar o procedimento, os materiais sugeridos são recarregados e podem ser editados.
+            </p>
+          </div>
+
+          <AppointmentMaterialsEditor
+            drafts={materialDrafts}
+            products={activeProducts.map((p) => ({
+              id: p.id,
+              name: p.name,
+              unit: p.unit,
+              current_stock: Number(p.current_stock) || 0,
+            }))}
+            canOverride={canOverrideStock}
+            overrideEnabled={overrideEnabled}
+            overrideReason={overrideReason}
+            procedureLabel={selectedProcedure?.name || appointment.procedure}
+            onOverrideEnabledChange={setOverrideEnabled}
+            onOverrideReasonChange={setOverrideReason}
+            onChange={(next) => {
+              setMaterialsTouched(true);
+              setMaterialDrafts(next);
+            }}
+          />
 
           <Separator />
 
@@ -620,22 +709,6 @@ export function CompleteAppointmentDialog({
               </Card>
             )}
           </div>
-
-          <AppointmentMaterialsEditor
-            drafts={materialDrafts}
-            products={activeProducts.map((p) => ({
-              id: p.id,
-              name: p.name,
-              unit: p.unit,
-              current_stock: Number(p.current_stock) || 0,
-            }))}
-            canOverride={canOverrideStock}
-            overrideEnabled={overrideEnabled}
-            overrideReason={overrideReason}
-            onOverrideEnabledChange={setOverrideEnabled}
-            onOverrideReasonChange={setOverrideReason}
-            onChange={setMaterialDrafts}
-          />
 
           {/* Opção de agendar retorno */}
           <div className="flex items-center space-x-2 rounded-lg border border-border/50 bg-muted/30 p-3">
