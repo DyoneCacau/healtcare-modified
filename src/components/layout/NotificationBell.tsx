@@ -12,6 +12,7 @@ import {
 } from "@/components/ui/popover";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { cn, getClinicDisplayName } from "@/lib/utils";
+import { formatNotificationMessageForDisplay } from "@/lib/notificationMessage";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { useSubscription } from "@/hooks/useSubscription";
@@ -355,7 +356,11 @@ export function NotificationBell({ collapsed }: NotificationBellProps) {
                       {clinicNameById.get(n.clinic_id)}
                     </p>
                   )}
-                  {n.message && <p className="mt-0.5 truncate text-xs text-muted-foreground">{n.message}</p>}
+                  {n.message && (
+                    <p className="mt-0.5 truncate text-xs text-muted-foreground">
+                      {formatNotificationMessageForDisplay(n.message)}
+                    </p>
+                  )}
                   <p className="mt-1 text-[11px] text-muted-foreground/70">
                     {formatDistanceToNow(new Date(n.created_at), { addSuffix: true, locale: ptBR })}
                   </p>
