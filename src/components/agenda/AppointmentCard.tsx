@@ -74,6 +74,75 @@ const paymentConfig: Record<string, { label: string; class: string }> = {
   refunded: { label: 'Estornado', class: 'bg-red-100 text-red-700' },
 };
 
+function AppointmentActionsMenu({
+  appointment,
+  onEdit,
+  onCancel,
+  onConfirm,
+  onComplete,
+  onMarkNoShow,
+  onWhatsApp,
+  triggerClassName,
+  iconClassName,
+}: AppointmentCardProps & { triggerClassName?: string; iconClassName?: string }) {
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <Button
+          variant="ghost"
+          size="icon"
+          className={triggerClassName ?? 'h-8 w-8'}
+          onClick={(e) => e.stopPropagation()}
+        >
+          <MoreVertical className={iconClassName ?? 'h-4 w-4'} />
+        </Button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="end" onClick={(e) => e.stopPropagation()}>
+        <DropdownMenuItem onClick={() => onWhatsApp(appointment)}>
+          <MessageSquare className="mr-2 h-4 w-4" />
+          Enviar WhatsApp
+        </DropdownMenuItem>
+        {appointment.status === 'pending' && (
+          <DropdownMenuItem onClick={() => onConfirm(appointment)}>
+            <Check className="mr-2 h-4 w-4" />
+            Confirmar
+          </DropdownMenuItem>
+        )}
+        {(appointment.status === 'confirmed' || appointment.status === 'pending') && onComplete && (
+          <DropdownMenuItem
+            onClick={() => onComplete(appointment)}
+            className="text-emerald-600 focus:text-emerald-600"
+          >
+            <CheckCircle className="mr-2 h-4 w-4" />
+            Finalizar Atendimento
+          </DropdownMenuItem>
+        )}
+        {(appointment.status === 'confirmed' || appointment.status === 'pending' || appointment.status === 'return') && onMarkNoShow && (
+          <DropdownMenuItem
+            onClick={() => onMarkNoShow(appointment)}
+            className="text-orange-600 focus:text-orange-600"
+          >
+            <UserX className="mr-2 h-4 w-4" />
+            Marcar como faltou
+          </DropdownMenuItem>
+        )}
+        <DropdownMenuItem onClick={() => onEdit(appointment)}>
+          <Edit className="mr-2 h-4 w-4" />
+          Editar
+        </DropdownMenuItem>
+        <DropdownMenuSeparator />
+        <DropdownMenuItem
+          onClick={() => onCancel(appointment)}
+          className="text-destructive focus:text-destructive"
+        >
+          <X className="mr-2 h-4 w-4" />
+          Cancelar
+        </DropdownMenuItem>
+      </DropdownMenuContent>
+    </DropdownMenu>
+  );
+}
+
 export function AppointmentCard({
   appointment,
   onEdit,
@@ -91,14 +160,28 @@ export function AppointmentCard({
     return (
       <div
         className={cn(
-          'rounded-md border-l-4 px-2 py-1 text-xs cursor-pointer transition-all hover:shadow-md',
+          'group relative flex items-start gap-1 rounded-md border-l-4 px-2 py-1 text-xs cursor-pointer transition-all hover:shadow-md',
           status.bg,
           status.border
         )}
         title={`${appointment.patientName} - ${appointment.procedure}`}
+        onClick={() => onEdit(appointment)}
       >
-        <div className="font-medium truncate">{appointment.patientName}</div>
-        <div className="text-muted-foreground truncate">{appointment.procedure}</div>
+        <div className="min-w-0 flex-1">
+          <div className="font-medium truncate">{appointment.patientName}</div>
+          <div className="text-muted-foreground truncate">{appointment.procedure}</div>
+        </div>
+        <AppointmentActionsMenu
+          appointment={appointment}
+          onEdit={onEdit}
+          onCancel={onCancel}
+          onConfirm={onConfirm}
+          onComplete={onComplete}
+          onMarkNoShow={onMarkNoShow}
+          onWhatsApp={onWhatsApp}
+          triggerClassName="h-5 w-5 shrink-0 opacity-0 group-hover:opacity-100 focus-visible:opacity-100"
+          iconClassName="h-3 w-3"
+        />
       </div>
     );
   }
@@ -154,55 +237,15 @@ export function AppointmentCard({
           </div>
         </div>
 
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <Button variant="ghost" size="icon" className="h-8 w-8">
-              <MoreVertical className="h-4 w-4" />
-            </Button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="end">
-            <DropdownMenuItem onClick={() => onWhatsApp(appointment)}>
-              <MessageSquare className="mr-2 h-4 w-4" />
-              Enviar WhatsApp
-            </DropdownMenuItem>
-            {appointment.status === 'pending' && (
-              <DropdownMenuItem onClick={() => onConfirm(appointment)}>
-                <Check className="mr-2 h-4 w-4" />
-                Confirmar
-              </DropdownMenuItem>
-            )}
-            {(appointment.status === 'confirmed' || appointment.status === 'pending') && onComplete && (
-              <DropdownMenuItem 
-                onClick={() => onComplete(appointment)}
-                className="text-emerald-600 focus:text-emerald-600"
-              >
-                <CheckCircle className="mr-2 h-4 w-4" />
-                Finalizar Atendimento
-              </DropdownMenuItem>
-            )}
-            {(appointment.status === 'confirmed' || appointment.status === 'pending' || appointment.status === 'return') && onMarkNoShow && (
-              <DropdownMenuItem 
-                onClick={() => onMarkNoShow(appointment)}
-                className="text-orange-600 focus:text-orange-600"
-              >
-                <UserX className="mr-2 h-4 w-4" />
-                Marcar como faltou
-              </DropdownMenuItem>
-            )}
-            <DropdownMenuItem onClick={() => onEdit(appointment)}>
-              <Edit className="mr-2 h-4 w-4" />
-              Editar
-            </DropdownMenuItem>
-            <DropdownMenuSeparator />
-            <DropdownMenuItem
-              onClick={() => onCancel(appointment)}
-              className="text-destructive focus:text-destructive"
-            >
-              <X className="mr-2 h-4 w-4" />
-              Cancelar
-            </DropdownMenuItem>
-          </DropdownMenuContent>
-        </DropdownMenu>
+        <AppointmentActionsMenu
+          appointment={appointment}
+          onEdit={onEdit}
+          onCancel={onCancel}
+          onConfirm={onConfirm}
+          onComplete={onComplete}
+          onMarkNoShow={onMarkNoShow}
+          onWhatsApp={onWhatsApp}
+        />
       </div>
     </div>
   );
