@@ -9,13 +9,16 @@ import type {
   ClinicProcedureMaterial,
 } from '@/types/procedureMaterial';
 
+const EMPTY_PROCEDURE_MATERIALS: ClinicProcedureMaterial[] = [];
+const EMPTY_APPOINTMENT_MATERIALS: AppointmentMaterialRow[] = [];
+
 export function useProcedureMaterials(procedureId?: string | null) {
   const { clinicId } = useClinic();
 
   const { data, isLoading, error, refetch } = useQuery({
     queryKey: ['procedure-materials', clinicId, procedureId],
     queryFn: async (): Promise<ClinicProcedureMaterial[]> => {
-      if (!clinicId || !procedureId) return [];
+      if (!clinicId || !procedureId) return EMPTY_PROCEDURE_MATERIALS;
 
       const { data: rows, error: queryError } = await (supabase as any)
         .from('clinic_procedure_materials')
@@ -33,7 +36,7 @@ export function useProcedureMaterials(procedureId?: string | null) {
         .order('sort_order', { ascending: true });
 
       if (queryError) {
-        if (queryError.code === '42P01') return [];
+        if (queryError.code === '42P01') return EMPTY_PROCEDURE_MATERIALS;
         throw queryError;
       }
 
@@ -52,7 +55,8 @@ export function useProcedureMaterials(procedureId?: string | null) {
     enabled: !!clinicId && !!procedureId,
   });
 
-  return { materials: data || [], isLoading, error, refetch };
+  // Referência estável quando vazio — evita resetar a UI a cada render
+  return { materials: data ?? EMPTY_PROCEDURE_MATERIALS, isLoading, error, refetch };
 }
 
 export function useAppointmentMaterials(appointmentIds: string[]) {
@@ -62,7 +66,7 @@ export function useAppointmentMaterials(appointmentIds: string[]) {
   const { data, isLoading } = useQuery({
     queryKey: ['appointment-materials', clinicId, idsKey],
     queryFn: async (): Promise<AppointmentMaterialRow[]> => {
-      if (!clinicId || appointmentIds.length === 0) return [];
+      if (!clinicId || appointmentIds.length === 0) return EMPTY_APPOINTMENT_MATERIALS;
 
       const { data: rows, error } = await (supabase as any)
         .from('appointment_materials')
@@ -72,7 +76,7 @@ export function useAppointmentMaterials(appointmentIds: string[]) {
         .order('created_at', { ascending: true });
 
       if (error) {
-        if (error.code === '42P01') return [];
+        if (error.code === '42P01') return EMPTY_APPOINTMENT_MATERIALS;
         throw error;
       }
 
@@ -91,7 +95,7 @@ export function useAppointmentMaterials(appointmentIds: string[]) {
     enabled: !!clinicId && appointmentIds.length > 0,
   });
 
-  return { materials: data || [], isLoading };
+  return { materials: data ?? EMPTY_APPOINTMENT_MATERIALS, isLoading };
 }
 
 export function useProcedureMaterialMutations() {

@@ -203,19 +203,22 @@ export function CompleteAppointmentDialog({
       return;
     }
 
-    // Sem composição no cadastro: deixa uma linha pronta para preencher na hora
-    setMaterialDrafts([
-      {
-        key: crypto.randomUUID(),
-        productId: '',
-        productName: '',
-        productUnit: 'un',
-        quantity: '',
-        currentStock: 0,
-        fromTemplate: false,
-      },
-    ]);
-  }, [appointment, templateMaterials, materialsTouched, selectedProcedureId]);
+    // Sem composição: uma linha vazia, só se ainda não houver linhas
+    setMaterialDrafts((prev) => {
+      if (prev.length > 0) return prev;
+      return [
+        {
+          key: `material-${Date.now()}`,
+          productId: '',
+          productName: '',
+          productUnit: 'un',
+          quantity: '',
+          currentStock: 0,
+          fromTemplate: false,
+        },
+      ];
+    });
+  }, [appointment?.id, selectedProcedureId, templateMaterials, materialsTouched]);
 
   useEffect(() => {
     if (applicableRules.length > 0 && serviceValue > 0) {
@@ -437,7 +440,15 @@ export function CompleteAppointmentDialog({
             onOverrideReasonChange={setOverrideReason}
             onChange={(next) => {
               setMaterialsTouched(true);
-              setMaterialDrafts(next);
+              setMaterialDrafts(next.length > 0 ? next : [{
+                key: `material-${Date.now()}`,
+                productId: '',
+                productName: '',
+                productUnit: 'un',
+                quantity: '',
+                currentStock: 0,
+                fromTemplate: false,
+              }]);
             }}
           />
 

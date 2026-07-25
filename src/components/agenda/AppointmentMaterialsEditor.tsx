@@ -13,6 +13,7 @@ import {
 } from '@/components/ui/select';
 import type { ProcedureMaterialDraft } from '@/types/procedureMaterial';
 import { formatQuantity, parseQuantityInput } from '@/lib/quantityInput';
+import { toast } from 'sonner';
 
 interface ProductOption {
   id: string;
@@ -35,7 +36,7 @@ interface AppointmentMaterialsEditorProps {
 
 function emptyDraft(): ProcedureMaterialDraft {
   return {
-    key: crypto.randomUUID(),
+    key: `material-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
     productId: '',
     productName: '',
     productUnit: 'un',
@@ -61,6 +62,10 @@ export function AppointmentMaterialsEditor({
   };
 
   const addLine = () => {
+    if (products.length === 0) {
+      toast.error('Cadastre produtos em Estoque para incluir materiais aqui');
+      return;
+    }
     onChange([...drafts, emptyDraft()]);
   };
 
