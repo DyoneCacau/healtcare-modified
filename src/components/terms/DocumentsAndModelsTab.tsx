@@ -243,6 +243,8 @@ export function DocumentsAndModelsTab() {
         clinicAddress={clinic ? formatClinicAddress(clinic) || undefined : undefined}
         clinicPhone={clinic?.phone || undefined}
         clinicEmail={clinic?.email || undefined}
+        clinicCity={clinic?.city || undefined}
+        clinicState={clinic?.state || undefined}
         primaryColor={branding?.primaryColor || '#000000'}
         useDefaultColor={!branding?.hasCustomColor}
         professionals={activeProfessionals.map((p) => ({ id: p.id, name: p.name, specialty: p.specialty, cro: p.cro }))}

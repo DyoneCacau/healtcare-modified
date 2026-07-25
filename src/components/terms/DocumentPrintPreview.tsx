@@ -68,6 +68,9 @@ interface DocumentPrintPreviewProps {
   clinicAddress?: string;
   clinicPhone?: string;
   clinicEmail?: string;
+  /** Cidade/UF cadastrados na clinica, usados na localidade da data de emissao (ex: "Fortaleza, CE") */
+  clinicCity?: string;
+  clinicState?: string;
   primaryColor?: string;
   useDefaultColor?: boolean;
   professionals?: ProfessionalOption[];
@@ -104,6 +107,8 @@ export function DocumentPrintPreview(props: DocumentPrintPreviewProps) {
     clinicAddress,
     clinicPhone,
     clinicEmail,
+    clinicCity,
+    clinicState,
     primaryColor = '#000000',
     useDefaultColor = true,
     professionals = [],
@@ -444,7 +449,9 @@ export function DocumentPrintPreview(props: DocumentPrintPreviewProps) {
     }
   };
 
-  const currentDate = format(new Date(), "dd 'de' MMMM 'de' yyyy", { locale: ptBR });
+  const currentDateOnly = format(new Date(), "dd 'de' MMMM 'de' yyyy", { locale: ptBR });
+  const clinicLocation = [clinicCity, clinicState].filter(Boolean).join(', ');
+  const currentDate = clinicLocation ? `${clinicLocation}, ${currentDateOnly}` : currentDateOnly;
 
   const titles: Record<DocumentPrintType, string> = {
     atestado: 'Atestado',
