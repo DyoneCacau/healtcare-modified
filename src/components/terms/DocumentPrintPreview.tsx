@@ -1,4 +1,5 @@
 import { useRef, useState, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Patient } from '@/types/patient';
@@ -476,6 +477,96 @@ export function DocumentPrintPreview(props: DocumentPrintPreviewProps) {
     return null;
   };
 
+  // Casco do documento (marca d'agua, cabecalho, conteudo, assinatura, rodape).
+  // Renderizado 2x: visivel (forPrint=false, com inputs/textarea p/ editar) e
+  // uma copia fora da tela (forPrint=true, so texto) usada pra gerar o PDF —
+  // assim o formulario de "Adicionar medicamento" e os proprios campos de
+  // edicao nunca aparecem no PDF, e textos com quebra de linha (ex.: a
+  // prescricao do receituario) saem corretos (html2canvas nao renderiza bem
+  // o valor de <textarea>/<input> com varias linhas).
+  const renderDocumentShell = (forPrint: boolean) => (
+    <>
+      {/* Marca d'agua centralizada e transparente */}
+      <div className="absolute inset-0 flex items-center justify-center pointer-events-none select-none" style={{ opacity: 0.06 }}>
+        {clinicLogoUrl ? (
+          <img src={clinicLogoUrl} alt="" className="max-w-[280px] max-h-[280px] object-contain" />
+        ) : (
+          <span className="text-6xl font-bold text-black/10" style={{ fontFamily: "'Times New Roman', serif" }}>
+            {clinicName || clinicRazaoSocial || 'Clinica'}
+          </span>
+        )}
+      </div>
+
+      <div className="relative z-10 flex flex-col min-h-[calc(297mm-4rem)]">
+      <div className="flex flex-col items-center text-center mb-6 pb-4" style={{ borderBottom: `2px solid ${primaryColor}` }}>
+        {clinicLogoUrl ? (
+          <img src={clinicLogoUrl} alt="Logo" className="w-16 h-16 object-contain mb-2" />
+        ) : (
+          <div className="w-16 h-16 rounded-full flex items-center justify-center mb-2" style={{ backgroundColor: `${primaryColor}20` }}>
+            <svg viewBox="0 0 24 24" fill={primaryColor} className="w-10 h-10">
+              <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 17.93c-3.95-.49-7-3.85-7-7.93 0-.62.08-1.21.21-1.79L9 15v1c0 1.1.9 2 2 2v1.93zm6.9-2.54c-.26-.81-1-1.39-1.9-1.39h-1v-3c0-.55-.45-1-1-1H8v-2h2c.55 0 1-.45 1-1V7h2c1.1 0 2-.9 2-2v-.41c2.93 1.19 5 4.06 5 7.41 0 2.08-.8 3.97-2.1 5.39z" />
+            </svg>
+          </div>
+        )}
+        <h2 className="text-lg font-bold text-black">{clinicName || clinicRazaoSocial}</h2>
+        {clinicRazaoSocial && clinicRazaoSocial !== (clinicName || clinicRazaoSocial) && (
+          <p className="text-sm text-muted-foreground">{clinicRazaoSocial}</p>
+        )}
+        {clinicCnpj && <p className="text-sm text-muted-foreground">CNPJ: {clinicCnpj}</p>}
+      </div>
+
+      <h2 className="text-center text-lg font-bold mb-6 uppercase text-black">{titles[type]}</h2>
+
+      {type === 'recibo' && (
+        <div className="bg-muted/30 p-4 rounded mb-6">
+          <p><strong>Paciente:</strong> {patient?.name || '________________'}</p>
+          <p><strong>CPF:</strong> {patient?.cpf || '________________'}</p>
+        </div>
+      )}
+
+      <div className="content text-black">{renderDocumentContent(forPrint)}</div>
+
+      <div className="mt-12 flex justify-end">
+        <div className="text-center w-[45%]">
+          <div className="border-t-2 mt-16 pt-2" style={{ borderColor: primaryColor }}>
+            <p className="font-medium">{profName}</p>
+            <p className="text-sm text-black/80">{profSpecialty}</p>
+            <p className="text-xs text-black/80">CRO {profCro}</p>
+          </div>
+        </div>
+      </div>
+
+      <div className="mt-auto pt-8">
+        {useDefaultColor ? (
+          <div className="-mx-8 -mb-8 pt-6 pb-6 px-8 border-t border-black/20 flex flex-wrap gap-x-6 gap-y-2 text-black text-sm">
+            {(clinicName || clinicRazaoSocial) && <span>{clinicName || clinicRazaoSocial}</span>}
+            {clinicCnpj && <span>CNPJ: {clinicCnpj}</span>}
+            {clinicPhone && <span className="flex items-center gap-1.5"><Phone className="h-4 w-4 flex-shrink-0" />{clinicPhone}</span>}
+            {clinicEmail && <span className="flex items-center gap-1.5"><Mail className="h-4 w-4 flex-shrink-0" />{clinicEmail}</span>}
+            {clinicAddress && <span className="flex items-center gap-1.5"><MapPin className="h-4 w-4 flex-shrink-0" />{clinicAddress}</span>}
+          </div>
+        ) : (
+          <div className="relative -mx-8 -mb-8 overflow-hidden">
+            <svg className="absolute w-full h-12" viewBox="0 0 1200 48" preserveAspectRatio="none">
+              <path fill={`${primaryColor}30`} d="M0,24 Q300,0 600,24 T1200,24 L1200,48 L0,48 Z" />
+              <path fill={primaryColor} d="M0,36 Q300,12 600,36 T1200,36 L1200,48 L0,48 Z" />
+            </svg>
+            <div className="relative pt-12 pb-6 px-8 flex flex-wrap gap-x-6 gap-y-2 text-white text-sm" style={{ backgroundColor: primaryColor }}>
+              {clinicPhone && <span className="flex items-center gap-1.5"><Phone className="h-4 w-4 flex-shrink-0" />{clinicPhone}</span>}
+              {clinicEmail && <span className="flex items-center gap-1.5"><Mail className="h-4 w-4 flex-shrink-0" />{clinicEmail}</span>}
+              {clinicAddress && <span className="flex items-center gap-1.5"><MapPin className="h-4 w-4 flex-shrink-0" />{clinicAddress}</span>}
+            </div>
+          </div>
+        )}
+      </div>
+      </div>
+    </>
+  );
+
+  const documentShellClassName =
+    "bg-white p-8 border-0 rounded-none relative w-full max-w-[210mm] min-h-[297mm] mx-auto";
+  const documentShellStyle = { fontFamily: "'Times New Roman', serif" } as const;
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
@@ -504,86 +595,30 @@ export function DocumentPrintPreview(props: DocumentPrintPreviewProps) {
           </div>
         )}
 
-        <div
-          ref={printRef}
-          className="bg-white p-8 border-0 rounded-none relative w-full max-w-[210mm] min-h-[297mm] mx-auto"
-          style={{ fontFamily: "'Times New Roman', serif" }}
-        >
-          {/* Marca d'agua centralizada e transparente */}
-          <div className="absolute inset-0 flex items-center justify-center pointer-events-none select-none" style={{ opacity: 0.06 }}>
-            {clinicLogoUrl ? (
-              <img src={clinicLogoUrl} alt="" className="max-w-[280px] max-h-[280px] object-contain" />
-            ) : (
-              <span className="text-6xl font-bold text-black/10" style={{ fontFamily: "'Times New Roman', serif" }}>
-                {clinicName || clinicRazaoSocial || 'Clinica'}
-              </span>
-            )}
-          </div>
-
-          <div className="relative z-10 flex flex-col min-h-[calc(297mm-4rem)]">
-          <div className="flex flex-col items-center text-center mb-6 pb-4" style={{ borderBottom: `2px solid ${primaryColor}` }}>
-            {clinicLogoUrl ? (
-              <img src={clinicLogoUrl} alt="Logo" className="w-16 h-16 object-contain mb-2" />
-            ) : (
-              <div className="w-16 h-16 rounded-full flex items-center justify-center mb-2" style={{ backgroundColor: `${primaryColor}20` }}>
-                <svg viewBox="0 0 24 24" fill={primaryColor} className="w-10 h-10">
-                  <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 17.93c-3.95-.49-7-3.85-7-7.93 0-.62.08-1.21.21-1.79L9 15v1c0 1.1.9 2 2 2v1.93zm6.9-2.54c-.26-.81-1-1.39-1.9-1.39h-1v-3c0-.55-.45-1-1-1H8v-2h2c.55 0 1-.45 1-1V7h2c1.1 0 2-.9 2-2v-.41c2.93 1.19 5 4.06 5 7.41 0 2.08-.8 3.97-2.1 5.39z" />
-                </svg>
-              </div>
-            )}
-            <h2 className="text-lg font-bold text-black">{clinicName || clinicRazaoSocial}</h2>
-            {clinicRazaoSocial && clinicRazaoSocial !== (clinicName || clinicRazaoSocial) && (
-              <p className="text-sm text-muted-foreground">{clinicRazaoSocial}</p>
-            )}
-            {clinicCnpj && <p className="text-sm text-muted-foreground">CNPJ: {clinicCnpj}</p>}
-          </div>
-
-          <h2 className="text-center text-lg font-bold mb-6 uppercase text-black">{titles[type]}</h2>
-
-          {type === 'recibo' && (
-            <div className="bg-muted/30 p-4 rounded mb-6">
-              <p><strong>Paciente:</strong> {patient?.name || '________________'}</p>
-              <p><strong>CPF:</strong> {patient?.cpf || '________________'}</p>
-            </div>
-          )}
-
-          <div className="content text-black">{renderDocumentContent(false)}</div>
-
-          <div className="mt-12 flex justify-end">
-            <div className="text-center w-[45%]">
-              <div className="border-t-2 mt-16 pt-2" style={{ borderColor: primaryColor }}>
-                <p className="font-medium">{profName}</p>
-                <p className="text-sm text-black/80">{profSpecialty}</p>
-                <p className="text-xs text-black/80">CRO {profCro}</p>
-              </div>
-            </div>
-          </div>
-
-          <div className="mt-auto pt-8">
-            {useDefaultColor ? (
-              <div className="-mx-8 -mb-8 pt-6 pb-6 px-8 border-t border-black/20 flex flex-wrap gap-x-6 gap-y-2 text-black text-sm">
-                {(clinicName || clinicRazaoSocial) && <span>{clinicName || clinicRazaoSocial}</span>}
-                {clinicCnpj && <span>CNPJ: {clinicCnpj}</span>}
-                {clinicPhone && <span className="flex items-center gap-1.5"><Phone className="h-4 w-4 flex-shrink-0" />{clinicPhone}</span>}
-                {clinicEmail && <span className="flex items-center gap-1.5"><Mail className="h-4 w-4 flex-shrink-0" />{clinicEmail}</span>}
-                {clinicAddress && <span className="flex items-center gap-1.5"><MapPin className="h-4 w-4 flex-shrink-0" />{clinicAddress}</span>}
-              </div>
-            ) : (
-              <div className="relative -mx-8 -mb-8 overflow-hidden">
-                <svg className="absolute w-full h-12" viewBox="0 0 1200 48" preserveAspectRatio="none">
-                  <path fill={`${primaryColor}30`} d="M0,24 Q300,0 600,24 T1200,24 L1200,48 L0,48 Z" />
-                  <path fill={primaryColor} d="M0,36 Q300,12 600,36 T1200,36 L1200,48 L0,48 Z" />
-                </svg>
-                <div className="relative pt-12 pb-6 px-8 flex flex-wrap gap-x-6 gap-y-2 text-white text-sm" style={{ backgroundColor: primaryColor }}>
-                  {clinicPhone && <span className="flex items-center gap-1.5"><Phone className="h-4 w-4 flex-shrink-0" />{clinicPhone}</span>}
-                  {clinicEmail && <span className="flex items-center gap-1.5"><Mail className="h-4 w-4 flex-shrink-0" />{clinicEmail}</span>}
-                  {clinicAddress && <span className="flex items-center gap-1.5"><MapPin className="h-4 w-4 flex-shrink-0" />{clinicAddress}</span>}
-                </div>
-              </div>
-            )}
-          </div>
-          </div>
+        {/* Versao visivel para edicao (inputs/textarea) */}
+        <div className={documentShellClassName} style={documentShellStyle}>
+          {renderDocumentShell(false)}
         </div>
+
+        {/*
+          Versao fora da tela, so texto — e a que vira o PDF. Renderizada via
+          portal direto no body: o DialogContent do Radix tem `translate-x/y`
+          fixo (pra centralizar), o que criaria um "containing block" novo
+          pra elementos `fixed` dentro dele e faria esse offscreen ficar
+          cortado pelo `overflow-y-auto` do dialog. Fora da arvore do dialog
+          isso nao acontece.
+        */}
+        {createPortal(
+          <div
+            ref={printRef}
+            aria-hidden
+            className={`${documentShellClassName} fixed left-[-9999px] top-0 pointer-events-none`}
+            style={documentShellStyle}
+          >
+            {renderDocumentShell(true)}
+          </div>,
+          document.body
+        )}
 
         <DialogFooter>
           <Button variant="outline" onClick={() => onOpenChange(false)}>
