@@ -19,11 +19,12 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { Switch } from '@/components/ui/switch';
-import { Checkbox } from '@/components/ui/checkbox';
 import { Stethoscope } from 'lucide-react';
 import { toast } from 'sonner';
 import { useClinics } from '@/hooks/useClinic';
-import { getClinicDisplayName } from '@/lib/utils';
+import { supabase } from '@/integrations/supabase/client';
+import { ClinicMultiSelect } from '@/components/common/ClinicMultiSelect';
+import { SPECIALTIES } from '@/lib/specialties';
 
 interface Professional {
   id?: string;
@@ -47,19 +48,6 @@ interface ProfessionalFormDialogProps {
   currentClinicId?: string | null;
 }
 
-const SPECIALTIES = [
-  'Clínico Geral',
-  'Ortodontia',
-  'Endodontia',
-  'Periodontia',
-  'Implantodontia',
-  'Odontopediatria',
-  'Cirurgia Bucomaxilofacial',
-  'Prótese Dentária',
-  'Dentística',
-  'Radiologia Odontológica',
-];
-
 export function ProfessionalFormDialog({
   open,
   onOpenChange,
@@ -76,7 +64,9 @@ export function ProfessionalFormDialog({
     is_active: true,
     hire_date: new Date().toISOString().split('T')[0],
   });
-  const [additionalClinicIds, setAdditionalClinicIds] = useState<string[]>([]);
+  const [selectedClinicIds, setSelectedClinicIds] = useState<string[]>([]);
+  /** Clínicas onde já existe um profissional com o mesmo CRO (não removíveis por aqui) */
+  const [existingClinicIds, setExistingClinicIds] = useState<string[]>([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const { clinics } = useClinics();
 
@@ -84,38 +74,52 @@ export function ProfessionalFormDialog({
   const otherClinics = clinics.filter((c: { id: string }) => c.id !== currentClinicId);
 
   useEffect(() => {
-    if (open) {
-      if (professional) {
-        setFormData({
-          id: professional.id,
-          name: professional.name,
-          specialty: professional.specialty,
-          cro: professional.cro,
-          email: professional.email || '',
-          phone: professional.phone || '',
-          is_active: professional.is_active,
-          hire_date: professional.hire_date || new Date().toISOString().split('T')[0],
-        });
-      } else {
-        setFormData({
-          name: '',
-          specialty: '',
-          cro: '',
-          email: '',
-          phone: '',
-          is_active: true,
-          hire_date: new Date().toISOString().split('T')[0],
-        });
-      }
-      setAdditionalClinicIds([]);
-    }
-  }, [open, professional]);
+    if (!open) return;
 
-  const toggleAdditionalClinic = (clinicId: string) => {
-    setAdditionalClinicIds((prev) =>
-      prev.includes(clinicId) ? prev.filter((id) => id !== clinicId) : [...prev, clinicId]
-    );
-  };
+    if (professional) {
+      setFormData({
+        id: professional.id,
+        name: professional.name,
+        specialty: professional.specialty,
+        cro: professional.cro,
+        email: professional.email || '',
+        phone: professional.phone || '',
+        is_active: professional.is_active,
+        hire_date: professional.hire_date || new Date().toISOString().split('T')[0],
+      });
+
+      // Busca em quais outras clínicas (que o usuário tem acesso) já existe
+      // um profissional com o mesmo CRO, para pré-marcar e travar essas opções.
+      if (professional.cro) {
+        supabase
+          .from('professionals')
+          .select('clinic_id')
+          .eq('cro', professional.cro)
+          .then(({ data }) => {
+            const linkedIds = (data || [])
+              .map((row: { clinic_id: string | null }) => row.clinic_id)
+              .filter((id): id is string => !!id && id !== currentClinicId);
+            setExistingClinicIds(linkedIds);
+            setSelectedClinicIds(linkedIds);
+          });
+      } else {
+        setExistingClinicIds([]);
+        setSelectedClinicIds([]);
+      }
+    } else {
+      setFormData({
+        name: '',
+        specialty: '',
+        cro: '',
+        email: '',
+        phone: '',
+        is_active: true,
+        hire_date: new Date().toISOString().split('T')[0],
+      });
+      setExistingClinicIds([]);
+      setSelectedClinicIds([]);
+    }
+  }, [open, professional, currentClinicId]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -127,7 +131,9 @@ export function ProfessionalFormDialog({
 
     setIsSubmitting(true);
     try {
-      await onSave({ ...formData, additionalClinicIds: isEditing ? undefined : additionalClinicIds });
+      // Só as clínicas marcadas agora que ainda não tinham este profissional
+      const additionalClinicIds = selectedClinicIds.filter((id) => !existingClinicIds.includes(id));
+      await onSave({ ...formData, additionalClinicIds });
       onOpenChange(false);
     } catch (error) {
       console.error('Error saving professional:', error);
@@ -238,27 +244,20 @@ export function ProfessionalFormDialog({
             />
           </div>
 
-          {!isEditing && otherClinics.length > 0 && (
-            <div className="space-y-2 rounded-md border p-3">
-              <Label>Também atende em</Label>
-              <p className="text-xs text-muted-foreground">
-                Marque outras clínicas para cadastrar este profissional nelas também, sem precisar repetir os dados manualmente.
-              </p>
-              <div className="space-y-2 pt-1">
-                {otherClinics.map((clinic: { id: string; name?: string | null; unit_name?: string | null }) => (
-                  <div key={clinic.id} className="flex items-center gap-2">
-                    <Checkbox
-                      id={`clinic-${clinic.id}`}
-                      checked={additionalClinicIds.includes(clinic.id)}
-                      onCheckedChange={() => toggleAdditionalClinic(clinic.id)}
-                    />
-                    <Label htmlFor={`clinic-${clinic.id}`} className="text-sm font-normal cursor-pointer">
-                      {getClinicDisplayName(clinic)}
-                    </Label>
-                  </div>
-                ))}
-              </div>
-            </div>
+          {otherClinics.length > 0 && (
+            <ClinicMultiSelect
+              label="Unidades de atuação"
+              clinics={otherClinics}
+              selectedIds={selectedClinicIds}
+              onChange={setSelectedClinicIds}
+              lockedIds={existingClinicIds}
+              placeholder="Também atende em outras unidades?"
+              helperText={
+                isEditing
+                  ? 'Unidades já vinculadas a este CRO ficam marcadas e travadas aqui. Marque novas unidades para cadastrar o profissional nelas também — inclusive as que você criar no futuro, elas aparecem automaticamente nesta lista.'
+                  : 'Marque em quais outras unidades este profissional também atende — o cadastro é replicado automaticamente, sem repetir os dados manualmente. Unidades criadas no futuro aparecem aqui sem precisar de nada.'
+              }
+            />
           )}
 
           <DialogFooter>

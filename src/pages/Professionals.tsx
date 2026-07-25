@@ -123,6 +123,29 @@ export default function Professionals() {
     hire_date: string;
     additionalClinicIds?: string[];
   }) => {
+    const replicateToAdditionalClinics = async (excludeClinicId: string | null): Promise<string | null> => {
+      const additionalClinicIds = (data.additionalClinicIds || []).filter((id) => id !== excludeClinicId);
+      if (additionalClinicIds.length === 0) return null;
+
+      const { error: additionalError } = await supabase.from('professionals').insert(
+        additionalClinicIds.map((additionalClinicId) => ({
+          clinic_id: additionalClinicId,
+          name: data.name,
+          specialty: data.specialty,
+          cro: data.cro,
+          email: data.email || null,
+          phone: data.phone || null,
+          is_active: data.is_active,
+          hire_date: data.hire_date || null,
+        }))
+      );
+      if (additionalError) {
+        console.error(additionalError);
+        return 'Houve erro ao replicar o profissional para as outras unidades selecionadas';
+      }
+      return null;
+    };
+
     if (data.id) {
       const { error } = await supabase
         .from('professionals')
@@ -139,10 +162,18 @@ export default function Professionals() {
 
       if (error) {
         toast.error('Erro ao atualizar profissional');
+        return;
+      }
+
+      const replicationError = await replicateToAdditionalClinics(clinicId);
+      if (replicationError) {
+        toast.error(`Profissional atualizado, mas ${replicationError.toLowerCase()}`);
+      } else if (data.additionalClinicIds && data.additionalClinicIds.length > 0) {
+        toast.success('Profissional atualizado e vinculado às novas unidades selecionadas!');
       } else {
         toast.success('Profissional atualizado com sucesso!');
-        fetchProfessionals();
       }
+      fetchProfessionals();
     } else {
       if (!clinicId) {
         toast.error('Clinica nao encontrada');
@@ -166,34 +197,16 @@ export default function Professionals() {
         return;
       }
 
-      // Replica o cadastro nas demais clínicas marcadas, sem precisar repetir manualmente
+      // Replica o cadastro nas demais unidades marcadas, sem precisar repetir manualmente
       const additionalClinicIds = (data.additionalClinicIds || []).filter((id) => id !== clinicId);
-      if (additionalClinicIds.length > 0) {
-        const { error: additionalError } = await supabase.from('professionals').insert(
-          additionalClinicIds.map((additionalClinicId) => ({
-            clinic_id: additionalClinicId,
-            name: data.name,
-            specialty: data.specialty,
-            cro: data.cro,
-            email: data.email || null,
-            phone: data.phone || null,
-            is_active: data.is_active,
-            hire_date: data.hire_date || null,
-          }))
-        );
-        if (additionalError) {
-          console.error(additionalError);
-          toast.error('Profissional cadastrado, mas houve erro ao replicar para as outras clínicas selecionadas');
-        } else {
-          toast.success(
-            `Profissional cadastrado nesta clínica e em mais ${additionalClinicIds.length} clínica(s)!`
-          );
-          fetchProfessionals();
-          return;
-        }
+      const replicationError = await replicateToAdditionalClinics(clinicId);
+      if (replicationError) {
+        toast.error(`Profissional cadastrado, mas ${replicationError.toLowerCase()}`);
+      } else if (additionalClinicIds.length > 0) {
+        toast.success(`Profissional cadastrado nesta clínica e em mais ${additionalClinicIds.length} clínica(s)!`);
+      } else {
+        toast.success('Profissional cadastrado com sucesso!');
       }
-
-      toast.success('Profissional cadastrado com sucesso!');
       fetchProfessionals();
     }
   };
