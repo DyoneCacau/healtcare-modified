@@ -24,11 +24,15 @@ import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
 import { generateWhatsAppUrl } from '@/utils/whatsapp';
 import { useClinicMedications, useClinicMedicationMutations } from '@/hooks/useClinicMedications';
+import { useCid10Search } from '@/hooks/useCid10';
 import { useDocumentSignatureMutations } from '@/hooks/useDocumentSignatures';
 import { SIGNATURE_CONSENT_TEXT } from '@/types/documentSignature';
 import { SendForSignatureDialog, type SendForSignatureResult } from './SendForSignatureDialog';
 
 export type DocumentPrintType = 'atestado' | 'declaracao' | 'termo_ciencia' | 'recibo' | 'receituario';
+
+/** Desativado por pedido do cliente — reative trocando pra `true` quando for retomar a feature. */
+const ENABLE_SEND_FOR_SIGNATURE = false;
 
 /** Posologias comuns pra montar a linha do medicamento sem digitar tudo na mão. */
 const FREQUENCY_OPTIONS = [
@@ -117,6 +121,10 @@ export function DocumentPrintPreview(props: DocumentPrintPreviewProps) {
   const [atestadoData, setAtestadoData] = useState(format(new Date(), 'dd/MM/yyyy'));
   const [atestadoConvalescenca, setAtestadoConvalescenca] = useState<'sim' | 'nao'>('nao');
   const [atestadoDias, setAtestadoDias] = useState('1');
+  const [atestadoCid, setAtestadoCid] = useState('');
+  const [atestadoCidQuery, setAtestadoCidQuery] = useState('');
+  const [atestadoCidComboOpen, setAtestadoCidComboOpen] = useState(false);
+  const { results: cidResults, loading: cidLoading } = useCid10Search(atestadoCidQuery);
   const [declaracaoPaciente, setDeclaracaoPaciente] = useState('');
   const [declaracaoCpf, setDeclaracaoCpf] = useState('');
   const [declaracaoTipo, setDeclaracaoTipo] = useState('comparecimento');
@@ -168,6 +176,13 @@ export function DocumentPrintPreview(props: DocumentPrintPreviewProps) {
       setReceituarioCpf(patient.cpf || '');
     }
   }, [patient]);
+
+  useEffect(() => {
+    if (open && type === 'atestado') {
+      setAtestadoCid('');
+      setAtestadoCidQuery('');
+    }
+  }, [open, type]);
 
   useEffect(() => {
     if (open && type === 'receituario') {
@@ -532,6 +547,73 @@ export function DocumentPrintPreview(props: DocumentPrintPreviewProps) {
                 </>
               )}
             </p>
+          )}
+          {(atestadoCid || !forPrint) && (
+            <div className="mt-2">
+              <p className="font-medium mb-1">CID (opcional):</p>
+              {forPrint ? (
+                atestadoCid && <span>{atestadoCid}</span>
+              ) : (
+                <Popover open={atestadoCidComboOpen} onOpenChange={setAtestadoCidComboOpen}>
+                  <PopoverTrigger asChild>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      role="combobox"
+                      className="h-9 w-full max-w-md justify-between rounded border-border bg-background px-2 text-sm font-normal"
+                    >
+                      <span className="truncate">{atestadoCid || 'Buscar por código ou nome da doença...'}</span>
+                      <ChevronsUpDown className="h-4 w-4 shrink-0 opacity-50" />
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-[380px] p-0" align="start">
+                    <Command shouldFilter={false}>
+                      <CommandInput
+                        value={atestadoCidQuery}
+                        onValueChange={setAtestadoCidQuery}
+                        placeholder="Ex: K08 ou periodontite..."
+                      />
+                      <CommandList>
+                        <CommandEmpty className="px-3 py-2 text-sm text-muted-foreground">
+                          {atestadoCidQuery.trim().length < 2
+                            ? 'Digite ao menos 2 letras para buscar.'
+                            : cidLoading
+                              ? 'Carregando base da CID-10...'
+                              : 'Nenhum CID encontrado.'}
+                        </CommandEmpty>
+                        <CommandGroup>
+                          {cidResults.map((cid) => (
+                            <CommandItem
+                              key={cid.code}
+                              value={cid.code}
+                              onSelect={() => {
+                                setAtestadoCid(`${cid.code} - ${cid.description}`);
+                                setAtestadoCidComboOpen(false);
+                              }}
+                            >
+                              <span className="font-medium mr-2">{cid.code}</span>
+                              <span className="truncate text-muted-foreground">{cid.description}</span>
+                            </CommandItem>
+                          ))}
+                        </CommandGroup>
+                      </CommandList>
+                    </Command>
+                  </PopoverContent>
+                </Popover>
+              )}
+              {!forPrint && atestadoCid && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setAtestadoCid('');
+                    setAtestadoCidQuery('');
+                  }}
+                  className="mt-1 text-xs text-muted-foreground underline"
+                >
+                  Remover CID
+                </button>
+              )}
+            </div>
           )}
           <p className="text-right mt-6">{currentDate}</p>
         </div>
@@ -987,15 +1069,17 @@ export function DocumentPrintPreview(props: DocumentPrintPreviewProps) {
             <Mail className="mr-2 h-4 w-4" />
             {sharingChannel === 'email' ? 'Preparando...' : 'E-mail'}
           </Button>
-          <Button
-            variant="outline"
-            onClick={handleOpenSignatureDialog}
-            disabled={preparingSignature || !patient}
-            title={!patient ? 'Selecione um paciente' : undefined}
-          >
-            <PenLine className="mr-2 h-4 w-4" />
-            {preparingSignature ? 'Preparando...' : 'Enviar para assinatura'}
-          </Button>
+          {ENABLE_SEND_FOR_SIGNATURE && (
+            <Button
+              variant="outline"
+              onClick={handleOpenSignatureDialog}
+              disabled={preparingSignature || !patient}
+              title={!patient ? 'Selecione um paciente' : undefined}
+            >
+              <PenLine className="mr-2 h-4 w-4" />
+              {preparingSignature ? 'Preparando...' : 'Enviar para assinatura'}
+            </Button>
+          )}
           <Button onClick={handleGeneratePdf} disabled={generatingPdf}>
             <FileDown className="mr-2 h-4 w-4" />{generatingPdf ? 'Gerando PDF...' : 'Gerar PDF'}
           </Button>
@@ -1003,17 +1087,19 @@ export function DocumentPrintPreview(props: DocumentPrintPreviewProps) {
       </DialogContent>
     </Dialog>
 
-    <SendForSignatureDialog
-      open={signatureDialogOpen}
-      onOpenChange={setSignatureDialogOpen}
-      professionals={professionals}
-      defaultSignerName={patient?.name || ''}
-      defaultCpf={patient?.cpf || ''}
-      defaultWhatsapp={patient?.phone || ''}
-      documentUrl={signatureDocumentUrl}
-      isSubmitting={submittingSignature}
-      onConfirm={handleConfirmSignatureRequest}
-    />
+    {ENABLE_SEND_FOR_SIGNATURE && (
+      <SendForSignatureDialog
+        open={signatureDialogOpen}
+        onOpenChange={setSignatureDialogOpen}
+        professionals={professionals}
+        defaultSignerName={patient?.name || ''}
+        defaultCpf={patient?.cpf || ''}
+        defaultWhatsapp={patient?.phone || ''}
+        documentUrl={signatureDocumentUrl}
+        isSubmitting={submittingSignature}
+        onConfirm={handleConfirmSignatureRequest}
+      />
+    )}
     </>
   );
 }
