@@ -121,6 +121,7 @@ export default function Professionals() {
     phone: string;
     is_active: boolean;
     hire_date: string;
+    additionalClinicIds?: string[];
   }) => {
     if (data.id) {
       const { error } = await supabase
@@ -162,10 +163,38 @@ export default function Professionals() {
       if (error) {
         toast.error('Erro ao cadastrar profissional');
         console.error(error);
-      } else {
-        toast.success('Profissional cadastrado com sucesso!');
-        fetchProfessionals();
+        return;
       }
+
+      // Replica o cadastro nas demais clínicas marcadas, sem precisar repetir manualmente
+      const additionalClinicIds = (data.additionalClinicIds || []).filter((id) => id !== clinicId);
+      if (additionalClinicIds.length > 0) {
+        const { error: additionalError } = await supabase.from('professionals').insert(
+          additionalClinicIds.map((additionalClinicId) => ({
+            clinic_id: additionalClinicId,
+            name: data.name,
+            specialty: data.specialty,
+            cro: data.cro,
+            email: data.email || null,
+            phone: data.phone || null,
+            is_active: data.is_active,
+            hire_date: data.hire_date || null,
+          }))
+        );
+        if (additionalError) {
+          console.error(additionalError);
+          toast.error('Profissional cadastrado, mas houve erro ao replicar para as outras clínicas selecionadas');
+        } else {
+          toast.success(
+            `Profissional cadastrado nesta clínica e em mais ${additionalClinicIds.length} clínica(s)!`
+          );
+          fetchProfessionals();
+          return;
+        }
+      }
+
+      toast.success('Profissional cadastrado com sucesso!');
+      fetchProfessionals();
     }
   };
 
@@ -473,6 +502,7 @@ export default function Professionals() {
       <ProfessionalFormDialog
         open={formOpen}
         onOpenChange={setFormOpen}
+        currentClinicId={clinicId}
         professional={
           editingProfessional
             ? {

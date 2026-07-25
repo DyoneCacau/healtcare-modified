@@ -19,8 +19,11 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { Switch } from '@/components/ui/switch';
+import { Checkbox } from '@/components/ui/checkbox';
 import { Stethoscope } from 'lucide-react';
 import { toast } from 'sonner';
+import { useClinics } from '@/hooks/useClinic';
+import { getClinicDisplayName } from '@/lib/utils';
 
 interface Professional {
   id?: string;
@@ -31,6 +34,8 @@ interface Professional {
   phone: string;
   is_active: boolean;
   hire_date: string;
+  /** Ao cadastrar, cria o mesmo profissional também nestas outras clínicas */
+  additionalClinicIds?: string[];
 }
 
 interface ProfessionalFormDialogProps {
@@ -38,6 +43,8 @@ interface ProfessionalFormDialogProps {
   onOpenChange: (open: boolean) => void;
   professional?: Professional | null;
   onSave: (professional: Professional) => void;
+  /** Clínica atual (selecionada), para não listá-la entre as "outras clínicas" */
+  currentClinicId?: string | null;
 }
 
 const SPECIALTIES = [
@@ -58,6 +65,7 @@ export function ProfessionalFormDialog({
   onOpenChange,
   professional,
   onSave,
+  currentClinicId,
 }: ProfessionalFormDialogProps) {
   const [formData, setFormData] = useState<Professional>({
     name: '',
@@ -68,7 +76,12 @@ export function ProfessionalFormDialog({
     is_active: true,
     hire_date: new Date().toISOString().split('T')[0],
   });
+  const [additionalClinicIds, setAdditionalClinicIds] = useState<string[]>([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const { clinics } = useClinics();
+
+  const isEditing = !!professional;
+  const otherClinics = clinics.filter((c: { id: string }) => c.id !== currentClinicId);
 
   useEffect(() => {
     if (open) {
@@ -94,8 +107,15 @@ export function ProfessionalFormDialog({
           hire_date: new Date().toISOString().split('T')[0],
         });
       }
+      setAdditionalClinicIds([]);
     }
   }, [open, professional]);
+
+  const toggleAdditionalClinic = (clinicId: string) => {
+    setAdditionalClinicIds((prev) =>
+      prev.includes(clinicId) ? prev.filter((id) => id !== clinicId) : [...prev, clinicId]
+    );
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -107,7 +127,7 @@ export function ProfessionalFormDialog({
 
     setIsSubmitting(true);
     try {
-      await onSave(formData);
+      await onSave({ ...formData, additionalClinicIds: isEditing ? undefined : additionalClinicIds });
       onOpenChange(false);
     } catch (error) {
       console.error('Error saving professional:', error);
@@ -217,6 +237,29 @@ export function ProfessionalFormDialog({
               }
             />
           </div>
+
+          {!isEditing && otherClinics.length > 0 && (
+            <div className="space-y-2 rounded-md border p-3">
+              <Label>Também atende em</Label>
+              <p className="text-xs text-muted-foreground">
+                Marque outras clínicas para cadastrar este profissional nelas também, sem precisar repetir os dados manualmente.
+              </p>
+              <div className="space-y-2 pt-1">
+                {otherClinics.map((clinic: { id: string; name?: string | null; unit_name?: string | null }) => (
+                  <div key={clinic.id} className="flex items-center gap-2">
+                    <Checkbox
+                      id={`clinic-${clinic.id}`}
+                      checked={additionalClinicIds.includes(clinic.id)}
+                      onCheckedChange={() => toggleAdditionalClinic(clinic.id)}
+                    />
+                    <Label htmlFor={`clinic-${clinic.id}`} className="text-sm font-normal cursor-pointer">
+                      {getClinicDisplayName(clinic)}
+                    </Label>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
 
           <DialogFooter>
             <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
