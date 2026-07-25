@@ -26,7 +26,7 @@ import {
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { toast } from "sonner";
-import { Receipt, Search, CheckCircle, XCircle, ExternalLink, Trash2, Copy, Plus } from "lucide-react";
+import { Receipt, Search, CheckCircle, XCircle, ExternalLink, Trash2, Copy, Plus, X } from "lucide-react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
@@ -74,6 +74,10 @@ export function PaymentsManagement() {
   const [payments, setPayments] = useState<Payment[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
+  const [statusFilter, setStatusFilter] = useState<string>("all");
+  const [originFilter, setOriginFilter] = useState<string>("all");
+  const [startDateFilter, setStartDateFilter] = useState<string>("");
+  const [endDateFilter, setEndDateFilter] = useState<string>("");
   const [selectedPayment, setSelectedPayment] = useState<Payment | null>(null);
   const [isConfirmDialogOpen, setIsConfirmDialogOpen] = useState(false);
   const [confirmNotes, setConfirmNotes] = useState("");
@@ -182,10 +186,27 @@ export function PaymentsManagement() {
     }
   }
 
-  const filteredPayments = payments.filter(payment =>
-    payment.subscription?.clinic?.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    payment.subscription?.clinic?.email?.toLowerCase().includes(searchTerm.toLowerCase())
-  );
+  const filteredPayments = payments.filter(payment => {
+    const matchesSearch =
+      payment.subscription?.clinic?.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      payment.subscription?.clinic?.email?.toLowerCase().includes(searchTerm.toLowerCase());
+    const matchesStatus = statusFilter === "all" || payment.status === statusFilter;
+    const matchesOrigin = originFilter === "all" || payment.origin === originFilter;
+    const paymentDate = payment.created_at.slice(0, 10);
+    const matchesStartDate = !startDateFilter || paymentDate >= startDateFilter;
+    const matchesEndDate = !endDateFilter || paymentDate <= endDateFilter;
+    return matchesSearch && matchesStatus && matchesOrigin && matchesStartDate && matchesEndDate;
+  });
+
+  const hasActiveFilters =
+    statusFilter !== "all" || originFilter !== "all" || Boolean(startDateFilter) || Boolean(endDateFilter);
+
+  function clearFilters() {
+    setStatusFilter("all");
+    setOriginFilter("all");
+    setStartDateFilter("");
+    setEndDateFilter("");
+  }
 
   const rejectedCount = payments.filter(p => p.status === 'rejected').length;
 
@@ -359,7 +380,7 @@ DELETE FROM payment_history WHERE status = 'rejected';`;
         </p>
       </CardHeader>
       <CardContent>
-        <div className="flex flex-wrap items-center gap-4 mb-6">
+        <div className="flex flex-wrap items-end gap-4 mb-6">
           <div className="relative flex-1 min-w-[200px]">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
             <Input
@@ -369,6 +390,47 @@ DELETE FROM payment_history WHERE status = 'rejected';`;
               className="pl-10"
             />
           </div>
+          <div className="space-y-1.5">
+            <Label className="text-xs text-muted-foreground">Status</Label>
+            <Select value={statusFilter} onValueChange={setStatusFilter}>
+              <SelectTrigger className="w-[150px]">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Todos</SelectItem>
+                <SelectItem value="pending">Aguardando</SelectItem>
+                <SelectItem value="confirmed">Confirmado</SelectItem>
+                <SelectItem value="rejected">Rejeitado</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="space-y-1.5">
+            <Label className="text-xs text-muted-foreground">Origem</Label>
+            <Select value={originFilter} onValueChange={setOriginFilter}>
+              <SelectTrigger className="w-[130px]">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Todas</SelectItem>
+                <SelectItem value="asaas">Asaas</SelectItem>
+                <SelectItem value="manual">Manual</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="space-y-1.5">
+            <Label className="text-xs text-muted-foreground">De</Label>
+            <DateInput value={startDateFilter} onChange={setStartDateFilter} />
+          </div>
+          <div className="space-y-1.5">
+            <Label className="text-xs text-muted-foreground">Até</Label>
+            <DateInput value={endDateFilter} onChange={setEndDateFilter} />
+          </div>
+          {hasActiveFilters && (
+            <Button variant="ghost" size="sm" onClick={clearFilters} className="gap-2">
+              <X className="h-4 w-4" />
+              Limpar filtros
+            </Button>
+          )}
           {rejectedCount > 0 && (
             <div className="flex gap-2">
               <Button variant="outline" size="sm" onClick={handleClearRejected} disabled={isClearingRejected} className="gap-2">
@@ -386,7 +448,7 @@ DELETE FROM payment_history WHERE status = 'rejected';`;
         {filteredPayments.length === 0 ? (
           <div className="text-center py-12 text-muted-foreground">
             <Receipt className="h-12 w-12 mx-auto mb-4 opacity-50" />
-            <p>Nenhum comprovante de pagamento encontrado</p>
+            <p>{payments.length === 0 ? "Nenhum comprovante de pagamento encontrado" : "Nenhum comprovante corresponde aos filtros aplicados"}</p>
           </div>
         ) : (
           <div className="rounded-md border">
