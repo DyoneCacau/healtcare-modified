@@ -199,3 +199,47 @@ npx supabase functions deploy <nome>
 ---
 
 *Última alinhamento de stack: React + Vite + Supabase + Asaas + Vercel (2026).*
+
+---
+
+## Cursor Cloud specific instructions
+
+Contexto para agentes rodando no Cursor Cloud (o *update script* já rodou `npm install`).
+
+### O que é / como roda
+
+- Produto = **SPA React + Vite** (porta **8080**). Backend = **Supabase** (Postgres + Auth + RLS + Edge Functions). Não há servidor Node próprio.
+- O client Supabase (`src/integrations/supabase/client.ts`) **lança erro no carregamento** se `VITE_SUPABASE_URL` / `VITE_SUPABASE_ANON_KEY` não existirem. Sem `.env`, a SPA nem monta. `.env` é gitignored.
+- Lint/test/build/typecheck: usar os scripts já documentados no `README.md` / `package.json` (`npm run lint`, `npm run test`, `npm run build`, `npm run typecheck`). Não precisam do Supabase no ar (o throw do client é em runtime, não no build).
+
+### Backend para desenvolvimento (duas opções)
+
+1. **Supabase remoto (caminho oficial de prod):** definir `VITE_SUPABASE_URL` e `VITE_SUPABASE_ANON_KEY` (secrets) apontando para um projeto hospedado com as migrations já aplicadas. É o mais confiável; não exige Docker.
+2. **Supabase local (fallback offline, usado neste setup):** requer **Docker** (rodar `sudo dockerd` — no Cloud usar `storage-driver: fuse-overlayfs` e `iptables-legacy`) + **Supabase CLI**. Então `supabase start` sobe tudo em `http://127.0.0.1:54321`. A `anon key` local é a chave demo padrão do CLI (não é segredo). Criar `.env` com essa URL/anon key.
+
+### Caveat importante das migrations (não "consertar" sem pedido)
+
+- `supabase start` / `supabase db reset` **falham** ao aplicar `supabase/migrations/` porque a pasta mistura migrations reais com **scripts SQL manuais one-off** (arquivos ALL-CAPS: `*_SQL_EDITOR.sql`, `LIMPAR_*`, `REMOVER_*`, `HOTFIX_*`, etc.) **e** há um problema de ordenação: `20260212100000_fix_vw_clients_status_vendas_diretas.sql` ordena **antes** de `20260212_vendas_diretas.sql` (que cria a coluna `subscriptions.billing_status`). Em produção o SQL foi aplicado manualmente, então nunca quebrou.
+- **Workaround para subir o schema local:** aplicar apenas os arquivos com prefixo de timestamp `2026*.sql`, em ordem, com tolerância a erro. Como as migrations usam guardas idempotentes (`IF NOT EXISTS`, blocos `DO $$`), o schema completo (44 tabelas + triggers de signup) é construído mesmo com alguns erros esperados de view/coluna fora de ordem:
+
+  ```bash
+  DB=$(docker ps --format '{{.Names}}' | grep supabase_db)
+  for f in $(ls supabase/migrations/2026*.sql | sort); do
+    docker exec -i "$DB" psql -U postgres -d postgres -v ON_ERROR_STOP=0 < "$f"
+  done
+  ```
+
+  Não editar os arquivos de migration para "corrigir" a ordem a menos que explicitamente pedido.
+
+### Signup / usuário de teste
+
+- **Não há tela de auto-cadastro** (o Login só faz sign-in; clientes novos usam "Solicitar acesso"). Para obter uma conta de teste, criar o usuário pela **Auth admin API** com a `service_role key` local — o trigger `create_clinic_on_signup` provisiona automaticamente clínica + assinatura `trial` (7 dias) + role `admin`:
+
+  ```bash
+  curl -s -X POST "http://127.0.0.1:54321/auth/v1/admin/users" \
+    -H "apikey: <SERVICE_ROLE_KEY>" -H "Authorization: Bearer <SERVICE_ROLE_KEY>" \
+    -H "Content-Type: application/json" \
+    -d '{"email":"dra.ana@healthcare.dev","password":"HealthCare123!","email_confirm":true,"user_metadata":{"name":"Dra. Ana","clinic_name":"Clínica Teste"}}'
+  ```
+
+- Confirmação de e-mail está desabilitada por padrão no Supabase local, então o login funciona logo após criar o usuário.
