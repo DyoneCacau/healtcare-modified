@@ -38,6 +38,47 @@ const MODEL_TYPES: { value: DocumentPrintType; label: string }[] = [
   { value: 'receituario', label: 'Receituario' },
 ];
 
+const PATIENT_SELECT_TYPES: DocumentPrintType[] = [
+  'receituario',
+  'atestado',
+  'declaracao',
+  'termo_ciencia',
+];
+
+const PATIENT_DIALOG_COPY: Record<
+  Exclude<DocumentPrintType, 'recibo'>,
+  { title: string; description: string; emptyHint: string }
+> = {
+  atestado: {
+    title: 'Atestado',
+    description:
+      'Selecione o paciente para preencher o atestado. Você poderá editar o conteúdo antes de gerar o PDF.',
+    emptyHint:
+      'Nenhum paciente cadastrado. Você ainda pode emitir o atestado e preencher o nome manualmente.',
+  },
+  declaracao: {
+    title: 'Declaração',
+    description:
+      'Selecione o paciente para preencher a declaração. Você poderá editar o conteúdo antes de gerar o PDF.',
+    emptyHint:
+      'Nenhum paciente cadastrado. Você ainda pode emitir a declaração e preencher o nome manualmente.',
+  },
+  termo_ciencia: {
+    title: 'Termo de Ciência',
+    description:
+      'Selecione o paciente para preencher o termo. Você poderá editar o conteúdo antes de gerar o PDF.',
+    emptyHint:
+      'Nenhum paciente cadastrado. Você ainda pode emitir o termo e preencher o nome manualmente.',
+  },
+  receituario: {
+    title: 'Receituário',
+    description:
+      'Selecione o paciente para preencher o receituário. Você poderá editar os medicamentos antes de gerar o PDF.',
+    emptyHint:
+      'Nenhum paciente cadastrado. Você ainda pode emitir o receituário e preencher o nome manualmente.',
+  },
+};
+
 function mapDbPatient(p: {
   id: string;
   name: string;
@@ -95,7 +136,7 @@ export function DocumentsAndModelsTab() {
       return;
     }
 
-    if (type === 'receituario') {
+    if (PATIENT_SELECT_TYPES.includes(type)) {
       setPendingType(type);
       setPatientSelectId(patients[0]?.id || '');
       setPatientDialogOpen(true);
@@ -113,12 +154,18 @@ export function DocumentsAndModelsTab() {
 
   const handlePatientConfirm = () => {
     const dbPatient = patients.find((p) => p.id === patientSelectId);
-    setSelectedPatient(dbPatient ? mapDbPatient(dbPatient) : samplePatient);
-    setPrintType(pendingType || 'receituario');
+    // Sem paciente selecionado: deixa null para o usuário preencher o nome manualmente no preview
+    setSelectedPatient(dbPatient ? mapDbPatient(dbPatient) : null);
+    setPrintType(pendingType || 'atestado');
     setPatientDialogOpen(false);
     setPendingType(null);
     setPrintOpen(true);
   };
+
+  const activePatientDialogCopy =
+    pendingType && pendingType !== 'recibo'
+      ? PATIENT_DIALOG_COPY[pendingType]
+      : PATIENT_DIALOG_COPY.atestado;
 
   const handleSaveBranding = (data: ClinicBranding) => {
     updateBranding.mutate(data);
@@ -196,9 +243,9 @@ export function DocumentsAndModelsTab() {
       <Dialog open={patientDialogOpen} onOpenChange={setPatientDialogOpen}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Receituário</DialogTitle>
+            <DialogTitle>{activePatientDialogCopy.title}</DialogTitle>
             <DialogDescription>
-              Selecione o paciente para preencher o receituário. Você poderá editar os medicamentos antes de gerar o PDF.
+              {activePatientDialogCopy.description}
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4 py-4">
@@ -218,7 +265,7 @@ export function DocumentsAndModelsTab() {
               </Select>
               {patients.length === 0 && (
                 <p className="text-sm text-muted-foreground">
-                  Nenhum paciente cadastrado. Você ainda pode emitir o receituário e preencher o nome manualmente.
+                  {activePatientDialogCopy.emptyHint}
                 </p>
               )}
             </div>
