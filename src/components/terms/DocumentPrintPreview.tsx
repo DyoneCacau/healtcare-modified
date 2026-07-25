@@ -185,7 +185,7 @@ export function DocumentPrintPreview(props: DocumentPrintPreviewProps) {
   useEffect(() => {
     if (open && type === 'receituario') {
       setReceituarioConteudo(
-        'Rp.\n\n1. _______________________________________________\n   Uso: ___________________________________________\n\n2. _______________________________________________\n   Uso: ___________________________________________'
+        '1. _______________________________________________\n   Uso: ___________________________________________\n\n2. _______________________________________________\n   Uso: ___________________________________________'
       );
       setReceituarioUso('');
       setMedName('');
@@ -218,7 +218,7 @@ export function DocumentPrintPreview(props: DocumentPrintPreviewProps) {
     const controlledTag = medIsControlled ? ' [Controle Especial]' : '';
     const line = `${nextNumber}. ${trimmedName}${controlledTag}\n   Uso: ${dosePart}${medFrequency}${durationPart}`;
 
-    setReceituarioConteudo((prev) => (medItemCount === 0 ? `Rp.\n\n${line}` : `${prev}\n\n${line}`));
+    setReceituarioConteudo((prev) => (medItemCount === 0 ? line : `${prev}\n\n${line}`));
     setMedItemCount(nextNumber);
     if (medIsControlled) setHasControlledMedication(true);
 
