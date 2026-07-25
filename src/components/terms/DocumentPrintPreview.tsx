@@ -19,6 +19,19 @@ import { toast } from 'sonner';
 
 export type DocumentPrintType = 'atestado' | 'declaracao' | 'termo_ciencia' | 'recibo' | 'receituario';
 
+/** Posologias comuns pra montar a linha do medicamento sem digitar tudo na mão. */
+const FREQUENCY_OPTIONS = [
+  '4/4h',
+  '6/6h',
+  '8/8h',
+  '12/12h',
+  '24/24h',
+  '1x ao dia',
+  '2x ao dia',
+  '3x ao dia',
+  'Se necessário (SOS)',
+];
+
 export interface ProfessionalOption {
   id: string;
   name: string;
@@ -100,6 +113,11 @@ export function DocumentPrintPreview(props: DocumentPrintPreviewProps) {
   const [receituarioCpf, setReceituarioCpf] = useState('');
   const [receituarioConteudo, setReceituarioConteudo] = useState('');
   const [receituarioUso, setReceituarioUso] = useState('');
+  const [medName, setMedName] = useState('');
+  const [medDosage, setMedDosage] = useState('');
+  const [medFrequency, setMedFrequency] = useState(FREQUENCY_OPTIONS[2]);
+  const [medDuration, setMedDuration] = useState('');
+  const [medItemCount, setMedItemCount] = useState(0);
 
   const selectedProf = professionals.find((p) => p.id === selectedProfId) || professionals[0];
   const profName = selectedProf?.name || '________________';
@@ -123,8 +141,35 @@ export function DocumentPrintPreview(props: DocumentPrintPreviewProps) {
         'Rp.\n\n1. _______________________________________________\n   Uso: ___________________________________________\n\n2. _______________________________________________\n   Uso: ___________________________________________'
       );
       setReceituarioUso('');
+      setMedName('');
+      setMedDosage('');
+      setMedFrequency(FREQUENCY_OPTIONS[2]);
+      setMedDuration('');
+      setMedItemCount(0);
     }
   }, [open, type]);
+
+  /**
+   * Monta a linha "N. medicamento — dose, frequência, por X dias" e adiciona
+   * na prescrição. Na primeira adição, substitui o modelo de preenchimento
+   * manual; depois disso, o textarea continua 100% editável na mão.
+   */
+  const handleAddMedication = () => {
+    if (!medName.trim()) {
+      toast.error('Informe o nome do medicamento');
+      return;
+    }
+    const nextNumber = medItemCount + 1;
+    const dosePart = medDosage.trim() ? `${medDosage.trim()} — ` : '';
+    const durationPart = medDuration.trim() ? `, por ${medDuration.trim()}` : '';
+    const line = `${nextNumber}. ${medName.trim()}\n   Uso: ${dosePart}${medFrequency}${durationPart}`;
+
+    setReceituarioConteudo((prev) => (medItemCount === 0 ? `Rp.\n\n${line}` : `${prev}\n\n${line}`));
+    setMedItemCount(nextNumber);
+    setMedName('');
+    setMedDosage('');
+    setMedDuration('');
+  };
 
   useEffect(() => {
     if (professionals.length > 0 && !selectedProfId) {
@@ -349,6 +394,54 @@ export function DocumentPrintPreview(props: DocumentPrintPreviewProps) {
           </p>
           <div className="mt-4">
             <p className="font-semibold mb-2">Prescricao:</p>
+            {!forPrint && (
+              <div className="mb-3 space-y-2 rounded-md border border-dashed border-border bg-muted/20 p-3">
+                <p className="text-sm font-medium">Adicionar medicamento</p>
+                <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                  <input
+                    type="text"
+                    value={medName}
+                    onChange={(e) => setMedName(e.target.value)}
+                    placeholder="Medicamento (ex: Amoxicilina 500mg)"
+                    className="rounded border border-border bg-background px-2 py-1.5 text-sm"
+                  />
+                  <input
+                    type="text"
+                    value={medDosage}
+                    onChange={(e) => setMedDosage(e.target.value)}
+                    placeholder="Quantidade/dose (ex: 1 cápsula)"
+                    className="rounded border border-border bg-background px-2 py-1.5 text-sm"
+                  />
+                </div>
+                <div className="grid grid-cols-1 gap-2 sm:grid-cols-[1fr_1fr_auto]">
+                  <Select value={medFrequency} onValueChange={setMedFrequency}>
+                    <SelectTrigger className="text-sm">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {FREQUENCY_OPTIONS.map((f) => (
+                        <SelectItem key={f} value={f}>
+                          {f}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <input
+                    type="text"
+                    value={medDuration}
+                    onChange={(e) => setMedDuration(e.target.value)}
+                    placeholder="Duração (ex: 7 dias) - opcional"
+                    className="rounded border border-border bg-background px-2 py-1.5 text-sm"
+                  />
+                  <Button type="button" size="sm" variant="secondary" onClick={handleAddMedication}>
+                    Adicionar
+                  </Button>
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  Preenche a prescrição abaixo automaticamente. Você pode editar o texto na mão a qualquer momento, inclusive depois de adicionar.
+                </p>
+              </div>
+            )}
             {forPrint ? (
               <div className="whitespace-pre-wrap min-h-[160px]">{receituarioConteudo}</div>
             ) : (
