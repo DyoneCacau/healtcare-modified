@@ -268,6 +268,7 @@ export function QuickActions() {
         }))}
         clinics={clinicForDialog ? [clinicForDialog] : []}
         existingAppointments={existingAppointments}
+        defaultClinicId={clinic?.id}
       />
 
       {/* Payment Form Dialog */}

@@ -77,6 +77,13 @@ interface AppointmentFormDialogProps {
   initialStartTime?: string;
   /** Horário final ao criar; se omitido, usa 30min após initialStartTime */
   initialEndTime?: string;
+  /**
+   * Clínica ativa (selecionada na sidebar) pra pré-selecionar ao criar um
+   * agendamento novo. Sem isso, cairia em `clinics[0]` (1ª da lista, ordem
+   * alfabética quando "Todas as clínicas" está ativo) — podendo criar o
+   * agendamento silenciosamente numa unidade diferente da pretendida.
+   */
+  defaultClinicId?: string | null;
 }
 
 export function AppointmentFormDialog({
@@ -96,6 +103,7 @@ export function AppointmentFormDialog({
   initialDate,
   initialStartTime,
   initialEndTime,
+  defaultClinicId,
 }: AppointmentFormDialogProps) {
   const [date, setDate] = useState<Date>(new Date());
   const [startTime, setStartTime] = useState('09:00');
@@ -160,7 +168,12 @@ export function AppointmentFormDialog({
       setEndTime(initialEndTime || (initialStartTime ? add30Min(initialStartTime) : '09:30'));
       setPatientId(prefillPatientId || '');
       setProfessionalId('');
-      setClinicId(clinics[0]?.id || '');
+      // Prioriza a clínica ativa (sidebar); só cai pra 1ª da lista se ela não
+      // estiver entre as clínicas disponíveis neste contexto.
+      const preferredClinicId = defaultClinicId && clinics.some((c) => c.id === defaultClinicId)
+        ? defaultClinicId
+        : clinics[0]?.id || '';
+      setClinicId(preferredClinicId);
       setProcedure(prefillProcedure || '');
       setProcedureId(null);
       setProcedurePrice(null);
@@ -187,6 +200,7 @@ export function AppointmentFormDialog({
     initialDate,
     initialStartTime,
     initialEndTime,
+    defaultClinicId,
   ]);
 
   const checkConflict = (): boolean => {

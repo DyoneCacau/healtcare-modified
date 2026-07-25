@@ -607,6 +607,7 @@ export default function Agenda() {
         prefillNotes={prefillNotes}
         initialDate={prefillSlotDate ?? selectedDate}
         initialStartTime={prefillSlotStartTime ?? undefined}
+        defaultClinicId={clinic?.id}
       />
 
       {/* Complete Appointment Dialog */}
