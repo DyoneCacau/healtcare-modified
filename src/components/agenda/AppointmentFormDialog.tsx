@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { format } from 'date-fns';
+import { format, parseISO } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { CalendarIcon, HelpCircle, AlertTriangle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -125,7 +125,10 @@ export function AppointmentFormDialog({
   const [bookingFee, setBookingFee] = useState<number | null>(null);
   const [bookingFeePaymentMethod, setBookingFeePaymentMethod] = useState<BookingFeePaymentMethod | null>(null);
 
-  const { patients } = usePatients();
+  // Usa a clinica do proprio agendamento/formulario, nao a clinica ativa na
+  // sidebar — senao, ao editar um agendamento de outra unidade (com "Todas
+  // as clinicas" na Agenda), o paciente nao aparece na lista e o campo some.
+  const { patients } = usePatients(clinicId);
   const { activeProcedures, error: proceduresError } = useClinicProcedures(clinicId);
 
   const isEditing = !!appointment;
@@ -141,7 +144,8 @@ export function AppointmentFormDialog({
 
     if (appointment) {
       // Edição: preservar data e todos os dados do agendamento
-      setDate(new Date(appointment.date));
+      // (parseISO, nao "new Date(string)" — evita voltar 1 dia por fuso horário)
+      setDate(parseISO(appointment.date));
       setStartTime(appointment.startTime);
       setEndTime(appointment.endTime);
       setPatientId(appointment.patientId);

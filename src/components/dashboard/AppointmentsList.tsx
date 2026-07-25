@@ -1,8 +1,15 @@
-import { Clock, User, CalendarX } from "lucide-react";
+import { Clock, User, CalendarX, MoreVertical, Edit, CheckCircle } from "lucide-react";
+import { Link, useNavigate } from "react-router-dom";
 import { cn } from "@/lib/utils";
 import { useTodayAppointments } from "@/hooks/useAppointments";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Link } from "react-router-dom";
+import { Button } from "@/components/ui/button";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 
 const statusStyles = {
   confirmed: {
@@ -39,6 +46,7 @@ const statusStyles = {
 
 export function AppointmentsList() {
   const { appointments, isLoading } = useTodayAppointments();
+  const navigate = useNavigate();
 
   if (isLoading) {
     return (
@@ -88,11 +96,20 @@ export function AppointmentsList() {
             {activeAppointments.map((appointment) => {
               const statusKey = appointment.status as keyof typeof statusStyles;
               const status = statusStyles[statusKey] || statusStyles.pending;
-              
+              const canComplete = appointment.status === 'pending' || appointment.status === 'confirmed';
+
               return (
                 <div
                   key={appointment.id}
-                  className="flex items-center gap-4 p-4 transition-colors hover:bg-muted/50"
+                  role="button"
+                  tabIndex={0}
+                  className="group flex items-center gap-4 p-4 transition-colors hover:bg-muted/50 cursor-pointer"
+                  onClick={() => navigate(`/agenda?focusAppointmentId=${appointment.id}`)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' || e.key === ' ') {
+                      navigate(`/agenda?focusAppointmentId=${appointment.id}`);
+                    }
+                  }}
                 >
                   <div className="flex h-12 w-12 flex-shrink-0 items-center justify-center rounded-lg bg-muted">
                     <Clock className="h-5 w-5 text-muted-foreground" />
@@ -120,6 +137,33 @@ export function AppointmentsList() {
                       {appointment.professional?.name || 'Profissional'} • {appointment.procedure}
                     </div>
                   </div>
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-8 w-8 shrink-0 opacity-0 group-hover:opacity-100 focus-visible:opacity-100"
+                        onClick={(e) => e.stopPropagation()}
+                      >
+                        <MoreVertical className="h-4 w-4" />
+                      </Button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="end" onClick={(e) => e.stopPropagation()}>
+                      <DropdownMenuItem onClick={() => navigate(`/agenda?focusAppointmentId=${appointment.id}`)}>
+                        <Edit className="mr-2 h-4 w-4" />
+                        Editar
+                      </DropdownMenuItem>
+                      {canComplete && (
+                        <DropdownMenuItem
+                          onClick={() => navigate(`/agenda?focusAppointmentId=${appointment.id}&focusAction=complete`)}
+                          className="text-emerald-600 focus:text-emerald-600"
+                        >
+                          <CheckCircle className="mr-2 h-4 w-4" />
+                          Finalizar Atendimento
+                        </DropdownMenuItem>
+                      )}
+                    </DropdownMenuContent>
+                  </DropdownMenu>
                 </div>
               );
             })}

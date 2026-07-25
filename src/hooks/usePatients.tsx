@@ -37,8 +37,15 @@ async function syncNameToLinkedLeads(patientId: string, name: string) {
   }
 }
 
-export function usePatients() {
-  const { clinicId } = useClinic();
+/**
+ * @param overrideClinicId Usa essa clinica no lugar da clinica ativa na sidebar.
+ * Necessario em telas que editam registros de OUTRA clinica (ex.: editar um
+ * agendamento de uma unidade diferente na Agenda com "Todas as clinicas"),
+ * senao a lista de pacientes vem da clinica errada e o Select aparece vazio.
+ */
+export function usePatients(overrideClinicId?: string | null) {
+  const { clinicId: activeClinicId } = useClinic();
+  const clinicId = overrideClinicId || activeClinicId;
 
   const { data: patients, isLoading, error, refetch } = useQuery({
     queryKey: ['patients', clinicId],

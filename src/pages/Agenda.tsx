@@ -1,6 +1,6 @@
 import { useState, useMemo, useEffect } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { format } from 'date-fns';
+import { format, parseISO } from 'date-fns';
 import { Plus } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { MainLayout } from '@/components/layout/MainLayout';
@@ -278,6 +278,31 @@ export default function Agenda() {
     setCompletingAppointment(appointment);
     setCompleteDialogOpen(true);
   };
+
+  // Abrir direto um agendamento especifico (ex: clique em "Próximas Consultas"
+  // no Dashboard) já na tela de edição, ou já no fluxo de finalizar.
+  useEffect(() => {
+    const focusId = searchParams.get('focusAppointmentId');
+    if (!focusId) return;
+    if (isLoadingAppointments) return;
+
+    const target = appointments.find((apt) => apt.id === focusId);
+    if (!target) {
+      toast.error('Agendamento não encontrado');
+      setSearchParams({}, { replace: true });
+      return;
+    }
+
+    setSelectedDate(parseISO(target.date));
+    setView('day');
+    if (searchParams.get('focusAction') === 'complete' && (target.status === 'pending' || target.status === 'confirmed')) {
+      handleComplete(target);
+    } else {
+      handleEdit(target);
+    }
+    setSearchParams({}, { replace: true });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchParams, appointments, isLoadingAppointments]);
 
   const handleCompleteConfirm = async (
     appointment: AgendaAppointment,
