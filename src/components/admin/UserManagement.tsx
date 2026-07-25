@@ -39,7 +39,6 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { Switch } from '@/components/ui/switch';
-import { Checkbox } from '@/components/ui/checkbox';
 import {
   Users,
   Plus,
@@ -59,7 +58,8 @@ import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
 import type { Database } from '@/integrations/supabase/types';
 import { useClinic, useClinics } from '@/hooks/useClinic';
-import { getClinicDisplayName } from '@/lib/utils';
+import { ClinicMultiSelect } from '@/components/common/ClinicMultiSelect';
+import { SPECIALTIES } from '@/lib/specialties';
 
 type UserRole = Database['public']['Enums']['app_role'];
 type AssignableSystemRole = Exclude<UserRole, 'superadmin'>;
@@ -102,6 +102,9 @@ export function UserManagement({ users, onRefresh, isSuperAdmin }: UserManagemen
     role: 'receptionist' as string,
   });
   const [selectedClinicIds, setSelectedClinicIds] = useState<string[]>([]);
+  const [createProfessionalRecord, setCreateProfessionalRecord] = useState(false);
+  const [professionalSpecialty, setProfessionalSpecialty] = useState('');
+  const [professionalCro, setProfessionalCro] = useState('');
   const [customRoles, setCustomRoles] = useState<{ id: string; name: string }[]>([]);
   const [newRoleDialogOpen, setNewRoleDialogOpen] = useState(false);
   const [newRoleName, setNewRoleName] = useState('');
@@ -153,19 +156,11 @@ export function UserManagement({ users, onRefresh, isSuperAdmin }: UserManagemen
         role: 'receptionist',
       });
       setSelectedClinicIds(clinicId ? [clinicId] : []);
+      setCreateProfessionalRecord(false);
+      setProfessionalSpecialty('');
+      setProfessionalCro('');
     }
     setDialogOpen(true);
-  };
-
-  const toggleSelectedClinic = (id: string) => {
-    setSelectedClinicIds((prev) => {
-      if (prev.includes(id)) {
-        // A clínica atual precisa continuar marcada (é onde o cadastro é feito por padrão)
-        if (id === clinicId) return prev;
-        return prev.filter((c) => c !== id);
-      }
-      return [...prev, id];
-    });
   };
 
   const isSystemRole = (value: string): value is AssignableSystemRole =>
@@ -240,6 +235,13 @@ export function UserManagement({ users, onRefresh, isSuperAdmin }: UserManagemen
           toast.error('Selecione ao menos uma clínica para dar acesso.');
           setIsLoading(false);
           return;
+        }
+        if (formData.role === 'professional' && createProfessionalRecord) {
+          if (!professionalSpecialty || !professionalCro.trim()) {
+            toast.error('Informe especialidade e CRO para o profissional aparecer em Profissionais.');
+            setIsLoading(false);
+            return;
+          }
         }
 
         // Verificar se email já existe
@@ -335,6 +337,29 @@ export function UserManagement({ users, onRefresh, isSuperAdmin }: UserManagemen
 
           if (profileUpdateError) {
             console.error('Erro ao atualizar perfil:', profileUpdateError);
+          }
+
+          // 3) Se marcado, também cria o registro em Profissionais (aparece na Agenda),
+          // vinculado a este login via user_id.
+          if (formData.role === 'professional' && createProfessionalRecord) {
+            const { error: professionalError } = await supabase.from('professionals').insert(
+              selectedClinicIds.map((id) => ({
+                clinic_id: id,
+                user_id: authData.user!.id,
+                name: nameTrimmed,
+                specialty: professionalSpecialty,
+                cro: professionalCro.trim(),
+                email: formData.email || null,
+                phone: formData.phone?.trim() || null,
+                is_active: true,
+              }))
+            );
+            if (professionalError) {
+              console.error('Erro ao criar registro em Profissionais:', professionalError);
+              toast.error(
+                'Usuário criado, mas houve erro ao criar o registro em Profissionais. Cadastre manualmente na aba Profissionais.'
+              );
+            }
           }
         }
 
@@ -669,6 +694,11 @@ export function UserManagement({ users, onRefresh, isSuperAdmin }: UserManagemen
                     {clinicId && <SelectItem value="__new__">Criar nova função</SelectItem>}
                   </SelectContent>
                 </Select>
+                {!editingUser && formData.role === 'professional' && (
+                  <p className="text-xs text-muted-foreground">
+                    Isso só cria o acesso/login com as permissões de profissional. Pra ele aparecer disponível na Agenda, marque "Aparecer em Profissionais" abaixo.
+                  </p>
+                )}
               </div>
             </div>
 
@@ -690,30 +720,60 @@ export function UserManagement({ users, onRefresh, isSuperAdmin }: UserManagemen
             )}
 
             {!editingUser && clinics.length > 1 && (
-              <div className="space-y-2 rounded-md border p-3">
-                <Label>Acesso às clínicas</Label>
-                <p className="text-xs text-muted-foreground">
-                  Marque em quais clínicas este usuário vai ter acesso. Se o e-mail já existir,
-                  o usuário existente só é vinculado às clínicas marcadas (sem criar login duplicado).
-                </p>
-                <div className="space-y-2 pt-1">
-                  {clinics.map((clinic: { id: string; name?: string | null; unit_name?: string | null }) => (
-                    <div key={clinic.id} className="flex items-center gap-2">
-                      <Checkbox
-                        id={`user-clinic-${clinic.id}`}
-                        checked={selectedClinicIds.includes(clinic.id)}
-                        onCheckedChange={() => toggleSelectedClinic(clinic.id)}
-                        disabled={clinic.id === clinicId}
-                      />
-                      <Label htmlFor={`user-clinic-${clinic.id}`} className="text-sm font-normal cursor-pointer">
-                        {getClinicDisplayName(clinic)}
-                        {clinic.id === clinicId && (
-                          <span className="text-muted-foreground"> (atual)</span>
-                        )}
-                      </Label>
-                    </div>
-                  ))}
+              <ClinicMultiSelect
+                label="Acesso às clínicas"
+                clinics={clinics}
+                selectedIds={selectedClinicIds}
+                onChange={setSelectedClinicIds}
+                lockedIds={clinicId ? [clinicId] : []}
+                helperText="Marque em quais clínicas este usuário vai ter acesso (a atual já vem marcada). Se o e-mail já existir, o usuário existente só é vinculado às clínicas marcadas, sem criar login duplicado."
+              />
+            )}
+
+            {!editingUser && formData.role === 'professional' && (
+              <div className="space-y-3 rounded-md border p-3">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <Label htmlFor="create-professional-record">Aparecer em Profissionais</Label>
+                    <p className="text-xs text-muted-foreground">
+                      Cria também o registro deste profissional na aba Profissionais, pra ele aparecer disponível na Agenda.
+                    </p>
+                  </div>
+                  <Switch
+                    id="create-professional-record"
+                    checked={createProfessionalRecord}
+                    onCheckedChange={setCreateProfessionalRecord}
+                  />
                 </div>
+
+                {createProfessionalRecord && (
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <Label htmlFor="professional-specialty">Especialidade *</Label>
+                      <Select value={professionalSpecialty} onValueChange={setProfessionalSpecialty}>
+                        <SelectTrigger id="professional-specialty">
+                          <SelectValue placeholder="Selecione" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {SPECIALTIES.map((spec) => (
+                            <SelectItem key={spec} value={spec}>
+                              {spec}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="professional-cro">CRO *</Label>
+                      <Input
+                        id="professional-cro"
+                        value={professionalCro}
+                        onChange={(e) => setProfessionalCro(e.target.value)}
+                        placeholder="SP-12345"
+                      />
+                    </div>
+                  </div>
+                )}
               </div>
             )}
 
