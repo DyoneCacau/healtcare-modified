@@ -1,9 +1,10 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { format } from 'date-fns';
+import { format, parseISO } from 'date-fns';
 import { supabase } from '@/integrations/supabase/client';
 import { useClinic } from './useClinic';
 import { toast } from 'sonner';
 import { useAuth } from './useAuth';
+import { formatAppointmentNotificationMessage } from '@/lib/notificationMessage';
 
 export interface AppointmentData {
   id: string;
@@ -143,14 +144,14 @@ export function useAppointmentMutations() {
       }
       // Notificar membros da clínica destino sobre o novo agendamento
       if (user?.id) {
-        const dateStr = data.date || '';
-        const timeStr = data.start_time || '';
+        const dateLabel = data.date ? format(parseISO(data.date), 'dd/MM/yyyy') : '';
+        const timeLabel = (data.start_time || '').slice(0, 5);
         void (async () => {
           try {
             const { error: notificationError } = await supabase.rpc('notify_clinic_users_on_appointment', {
               p_clinic_id: targetClinicId,
               p_title: 'Novo agendamento',
-              p_message: `Novo agendamento em ${dateStr} às ${timeStr}`,
+              p_message: formatAppointmentNotificationMessage(dateLabel, timeLabel),
               p_reference_id: appointmentId,
               p_creator_id: user.id,
             });
