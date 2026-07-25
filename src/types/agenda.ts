@@ -42,7 +42,7 @@ export interface AgendaAppointment {
   leadSource?: LeadSource;
   /** Nome de quem indicou (quando leadSource = Indicação). Usado em bonificações. */
   referralName?: string | null;
-  /** Taxa de agendamento (ex: R$50). Se faltar/desistir, entra no caixa. */
+  /** Sinal/taxa de agendamento (ex: R$50). Entra no caixa ao agendar; abate no procedimento se comparecer; retido se faltar/cancelar. */
   bookingFee?: number | null;
   /** Forma de pagamento da taxa (dinheiro, PIX, cartão). */
   bookingFeePaymentMethod?: 'cash' | 'pix' | 'credit' | 'debit' | null;
