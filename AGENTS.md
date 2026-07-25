@@ -254,3 +254,10 @@ Contexto para agentes rodando no Cursor Cloud (o *update script* já rodou `npm 
   ```
 
 - Confirmação de e-mail está desabilitada por padrão no Supabase local, então o login funciona logo após criar o usuário.
+
+### Provisionar um tenant (modelo "vendas diretas")
+
+- Os scripts `PRODUCAO_*.sql` **removem** o trigger de auto-criação de clínica no signup (`create_clinic_on_signup`). No modelo atual, a clínica é provisionada pelo SuperAdmin/backend — signup sozinho **não** cria clínica.
+- Sem assinatura, o app mostra "Clínica pendente de ativação" (`needsActivation` em `useSubscription.tsx`). As features (ex.: `pacientes`) vêm das `plans.features` da assinatura. Para um tenant funcional, criar clínica + `clinic_users` (owner) + `user_roles` (admin) + `subscriptions` `status=active`, `billing_status=paid`, `billing_mode=manual`, com um `plan_id` que inclua as features desejadas (ex.: `premium`). Ver o bloco `DO $$ ... $$` usado neste setup como referência.
+- **Ordem completa de setup local:** `supabase start` → aplicar `2026*.sql` → grants → aplicar `PRODUCAO_*.sql` (pular o `PRODUCAO_04_*`, que apaga dados) → grants de novo → criar usuário via Auth admin API → provisionar o tenant via SQL.
+- **NÃO aplicar o `PRODUCAO_04_LIMPAR_DADOS_EXCETO_SUPERADMIN.sql`** em dev: ele apaga todas as clínicas/usuários exceto um superadmin específico de produção.
