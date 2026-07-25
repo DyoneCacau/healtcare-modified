@@ -53,6 +53,7 @@ import {
   ValidationResult,
 } from '@/services/commissionService';
 import { cn } from '@/lib/utils';
+import { remainingAfterBookingFee } from '@/lib/bookingFee';
 
 export interface CommissionBreakdownItem {
   rule: CommissionRule;
@@ -187,6 +188,8 @@ export function CompleteAppointmentDialog({
 
   if (!appointment) return null;
 
+  const bookingFee = appointment.bookingFee ?? 0;
+  const remainingToCharge = remainingAfterBookingFee(serviceValue, bookingFee);
   const totalCommission = commissionBreakdown.reduce((sum, item) => sum + item.amount, 0);
   const netValue = serviceValue - totalCommission;
   const hasProfessionalRule = commissionBreakdown.some(b => b.rule.beneficiaryType === 'professional');
@@ -203,7 +206,9 @@ export function CompleteAppointmentDialog({
             Finalizar Atendimento
           </DialogTitle>
           <DialogDescription>
-            Escolha receber agora no Caixa ou lançar em Contas a receber
+            {bookingFee > 0
+              ? 'O sinal já pago é abatido do procedimento. Escolha o destino do saldo restante.'
+              : 'Escolha receber agora no Caixa ou lançar em Contas a receber'}
           </DialogDescription>
         </DialogHeader>
 
@@ -317,70 +322,108 @@ export function CompleteAppointmentDialog({
               )}
             </div>
 
-            <div className="grid gap-2">
-              <Label>Destino do valor</Label>
-              <div className="grid grid-cols-2 gap-2">
-                <Button
-                  type="button"
-                  variant={billingDestination === 'cash' ? 'default' : 'outline'}
-                  className="justify-start h-auto py-3"
-                  disabled={validation.errorCode === 'DUPLICATE'}
-                  onClick={() => setBillingDestination('cash')}
-                >
-                  <DollarSign className="mr-2 h-4 w-4 shrink-0" />
-                  <span className="text-left">
-                    <span className="block text-sm font-medium">Receber agora</span>
-                    <span className="block text-xs font-normal opacity-80">Lança no Caixa</span>
-                  </span>
-                </Button>
-                <Button
-                  type="button"
-                  variant={billingDestination === 'receivable' ? 'default' : 'outline'}
-                  className="justify-start h-auto py-3"
-                  disabled={validation.errorCode === 'DUPLICATE'}
-                  onClick={() => setBillingDestination('receivable')}
-                >
-                  <Wallet className="mr-2 h-4 w-4 shrink-0" />
-                  <span className="text-left">
-                    <span className="block text-sm font-medium">Contas a receber</span>
-                    <span className="block text-xs font-normal opacity-80">Cobrar depois</span>
-                  </span>
-                </Button>
-              </div>
-            </div>
+            {bookingFee > 0 && (
+              <Card className="border-emerald-200 bg-emerald-50/60">
+                <CardContent className="p-3 space-y-1 text-sm">
+                  <div className="flex items-center justify-between">
+                    <span className="text-muted-foreground">Valor do procedimento</span>
+                    <span className="font-medium">{formatCurrency(serviceValue)}</span>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span className="text-muted-foreground">Sinal já pago no agendamento</span>
+                    <span className="font-medium text-emerald-700">− {formatCurrency(bookingFee)}</span>
+                  </div>
+                  <Separator className="my-1" />
+                  <div className="flex items-center justify-between">
+                    <span className="font-medium">
+                      {remainingToCharge > 0
+                        ? (billingDestination === 'receivable' ? 'Saldo a lançar a receber' : 'Saldo a receber agora')
+                        : 'Saldo restante'}
+                    </span>
+                    <span className="font-semibold text-emerald-800">{formatCurrency(remainingToCharge)}</span>
+                  </div>
+                  {remainingToCharge <= 0 && (
+                    <p className="text-xs text-muted-foreground pt-1">
+                      O procedimento fica quitado com o sinal já lançado no caixa. Nada será cobrado agora.
+                    </p>
+                  )}
+                </CardContent>
+              </Card>
+            )}
 
-            {billingDestination === 'cash' ? (
-              <div className="grid gap-2">
-                <Label>Forma de Pagamento</Label>
-                <Select
-                  value={paymentMethod}
-                  onValueChange={(v) => setPaymentMethod(v as PaymentMethod)}
-                  disabled={validation.errorCode === 'DUPLICATE'}
-                >
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="cash">Dinheiro</SelectItem>
-                    <SelectItem value="credit">Cartão Crédito</SelectItem>
-                    <SelectItem value="debit">Cartão Débito</SelectItem>
-                    <SelectItem value="pix">PIX</SelectItem>
-                    <SelectItem value="voucher">Voucher</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-            ) : (
-              <div className="grid gap-2">
-                <Label>Vencimento</Label>
-                <DateInput
-                  value={dueDate}
-                  onChange={setDueDate}
-                  disabled={validation.errorCode === 'DUPLICATE'}
-                />
-                <p className="text-xs text-muted-foreground">
-                  O valor fica em aberto até a baixa em Contas a receber (que gera o lançamento no Caixa).
-                </p>
-              </div>
+            {remainingToCharge > 0 && (
+              <>
+                <div className="grid gap-2">
+                  <Label>{bookingFee > 0 ? 'Destino do saldo' : 'Destino do valor'}</Label>
+                  <div className="grid grid-cols-2 gap-2">
+                    <Button
+                      type="button"
+                      variant={billingDestination === 'cash' ? 'default' : 'outline'}
+                      className="justify-start h-auto py-3"
+                      disabled={validation.errorCode === 'DUPLICATE'}
+                      onClick={() => setBillingDestination('cash')}
+                    >
+                      <DollarSign className="mr-2 h-4 w-4 shrink-0" />
+                      <span className="text-left">
+                        <span className="block text-sm font-medium">Receber agora</span>
+                        <span className="block text-xs font-normal opacity-80">
+                          Lança {formatCurrency(remainingToCharge)} no Caixa
+                        </span>
+                      </span>
+                    </Button>
+                    <Button
+                      type="button"
+                      variant={billingDestination === 'receivable' ? 'default' : 'outline'}
+                      className="justify-start h-auto py-3"
+                      disabled={validation.errorCode === 'DUPLICATE'}
+                      onClick={() => setBillingDestination('receivable')}
+                    >
+                      <Wallet className="mr-2 h-4 w-4 shrink-0" />
+                      <span className="text-left">
+                        <span className="block text-sm font-medium">Contas a receber</span>
+                        <span className="block text-xs font-normal opacity-80">
+                          Cobrar {formatCurrency(remainingToCharge)} depois
+                        </span>
+                      </span>
+                    </Button>
+                  </div>
+                </div>
+
+                {billingDestination === 'cash' ? (
+                  <div className="grid gap-2">
+                    <Label>{bookingFee > 0 ? 'Forma de Pagamento do saldo' : 'Forma de Pagamento'}</Label>
+                    <Select
+                      value={paymentMethod}
+                      onValueChange={(v) => setPaymentMethod(v as PaymentMethod)}
+                      disabled={validation.errorCode === 'DUPLICATE'}
+                    >
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="cash">Dinheiro</SelectItem>
+                        <SelectItem value="credit">Cartão Crédito</SelectItem>
+                        <SelectItem value="debit">Cartão Débito</SelectItem>
+                        <SelectItem value="pix">PIX</SelectItem>
+                        <SelectItem value="voucher">Voucher</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                ) : (
+                  <div className="grid gap-2">
+                    <Label>Vencimento</Label>
+                    <DateInput
+                      value={dueDate}
+                      onChange={setDueDate}
+                      disabled={validation.errorCode === 'DUPLICATE'}
+                    />
+                    <p className="text-xs text-muted-foreground">
+                      O saldo fica em aberto até a baixa em Contas a receber (que gera o lançamento no Caixa).
+                      O sinal já pago permanece no caixa com origem no agendamento.
+                    </p>
+                  </div>
+                )}
+              </>
             )}
           </div>
 
@@ -534,7 +577,11 @@ export function CompleteAppointmentDialog({
             )}
           >
             <CheckCircle className="mr-2 h-4 w-4" />
-            {billingDestination === 'receivable' ? 'Finalizar e lançar a receber' : 'Finalizar e Registrar'}
+            {remainingToCharge <= 0
+              ? 'Finalizar (quitado com sinal)'
+              : billingDestination === 'receivable'
+                ? 'Finalizar e lançar a receber'
+                : 'Finalizar e Registrar'}
           </Button>
         </DialogFooter>
       </DialogContent>

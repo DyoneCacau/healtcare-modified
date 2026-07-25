@@ -83,7 +83,7 @@ export function QuickActions() {
   const { createPatient } = usePatientMutations();
   const { patients } = usePatients();
   const { createAppointment } = useAppointmentMutations();
-  const { createTransaction } = useTransactionMutations();
+  const { createTransaction, ensureBookingFeeIncome } = useTransactionMutations();
   const { activeProfessionals } = useProfessionals();
   const { clinic } = useClinic();
   const { branding } = useClinicBranding();
@@ -135,7 +135,7 @@ export function QuickActions() {
 
   const handleSaveAppointment = async (appointmentData: any) => {
     // Transform from dialog format to database format
-    await createAppointment.mutateAsync({
+    const created = await createAppointment.mutateAsync({
       clinic_id: appointmentData.clinic?.id,
       patient_id: appointmentData.patientId,
       professional_id: appointmentData.professional?.id || appointmentData.professionalId,
@@ -154,6 +154,21 @@ export function QuickActions() {
       booking_fee: appointmentData.bookingFee ?? null,
       booking_fee_payment_method: appointmentData.bookingFeePaymentMethod ?? null,
     });
+
+    if (created?.id && (appointmentData.bookingFee ?? 0) > 0) {
+      try {
+        await ensureBookingFeeIncome.mutateAsync({
+          appointmentId: created.id,
+          amount: appointmentData.bookingFee,
+          paymentMethod: appointmentData.bookingFeePaymentMethod || 'pix',
+          patientName: appointmentData.patientName || 'Paciente',
+          patientId: appointmentData.patientId,
+        });
+      } catch (err) {
+        console.error('Erro ao lançar sinal de agendamento:', err);
+      }
+    }
+
     setAppointmentDialogOpen(false);
   };
 

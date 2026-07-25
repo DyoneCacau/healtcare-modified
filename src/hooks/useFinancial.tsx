@@ -5,6 +5,7 @@ import { useClinic } from './useClinic';
 import { useAuth } from './useAuth';
 import { toast } from 'sonner';
 import { AuditEvent } from '@/types/audit';
+import { BOOKING_FEE_CATEGORY, bookingFeeIncomeDescription } from '@/lib/bookingFee';
 
 export type TransactionData = Database['public']['Tables']['financial_transactions']['Row'];
 type FinancialTransactionInsert = Database['public']['Tables']['financial_transactions']['Insert'];
@@ -610,21 +611,28 @@ export function useTransactionMutations() {
     },
   });
 
+  const findBookingFeeTransaction = async (appointmentId: string) => {
+    if (!clinicId) return null;
+
+    const { data: tx, error } = await supabase
+      .from('financial_transactions')
+      .select('id, payment_method, description, amount, refunded_at')
+      .eq('clinic_id', clinicId)
+      .eq('reference_type', 'appointment')
+      .eq('reference_id', appointmentId)
+      .eq('category', BOOKING_FEE_CATEGORY)
+      .is('deleted_at', null)
+      .maybeSingle();
+
+    if (error) throw error;
+    return tx;
+  };
+
   const syncBookingFeePaymentMethod = useMutation({
     mutationFn: async ({ appointmentId, paymentMethod }: { appointmentId: string; paymentMethod: string }) => {
       if (!clinicId) throw new Error('Clínica não encontrada');
 
-      const { data: tx, error: findErr } = await supabase
-        .from('financial_transactions')
-        .select('id, payment_method')
-        .eq('clinic_id', clinicId)
-        .eq('reference_type', 'appointment')
-        .eq('reference_id', appointmentId)
-        .eq('category', 'Taxa de agendamento')
-        .is('deleted_at', null)
-        .maybeSingle();
-
-      if (findErr) throw findErr;
+      const tx = await findBookingFeeTransaction(appointmentId);
       if (!tx) return null;
 
       const { error: updateErr } = await supabase
@@ -645,7 +653,98 @@ export function useTransactionMutations() {
     },
   });
 
-  return { createTransaction, updateTransaction, deleteTransaction, refundTransaction, syncBookingFeePaymentMethod };
+  /**
+   * Garante o lançamento do sinal no caixa vinculado ao agendamento.
+   * Idempotente: se já existir receita da categoria, só sincroniza forma/descrição.
+   */
+  const ensureBookingFeeIncome = useMutation({
+    mutationFn: async ({
+      appointmentId,
+      amount,
+      paymentMethod,
+      patientName,
+      patientId,
+      descriptionSuffix,
+      silent,
+    }: {
+      appointmentId: string;
+      amount: number;
+      paymentMethod: string;
+      patientName: string;
+      patientId?: string | null;
+      descriptionSuffix?: string;
+      silent?: boolean;
+    }) => {
+      if (!clinicId) throw new Error('Clínica não encontrada');
+      if (!user?.id) throw new Error('Usuário não autenticado');
+      if (!(amount > 0)) return null;
+
+      const description = bookingFeeIncomeDescription(patientName, descriptionSuffix);
+      const existing = await findBookingFeeTransaction(appointmentId);
+
+      if (existing) {
+        const { error: updateErr } = await supabase
+          .from('financial_transactions')
+          .update({
+            payment_method: paymentMethod,
+            description,
+            updated_at: new Date().toISOString(),
+          })
+          .eq('id', existing.id);
+        if (updateErr) throw updateErr;
+        return { id: existing.id, created: false as const };
+      }
+
+      const transactionId = crypto.randomUUID();
+      const basePayload: FinancialTransactionInsert = {
+        id: transactionId,
+        type: 'income',
+        amount,
+        description,
+        category: BOOKING_FEE_CATEGORY,
+        payment_method: paymentMethod,
+        clinic_id: clinicId,
+        user_id: user.id,
+        reference_type: 'appointment',
+        reference_id: appointmentId,
+      };
+      const payload: FinancialTransactionInsert = patientId
+        ? { ...basePayload, patient_id: patientId, notes: 'origem: sinal_agendamento' }
+        : { ...basePayload, notes: 'origem: sinal_agendamento' };
+
+      let { error } = await supabase.from('financial_transactions').insert(payload);
+      if (error && ['42703', 'PGRST204'].includes((error as { code?: string }).code || '')) {
+        ({ error } = await supabase.from('financial_transactions').insert(basePayload));
+      }
+      if (error) throw error;
+
+      return { id: transactionId, created: true as const, silent: !!silent };
+    },
+    onSuccess: (result) => {
+      if (!result) return;
+      queryClient.invalidateQueries({ queryKey: ['transactions'] });
+      queryClient.invalidateQueries({ queryKey: ['financial-summary'] });
+      queryClient.invalidateQueries({ queryKey: ['dashboard-stats'] });
+      queryClient.invalidateQueries({ queryKey: ['revenue-chart'] });
+      if (result.created && !('silent' in result && result.silent)) {
+        toast.success('Sinal de agendamento lançado no caixa');
+      }
+    },
+    onError: (error) => {
+      console.error('Error ensuring booking fee income:', error);
+      toast.error('Erro ao lançar sinal de agendamento no financeiro');
+    },
+  });
+
+  return {
+    createTransaction,
+    updateTransaction,
+    deleteTransaction,
+    refundTransaction,
+    syncBookingFeePaymentMethod,
+    ensureBookingFeeIncome,
+    findBookingFeeTransaction,
+  };
 }
 
 /** Normaliza data para YYYY-MM-DD (Supabase pode retornar string ISO ou Date). */

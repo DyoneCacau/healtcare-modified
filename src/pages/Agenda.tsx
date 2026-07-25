@@ -26,6 +26,7 @@ import { usePermissions } from '@/hooks/usePermissions';
 import { toast } from 'sonner';
 import { Skeleton } from '@/components/ui/skeleton';
 import { prepareAgendaWhatsAppMessage } from '@/utils/whatsapp';
+import { remainingAfterBookingFee } from '@/lib/bookingFee';
 
 export default function Agenda() {
   const [searchParams, setSearchParams] = useSearchParams();
@@ -75,7 +76,12 @@ export default function Agenda() {
   );
   const { activeProfessionals, isLoading: isLoadingProfessionals } = useProfessionals();
   const { createAppointment, updateAppointment } = useAppointmentMutations();
-  const { createTransaction, syncBookingFeePaymentMethod } = useTransactionMutations();
+  const {
+    createTransaction,
+    syncBookingFeePaymentMethod,
+    ensureBookingFeeIncome,
+    findBookingFeeTransaction,
+  } = useTransactionMutations();
   const { createReceivable } = useReceivableMutations();
   const { createCommission } = useCommissionMutations();
   const { updateLead } = useCrmLeadMutations();
@@ -226,7 +232,26 @@ export default function Agenda() {
       id: appointment.id,
       status: 'cancelled',
     });
-    toast.success('Agendamento cancelado');
+    const fee = appointment.bookingFee ?? 0;
+    if (fee > 0) {
+      // Sinal já lançado no agendamento permanece no caixa (não reembolsado).
+      try {
+        await ensureBookingFeeIncome.mutateAsync({
+          appointmentId: appointment.id,
+          amount: fee,
+          paymentMethod: appointment.bookingFeePaymentMethod || 'pix',
+          patientName: appointment.patientName,
+          patientId: appointment.patientId,
+          descriptionSuffix: 'cancelou — retido',
+          silent: true,
+        });
+      } catch (err) {
+        console.error('Erro ao atualizar origem do sinal no cancelamento:', err);
+      }
+      toast.success(`Agendamento cancelado. Sinal de R$ ${fee.toFixed(2)} permanece no caixa.`);
+    } else {
+      toast.success('Agendamento cancelado');
+    }
   };
 
   const handleMarkNoShow = async (appointment: AgendaAppointment, paymentMethod?: PaymentMethod) => {
@@ -236,34 +261,45 @@ export default function Agenda() {
     });
     const fee = appointment.bookingFee ?? 0;
     if (fee > 0) {
-      await createTransaction.mutateAsync({
-        type: 'income',
+      const method = paymentMethod ?? appointment.bookingFeePaymentMethod ?? 'pix';
+      // Idempotente: se o sinal já entrou no caixa ao agendar, só atualiza a origem.
+      await ensureBookingFeeIncome.mutateAsync({
+        appointmentId: appointment.id,
         amount: fee,
-        description: `Taxa de agendamento - ${appointment.patientName} (faltou)`,
-        category: 'Taxa de agendamento',
-        payment_method: paymentMethod ?? 'cash',
-        reference_type: 'appointment',
-        reference_id: appointment.id,
+        paymentMethod: method,
+        patientName: appointment.patientName,
+        patientId: appointment.patientId,
+        descriptionSuffix: 'faltou — retido',
+        silent: true,
       });
-      const methodLabel = { cash: 'Dinheiro', pix: 'PIX', credit: 'Cartão Crédito', debit: 'Cartão Débito' }[paymentMethod ?? 'cash'];
-      toast.success(`Marcado como faltou. Taxa de R$ ${fee.toFixed(2)} registrada no caixa (${methodLabel}).`);
+      toast.success(`Marcado como faltou. Sinal de R$ ${fee.toFixed(2)} permanece no caixa (não reembolsado).`);
     } else {
       toast.success('Marcado como faltou');
     }
   };
 
-  const handleMarkNoShowClick = (appointment: AgendaAppointment) => {
+  const handleMarkNoShowClick = async (appointment: AgendaAppointment) => {
     const fee = appointment.bookingFee ?? 0;
-    const paymentMethod = appointment.bookingFeePaymentMethod;
-    // Se já tem forma de pagamento definida no agendamento, usa direto; senão abre o diálogo
-    if (fee > 0 && (paymentMethod === 'cash' || paymentMethod === 'pix' || paymentMethod === 'credit' || paymentMethod === 'debit')) {
-      handleMarkNoShow(appointment, paymentMethod);
-    } else if (fee > 0) {
-      setNoShowAppointment(appointment);
-      setNoShowFeeDialogOpen(true);
-    } else {
+    if (!(fee > 0)) {
       handleMarkNoShow(appointment);
+      return;
     }
+
+    const paymentMethod = appointment.bookingFeePaymentMethod;
+    try {
+      const existing = await findBookingFeeTransaction(appointment.id);
+      // Sinal já no caixa ou forma já definida: não precisa perguntar de novo.
+      if (existing || paymentMethod === 'cash' || paymentMethod === 'pix' || paymentMethod === 'credit' || paymentMethod === 'debit') {
+        await handleMarkNoShow(appointment, paymentMethod || undefined);
+        return;
+      }
+    } catch (err) {
+      console.error('Erro ao consultar sinal do agendamento:', err);
+    }
+
+    // Legado: taxa marcada sem forma/lançamento — pede a forma antes de registrar.
+    setNoShowAppointment(appointment);
+    setNoShowFeeDialogOpen(true);
   };
 
   const handleConfirm = async (appointment: AgendaAppointment) => {
@@ -316,40 +352,65 @@ export default function Agenda() {
     dueDate?: string,
   ) => {
     const isReceivable = billingDestination === 'receivable';
+    const bookingFee = appointment.bookingFee ?? 0;
+    const remaining = remainingAfterBookingFee(serviceValue, bookingFee);
+    // Com saldo zero após o sinal, não há nada a receber depois.
+    const paymentStatus = isReceivable && remaining > 0 ? 'pending' : 'paid';
 
     await updateAppointment.mutateAsync({
       id: appointment.id,
       status: 'completed',
-      payment_status: isReceivable ? 'pending' : 'paid',
+      payment_status: paymentStatus,
     });
 
-    if (isReceivable) {
-      await createReceivable.mutateAsync({
-        patient_id: appointment.patientId || null,
-        appointment_id: appointment.id,
-        description: [
-          `${appointment.procedure} - ${appointment.patientName}`,
-          adjustmentReason ? `Ajuste: ${adjustmentReason}` : null,
-        ].filter(Boolean).join(' | '),
-        amount: serviceValue,
-        due_date: dueDate || format(new Date(), 'yyyy-MM-dd'),
-      });
-    } else {
-      await createTransaction.mutateAsync({
-        type: 'income',
-        amount: serviceValue,
-        description: [
-          `${appointment.procedure} - ${appointment.patientName}`,
-          adjustmentReason ? `Ajuste: ${adjustmentReason}` : null,
-        ].filter(Boolean).join(' | '),
-        category: 'Procedimento',
-        payment_method: paymentMethod,
-        reference_type: 'appointment',
-        reference_id: appointment.id,
-      });
+    const feeNote = bookingFee > 0
+      ? `Sinal R$ ${bookingFee.toFixed(2)} abatido`
+      : null;
+    const description = [
+      `${appointment.procedure} - ${appointment.patientName}`,
+      feeNote,
+      adjustmentReason ? `Ajuste: ${adjustmentReason}` : null,
+    ].filter(Boolean).join(' | ');
+
+    if (remaining > 0) {
+      if (isReceivable) {
+        await createReceivable.mutateAsync({
+          patient_id: appointment.patientId || null,
+          appointment_id: appointment.id,
+          description,
+          amount: remaining,
+          due_date: dueDate || format(new Date(), 'yyyy-MM-dd'),
+        });
+      } else {
+        await createTransaction.mutateAsync({
+          type: 'income',
+          amount: remaining,
+          description,
+          category: 'Procedimento',
+          payment_method: paymentMethod,
+          reference_type: 'appointment',
+          reference_id: appointment.id,
+          patient_id: appointment.patientId || null,
+        });
+      }
+    } else if (bookingFee > 0) {
+      // Procedimento quitado só com o sinal já lançado no agendamento.
+      try {
+        await ensureBookingFeeIncome.mutateAsync({
+          appointmentId: appointment.id,
+          amount: bookingFee,
+          paymentMethod: appointment.bookingFeePaymentMethod || paymentMethod,
+          patientName: appointment.patientName,
+          patientId: appointment.patientId,
+          descriptionSuffix: 'abatido no procedimento',
+          silent: true,
+        });
+      } catch (err) {
+        console.error('Erro ao atualizar origem do sinal na finalização:', err);
+      }
     }
 
-    // Registrar comissões no banco
+    // Registrar comissões no banco (sobre o valor bruto do procedimento)
     try {
       for (const { rule, amount } of commissionBreakdown) {
         const beneficiaryId =
@@ -386,10 +447,14 @@ export default function Agenda() {
       return;
     }
 
-    if (isReceivable) {
-      toast.success(`Atendimento finalizado. Valor de R$ ${serviceValue.toFixed(2)} lançado em Contas a receber.`);
+    if (remaining <= 0 && bookingFee > 0) {
+      toast.success(`Atendimento finalizado. Procedimento quitado com o sinal de R$ ${bookingFee.toFixed(2)} já no caixa.`);
+    } else if (isReceivable) {
+      const feeMsg = bookingFee > 0 ? ` (sinal R$ ${bookingFee.toFixed(2)} abatido)` : '';
+      toast.success(`Atendimento finalizado. R$ ${remaining.toFixed(2)} em Contas a receber${feeMsg}.`);
     } else {
-      toast.success(`Atendimento finalizado! Valor: R$ ${serviceValue.toFixed(2)} no Caixa.`);
+      const feeMsg = bookingFee > 0 ? ` (sinal R$ ${bookingFee.toFixed(2)} abatido)` : '';
+      toast.success(`Atendimento finalizado! R$ ${remaining.toFixed(2)} no Caixa${feeMsg}.`);
     }
 
     if (scheduleReturn) {
@@ -435,15 +500,25 @@ export default function Agenda() {
         booking_fee: data.bookingFee ?? null,
         booking_fee_payment_method: data.bookingFeePaymentMethod ?? null,
       });
-      // Sincronizar forma de pagamento da taxa no financeiro (se já existe transação de no-show)
+      // Garante sinal no caixa se a taxa foi marcada/alterada na edição
       if ((data.bookingFee ?? 0) > 0 && data.bookingFeePaymentMethod) {
         try {
-          await syncBookingFeePaymentMethod.mutateAsync({
+          await ensureBookingFeeIncome.mutateAsync({
             appointmentId: data.id,
+            amount: data.bookingFee!,
             paymentMethod: data.bookingFeePaymentMethod,
+            patientName: data.patientName || 'Paciente',
+            patientId: data.patientId,
           });
         } catch {
-          // Silencioso: transação pode não existir ainda (paciente não faltou)
+          try {
+            await syncBookingFeePaymentMethod.mutateAsync({
+              appointmentId: data.id,
+              paymentMethod: data.bookingFeePaymentMethod,
+            });
+          } catch {
+            // Melhor esforço: não bloqueia a edição do agendamento
+          }
         }
       }
     } else {
@@ -467,6 +542,22 @@ export default function Agenda() {
         booking_fee: data.bookingFee ?? null,
         booking_fee_payment_method: data.bookingFeePaymentMethod ?? null,
       });
+
+      // Sinal entra no caixa/financeiro na criação, com origem no agendamento
+      if (created?.id && (data.bookingFee ?? 0) > 0) {
+        try {
+          await ensureBookingFeeIncome.mutateAsync({
+            appointmentId: created.id,
+            amount: data.bookingFee!,
+            paymentMethod: data.bookingFeePaymentMethod || 'pix',
+            patientName: data.patientName || 'Paciente',
+            patientId: data.patientId,
+          });
+        } catch (err) {
+          console.error('Erro ao lançar sinal de agendamento:', err);
+          toast.error('Agendamento criado, mas o sinal não entrou no caixa. Lance manualmente no Financeiro.');
+        }
+      }
 
       // Vínculo de volta ao CRM (origem + paciente + agendamento)
       if (crmLeadId && created?.id) {

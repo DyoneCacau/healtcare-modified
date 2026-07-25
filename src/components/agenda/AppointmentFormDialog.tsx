@@ -41,6 +41,7 @@ import { Clinic } from '@/types/clinic';
 import { usePatients } from '@/hooks/usePatients';
 import { useClinicProcedures } from '@/hooks/useClinicProcedures';
 import { PROCEDURE_OPTIONS } from '@/lib/procedures';
+import { DEFAULT_BOOKING_FEE } from '@/lib/bookingFee';
 import { toast } from 'sonner';
 
 type BookingFeePaymentMethod = NonNullable<AgendaAppointment['bookingFeePaymentMethod']>;
@@ -611,13 +612,13 @@ export function AppointmentFormDialog({
                 id="bookingFee"
                 checked={bookingFee !== null}
                 onCheckedChange={(checked) => {
-                  setBookingFee(checked ? 50 : null);
+                  setBookingFee(checked ? DEFAULT_BOOKING_FEE : null);
                   if (!checked) setBookingFeePaymentMethod(null);
                   else setBookingFeePaymentMethod((p) => p ?? 'pix');
                 }}
               />
               <label htmlFor="bookingFee" className="text-sm font-medium cursor-pointer">
-                Taxa de agendamento (R$ 50) — se faltar/desistir, valor entra no caixa
+                {`Sinal / taxa de agendamento (R$ ${DEFAULT_BOOKING_FEE}) — entra no caixa agora; abate no procedimento se vier; retido se faltar/cancelar`}
               </label>
             </div>
             {bookingFee !== null && (
