@@ -260,6 +260,31 @@ export function useProcedureMaterialMutations() {
         });
       }
 
+      // Auditoria: primeiro registro de materiais do atendimento
+      try {
+        await (supabase as any).from('audit_events').insert({
+          clinic_id: clinicId,
+          entity_type: 'appointment',
+          entity_id: appointmentId,
+          action: 'update',
+          before: null,
+          after: {
+            kind: 'appointment_materials',
+            procedure: procedureName,
+            patient: patientName,
+            materials: saved.map((m) => ({
+              product_name: m.product_name,
+              quantity: m.quantity,
+              unit: m.product_unit,
+            })),
+          },
+          reason: 'Materiais confirmados na finalização',
+          user_id: user.id,
+        });
+      } catch (auditErr) {
+        console.warn('Falha ao registrar auditoria de materiais:', auditErr);
+      }
+
       return saved;
     },
     onSuccess: () => {
@@ -267,6 +292,7 @@ export function useProcedureMaterialMutations() {
       queryClient.invalidateQueries({ queryKey: ['inventory-products'] });
       queryClient.invalidateQueries({ queryKey: ['inventory-movements'] });
       queryClient.invalidateQueries({ queryKey: ['procedure-materials'] });
+      queryClient.invalidateQueries({ queryKey: ['audit-events'] });
     },
     onError: (error) => {
       console.error('Error recording appointment materials:', error);
@@ -274,5 +300,238 @@ export function useProcedureMaterialMutations() {
     },
   });
 
-  return { replaceProcedureMaterials, recordAppointmentMaterials };
+  /**
+   * Substitui materiais de um atendimento já finalizado:
+   * devolve estoque antigo, baixa o novo e registra auditoria before/after.
+   */
+  const updateAppointmentMaterials = useMutation({
+    mutationFn: async ({
+      appointmentId,
+      patientName,
+      procedureName,
+      items,
+      reason,
+    }: {
+      appointmentId: string;
+      patientName: string;
+      procedureName: string;
+      items: AppointmentMaterialUsageInput[];
+      reason: string;
+    }) => {
+      if (!clinicId) throw new Error('Clínica não encontrada');
+      if (!user?.id) throw new Error('Usuário não autenticado');
+      if (!reason.trim()) throw new Error('Informe o motivo da alteração');
+
+      const { data: existingRows, error: existingError } = await (supabase as any)
+        .from('appointment_materials')
+        .select('id, product_id, product_name, product_unit, quantity, overridden, override_reason, created_at, appointment_id')
+        .eq('clinic_id', clinicId)
+        .eq('appointment_id', appointmentId);
+
+      if (existingError) throw existingError;
+
+      const beforeMaterials = ((existingRows || []) as any[]).map((row) => ({
+        product_id: row.product_id,
+        product_name: row.product_name,
+        product_unit: row.product_unit,
+        quantity: Number(row.quantity),
+      }));
+
+      // Devolve ao estoque o que havia sido baixado
+      for (const row of existingRows || []) {
+        const qty = Number(row.quantity) || 0;
+        if (!(qty > 0)) continue;
+
+        const { data: product, error: productError } = await (supabase as any)
+          .from('inventory_products')
+          .select('id, current_stock')
+          .eq('id', row.product_id)
+          .eq('clinic_id', clinicId)
+          .maybeSingle();
+
+        if (productError) throw productError;
+        if (!product) continue;
+
+        const previousStock = Number(product.current_stock) || 0;
+        const newStock = Math.round((previousStock + qty) * 1000) / 1000;
+
+        const { error: movementError } = await (supabase as any)
+          .from('inventory_movements')
+          .insert({
+            id: crypto.randomUUID(),
+            clinic_id: clinicId,
+            user_id: user.id,
+            product_id: row.product_id,
+            type: 'entrada',
+            quantity: qty,
+            previous_stock: previousStock,
+            new_stock: newStock,
+            reason: 'ajuste',
+            notes: `Estorno por edição de materiais | ${procedureName} | ${patientName}`,
+            appointment_id: appointmentId,
+          });
+
+        if (movementError && !['42703', 'PGRST204'].includes(movementError.code || '')) {
+          throw movementError;
+        }
+
+        const { error: stockError } = await (supabase as any)
+          .from('inventory_products')
+          .update({ current_stock: newStock, updated_at: new Date().toISOString() })
+          .eq('id', row.product_id);
+
+        if (stockError) throw stockError;
+      }
+
+      if ((existingRows || []).length > 0) {
+        const { error: deleteError } = await (supabase as any)
+          .from('appointment_materials')
+          .delete()
+          .eq('clinic_id', clinicId)
+          .eq('appointment_id', appointmentId);
+        if (deleteError) throw deleteError;
+      }
+
+      // Reaproveita a lógica de baixa inserindo novamente (sem early-return)
+      const saved: AppointmentMaterialRow[] = [];
+      for (const item of items) {
+        const { data: product, error: productError } = await (supabase as any)
+          .from('inventory_products')
+          .select('id, name, unit, current_stock')
+          .eq('id', item.productId)
+          .eq('clinic_id', clinicId)
+          .maybeSingle();
+
+        if (productError) throw productError;
+        if (!product) throw new Error(`Produto não encontrado: ${item.productName}`);
+
+        const previousStock = Number(product.current_stock) || 0;
+        const newStock = Math.round((previousStock - item.quantity) * 1000) / 1000;
+        const movementId = crypto.randomUUID();
+
+        let { error: movementError } = await (supabase as any)
+          .from('inventory_movements')
+          .insert({
+            id: movementId,
+            clinic_id: clinicId,
+            user_id: user.id,
+            product_id: item.productId,
+            type: 'saida',
+            quantity: item.quantity,
+            previous_stock: previousStock,
+            new_stock: newStock,
+            reason: 'uso',
+            notes: [
+              `Procedimento: ${procedureName}`,
+              `Paciente: ${patientName}`,
+              `Edição de materiais: ${reason.trim()}`,
+              item.overridden ? `Liberado sem saldo${item.overrideReason ? `: ${item.overrideReason}` : ''}` : null,
+            ].filter(Boolean).join(' | '),
+            appointment_id: appointmentId,
+          });
+
+        if (movementError && ['42703', 'PGRST204'].includes(movementError.code || '')) {
+          ({ error: movementError } = await (supabase as any)
+            .from('inventory_movements')
+            .insert({
+              id: movementId,
+              clinic_id: clinicId,
+              user_id: user.id,
+              product_id: item.productId,
+              type: 'saida',
+              quantity: item.quantity,
+              previous_stock: previousStock,
+              new_stock: newStock,
+              reason: 'uso',
+              notes: `Edição de materiais: ${reason.trim()}`,
+            }));
+        }
+        if (movementError) throw movementError;
+
+        const { error: stockError } = await (supabase as any)
+          .from('inventory_products')
+          .update({ current_stock: newStock, updated_at: new Date().toISOString() })
+          .eq('id', item.productId);
+        if (stockError) throw stockError;
+
+        const { data: usageRow, error: usageError } = await (supabase as any)
+          .from('appointment_materials')
+          .insert({
+            id: crypto.randomUUID(),
+            clinic_id: clinicId,
+            appointment_id: appointmentId,
+            product_id: item.productId,
+            product_name: item.productName || product.name,
+            product_unit: item.productUnit || product.unit || 'un',
+            quantity: item.quantity,
+            movement_id: movementId,
+            overridden: item.overridden,
+            override_reason: item.overrideReason || null,
+          })
+          .select('id, appointment_id, product_id, product_name, product_unit, quantity, overridden, override_reason, created_at')
+          .single();
+
+        if (usageError) throw usageError;
+
+        saved.push({
+          id: usageRow.id,
+          appointment_id: usageRow.appointment_id,
+          product_id: usageRow.product_id,
+          product_name: usageRow.product_name,
+          product_unit: usageRow.product_unit,
+          quantity: Number(usageRow.quantity),
+          overridden: !!usageRow.overridden,
+          override_reason: usageRow.override_reason,
+          created_at: usageRow.created_at,
+        });
+      }
+
+      const afterMaterials = saved.map((m) => ({
+        product_id: m.product_id,
+        product_name: m.product_name,
+        product_unit: m.product_unit,
+        quantity: m.quantity,
+      }));
+
+      const { error: auditError } = await (supabase as any).from('audit_events').insert({
+        clinic_id: clinicId,
+        entity_type: 'appointment',
+        entity_id: appointmentId,
+        action: 'update',
+        before: {
+          kind: 'appointment_materials',
+          procedure: procedureName,
+          patient: patientName,
+          materials: beforeMaterials,
+        },
+        after: {
+          kind: 'appointment_materials',
+          procedure: procedureName,
+          patient: patientName,
+          materials: afterMaterials,
+        },
+        reason: reason.trim(),
+        user_id: user.id,
+      });
+
+      if (auditError && auditError.code !== '42P01') {
+        console.warn('Falha ao registrar auditoria de edição de materiais:', auditError);
+      }
+
+      return saved;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['appointment-materials'] });
+      queryClient.invalidateQueries({ queryKey: ['inventory-products'] });
+      queryClient.invalidateQueries({ queryKey: ['inventory-movements'] });
+      queryClient.invalidateQueries({ queryKey: ['audit-events'] });
+      toast.success('Materiais atualizados e registrados na auditoria');
+    },
+    onError: (error) => {
+      console.error('Error updating appointment materials:', error);
+      toast.error(error instanceof Error ? error.message : 'Erro ao atualizar materiais');
+    },
+  });
+
+  return { replaceProcedureMaterials, recordAppointmentMaterials, updateAppointmentMaterials };
 }

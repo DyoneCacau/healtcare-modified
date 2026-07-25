@@ -382,6 +382,25 @@ export default function Administration() {
     }
 
     if (entry.entity_type === 'appointment') {
+      const formatMaterials = (payload: any) => {
+        if (!payload || payload.kind !== 'appointment_materials') return null;
+        const list = Array.isArray(payload.materials) ? payload.materials : [];
+        const items = list
+          .map((m: any) => `${m.product_name || '-'} ${m.quantity ?? ''}${m.unit || m.product_unit ? ` ${m.unit || m.product_unit}` : ''}`.trim())
+          .join('; ');
+        return `Materiais${payload.procedure ? ` (${payload.procedure})` : ''}: ${items || 'nenhum'}`;
+      };
+
+      const materialsBefore = formatMaterials(before);
+      const materialsAfter = formatMaterials(after);
+      if (materialsBefore || materialsAfter) {
+        return {
+          label: 'Agendamento · Materiais',
+          beforeText: materialsBefore || '-',
+          afterText: materialsAfter || '-',
+        };
+      }
+
       const beforeText = before
         ? `${before.procedure || '-'} | ${before.date || '-'} ${before.start_time || ''}`.trim()
         : '-';

@@ -12,6 +12,7 @@ import { MonthView } from '@/components/agenda/MonthView';
 import { AppointmentFormDialog } from '@/components/agenda/AppointmentFormDialog';
 import { CompleteAppointmentDialog } from '@/components/agenda/CompleteAppointmentDialog';
 import { NoShowFeeDialog } from '@/components/agenda/NoShowFeeDialog';
+import { EditAppointmentMaterialsDialog } from '@/components/agenda/EditAppointmentMaterialsDialog';
 import { AgendaAppointment, AgendaView, Professional, LeadSource } from '@/types/agenda';
 import { PaymentMethod } from '@/types/financial';
 import { useAppointments, useAppointmentMutations } from '@/hooks/useAppointments';
@@ -53,6 +54,8 @@ export default function Agenda() {
   const [completingAppointment, setCompletingAppointment] = useState<AgendaAppointment | null>(null);
   const [noShowFeeDialogOpen, setNoShowFeeDialogOpen] = useState(false);
   const [noShowAppointment, setNoShowAppointment] = useState<AgendaAppointment | null>(null);
+  const [editMaterialsOpen, setEditMaterialsOpen] = useState(false);
+  const [editingMaterialsAppointment, setEditingMaterialsAppointment] = useState<AgendaAppointment | null>(null);
 
   const { clinic } = useClinic();
   const { clinics: userClinics } = useClinics();
@@ -316,6 +319,11 @@ export default function Agenda() {
   const handleComplete = (appointment: AgendaAppointment) => {
     setCompletingAppointment(appointment);
     setCompleteDialogOpen(true);
+  };
+
+  const handleEditMaterials = (appointment: AgendaAppointment) => {
+    setEditingMaterialsAppointment(appointment);
+    setEditMaterialsOpen(true);
   };
 
   // Abrir direto um agendamento especifico (ex: clique em "Próximas Consultas"
@@ -684,6 +692,7 @@ export default function Agenda() {
             onConfirm={handleConfirm}
             onComplete={handleComplete}
             onMarkNoShow={handleMarkNoShowClick}
+            onEditMaterials={handleEditMaterials}
             onWhatsApp={handleWhatsApp}
             onSlotClick={handleSlotClickDay}
           />
@@ -698,6 +707,7 @@ export default function Agenda() {
             onConfirm={handleConfirm}
             onComplete={handleComplete}
             onMarkNoShow={handleMarkNoShowClick}
+            onEditMaterials={handleEditMaterials}
             onWhatsApp={handleWhatsApp}
             onSlotClick={handleSlotClickWeek}
           />
@@ -766,6 +776,15 @@ export default function Agenda() {
         }}
         appointment={noShowAppointment}
         onConfirm={handleMarkNoShow}
+      />
+
+      <EditAppointmentMaterialsDialog
+        open={editMaterialsOpen}
+        onOpenChange={(open) => {
+          setEditMaterialsOpen(open);
+          if (!open) setEditingMaterialsAppointment(null);
+        }}
+        appointment={editingMaterialsAppointment}
       />
     </MainLayout>
   );

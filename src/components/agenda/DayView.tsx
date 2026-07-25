@@ -14,6 +14,7 @@ interface DayViewProps {
   onConfirm: (appointment: AgendaAppointment) => void;
   onComplete: (appointment: AgendaAppointment) => void;
   onMarkNoShow?: (appointment: AgendaAppointment) => void;
+  onEditMaterials?: (appointment: AgendaAppointment) => void;
   onWhatsApp: (appointment: AgendaAppointment) => void;
   /** Clique em um horário (slot) para abrir formulário de novo agendamento com essa data e horário */
   onSlotClick?: (startTime: string) => void;
@@ -40,6 +41,7 @@ export function DayView({
   onConfirm,
   onComplete,
   onMarkNoShow,
+  onEditMaterials,
   onWhatsApp,
   onSlotClick,
 }: DayViewProps) {
@@ -122,6 +124,7 @@ export function DayView({
                         onConfirm={onConfirm}
                         onComplete={onComplete}
                         onMarkNoShow={onMarkNoShow}
+                        onEditMaterials={onEditMaterials}
                         onWhatsApp={onWhatsApp}
                       />
                     ))}
