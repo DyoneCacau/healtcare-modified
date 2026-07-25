@@ -114,11 +114,6 @@ export function DocumentPrintPreview(props: DocumentPrintPreviewProps) {
 
   const [selectedProfId, setSelectedProfId] = useState<string>('');
   const [atestadoPaciente, setAtestadoPaciente] = useState('');
-  const [atestadoRg, setAtestadoRg] = useState('');
-  const [atestadoHoraInicio, setAtestadoHoraInicio] = useState('14:00');
-  const [atestadoHoraFim, setAtestadoHoraFim] = useState('16:00');
-  const [atestadoData, setAtestadoData] = useState(format(new Date(), 'dd/MM/yyyy'));
-  const [atestadoConvalescenca, setAtestadoConvalescenca] = useState<'sim' | 'nao'>('nao');
   const [atestadoDias, setAtestadoDias] = useState('');
   const [atestadoCid, setAtestadoCid] = useState('');
   const [atestadoCidQuery, setAtestadoCidQuery] = useState('');
@@ -483,67 +478,30 @@ export function DocumentPrintPreview(props: DocumentPrintPreviewProps) {
       return (
         <div className="space-y-4 text-justify">
           <p>
-            Atesto para os devidos fins que{' '}
+            Atesto, para os devidos fins, que o(a) Sr.(a){' '}
             {forPrint ? (
               <span className="font-semibold">{atestadoPaciente || patient?.name || '________________'}</span>
             ) : (
               <InlineInput value={atestadoPaciente} onChange={setAtestadoPaciente} placeholder="Nome do paciente" />
             )}{' '}
-            R.G.{' '}
-            {forPrint ? (
-              <span>{atestadoRg || '________________'}</span>
-            ) : (
-              <InlineInput value={atestadoRg} onChange={setAtestadoRg} placeholder="RG" />
-            )}
+            foi submetido(a) a procedimentos nesta data.
           </p>
           <p>
-            esteve sob tratamento Odontologico neste consultorio, no periodo das{' '}
+            Em decorrência, deverá permanecer afastado(a) de suas atividades por um período de{' '}
             {forPrint ? (
-              <span>{atestadoHoraInicio}</span>
+              <span>{atestadoDias ? `${atestadoDias} ${parseInt(atestadoDias) === 1 ? 'dia' : 'dias'}` : '________'}</span>
             ) : (
-              <input type="time" value={atestadoHoraInicio} onChange={(e) => setAtestadoHoraInicio(e.target.value)} className="border-b border-foreground bg-transparent px-1" />
-            )}{' '}
-            as{' '}
-            {forPrint ? (
-              <span>{atestadoHoraFim}</span>
-            ) : (
-              <input type="time" value={atestadoHoraFim} onChange={(e) => setAtestadoHoraFim(e.target.value)} className="border-b border-foreground bg-transparent px-1" />
-            )}{' '}
-            horas do dia{' '}
-            {forPrint ? (
-              <span>{atestadoData}</span>
-            ) : (
-              <input type="text" value={atestadoData} onChange={(e) => setAtestadoData(e.target.value)} placeholder="dd/mm/aaaa" className="inline-block w-24 border-b border-foreground bg-transparent px-1 text-center" />
-            )}
-          </p>
-          <p>
-            Necessita de convalescenca? ({atestadoConvalescenca === 'sim' ? 'X' : ' '}) SIM ({atestadoConvalescenca === 'nao' ? 'X' : ' '}) NAO
-            {!forPrint && (
-              <span className="ml-2">
-                <button type="button" onClick={() => setAtestadoConvalescenca('sim')} className="underline mr-2">Sim</button>
-                <button type="button" onClick={() => setAtestadoConvalescenca('nao')} className="underline">Nao</button>
-              </span>
-            )}
-          </p>
-          {forPrint ? (
-            parseInt(atestadoDias) > 0 && (
-              <p>
-                Periodo de afastamento: {atestadoDias} {parseInt(atestadoDias) === 1 ? 'dia' : 'dias'}
-              </p>
-            )
-          ) : (
-            <p className="flex items-center gap-2">
-              Quantidade de dias (opcional):{' '}
               <input
                 type="number"
                 min="1"
                 value={atestadoDias}
                 onChange={(e) => setAtestadoDias(e.target.value)}
                 placeholder="0"
-                className="w-16 border-b border-foreground bg-transparent px-1 text-center"
+                className="inline-block w-16 border-b border-foreground bg-transparent px-1 text-center"
               />
-            </p>
-          )}
+            )}{' '}
+            {!forPrint && (parseInt(atestadoDias) === 1 ? 'dia' : 'dias')}, a partir desta data.
+          </p>
           {(atestadoCid || !forPrint) && (
             <div className="mt-2">
               <p className="font-medium mb-1">CID:</p>
