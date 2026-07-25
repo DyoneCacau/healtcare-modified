@@ -4,16 +4,10 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Textarea } from '@/components/ui/textarea';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
 import type { ProcedureMaterialDraft } from '@/types/procedureMaterial';
 import { formatQuantity, parseQuantityInput } from '@/lib/quantityInput';
 import { toast } from 'sonner';
+import { cn } from '@/lib/utils';
 
 interface ProductOption {
   id: string;
@@ -46,6 +40,10 @@ function emptyDraft(): ProcedureMaterialDraft {
   };
 }
 
+/**
+ * Usa <select> nativo de propósito: o Select do Radix dentro do Dialog de
+ * finalização falhava ao abrir (tenta abrir e fecha). Native select é estável.
+ */
 export function AppointmentMaterialsEditor({
   drafts,
   products,
@@ -101,7 +99,8 @@ export function AppointmentMaterialsEditor({
 
       {products.length === 0 && (
         <p className="text-xs text-amber-800 bg-amber-50 border border-amber-200 rounded-md p-2">
-          Nenhum produto no estoque desta clínica. Cadastre em Estoque para selecionar aqui.
+          Nenhum produto ativo no estoque desta clínica. Cadastre em <strong>Estoque</strong> para
+          selecionar materiais aqui.
         </p>
       )}
 
@@ -116,9 +115,16 @@ export function AppointmentMaterialsEditor({
             >
               <div className="space-y-1">
                 <Label className="text-xs text-muted-foreground">Material / marca</Label>
-                <Select
-                  value={draft.productId || undefined}
-                  onValueChange={(productId) => {
+                <select
+                  className={cn(
+                    'flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm',
+                    'ring-offset-background focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2',
+                    'disabled:cursor-not-allowed disabled:opacity-50',
+                  )}
+                  value={draft.productId}
+                  disabled={products.length === 0}
+                  onChange={(e) => {
+                    const productId = e.target.value;
                     const product = products.find((p) => p.id === productId);
                     updateDraft(draft.key, {
                       productId,
@@ -129,17 +135,13 @@ export function AppointmentMaterialsEditor({
                     });
                   }}
                 >
-                  <SelectTrigger>
-                    <SelectValue placeholder="Selecione o material" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {products.map((p) => (
-                      <SelectItem key={p.id} value={p.id}>
-                        {p.name} ({formatQuantity(Number(p.current_stock) || 0)} {p.unit || 'un'})
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                  <option value="">Selecione o material</option>
+                  {products.map((p) => (
+                    <option key={p.id} value={p.id}>
+                      {p.name} ({formatQuantity(Number(p.current_stock) || 0)} {p.unit || 'un'})
+                    </option>
+                  ))}
+                </select>
               </div>
               <div className="space-y-1">
                 <Label className="text-xs text-muted-foreground">
