@@ -54,6 +54,14 @@ import {
 } from '@/services/commissionService';
 import { cn } from '@/lib/utils';
 import { remainingAfterBookingFee } from '@/lib/bookingFee';
+import { AppointmentMaterialsEditor } from '@/components/agenda/AppointmentMaterialsEditor';
+import { useProcedureMaterials } from '@/hooks/useProcedureMaterials';
+import { useInventoryProducts } from '@/hooks/useInventory';
+import { usePermissions } from '@/hooks/usePermissions';
+import { useAuth } from '@/hooks/useAuth';
+import { parseQuantityInput } from '@/lib/quantityInput';
+import type { AppointmentMaterialUsageInput, ProcedureMaterialDraft } from '@/types/procedureMaterial';
+import { toast } from 'sonner';
 
 export interface CommissionBreakdownItem {
   rule: CommissionRule;
@@ -76,6 +84,7 @@ interface CompleteAppointmentDialogProps {
     adjustmentReason?: string,
     billingDestination?: BillingDestination,
     dueDate?: string,
+    materialsUsage?: AppointmentMaterialUsageInput[],
   ) => void;
   commissionRules?: CommissionRule[];
 }
@@ -101,6 +110,15 @@ export function CompleteAppointmentDialog({
   const [proceedWithoutRule, setProceedWithoutRule] = useState(false);
   const [scheduleReturn, setScheduleReturn] = useState(false);
   const [adjustmentReason, setAdjustmentReason] = useState('');
+  const [materialDrafts, setMaterialDrafts] = useState<ProcedureMaterialDraft[]>([]);
+  const [overrideEnabled, setOverrideEnabled] = useState(false);
+  const [overrideReason, setOverrideReason] = useState('');
+
+  const { isSuperAdmin } = useAuth();
+  const { can } = usePermissions();
+  const canOverrideStock = isSuperAdmin || can('estoque_liberar', 'can_edit');
+  const { materials: templateMaterials } = useProcedureMaterials(appointment?.procedureId);
+  const { activeProducts } = useInventoryProducts();
 
   useEffect(() => {
     if (appointment) {
@@ -112,6 +130,9 @@ export function CompleteAppointmentDialog({
       setBillingDestination('cash');
       setDueDate(format(new Date(), 'yyyy-MM-dd'));
       setPaymentMethod('pix');
+      setOverrideEnabled(false);
+      setOverrideReason('');
+      setMaterialDrafts([]);
       
       // Validate appointment completion
       const validationResult = validateAppointmentCompletion(
@@ -150,6 +171,26 @@ export function CompleteAppointmentDialog({
   }, [appointment, commissionRules]);
 
   useEffect(() => {
+    if (!appointment) return;
+    if (templateMaterials.length === 0) {
+      // Mantém linhas manuais já adicionadas; só preenche template na abertura
+      return;
+    }
+    setMaterialDrafts((prev) => {
+      if (prev.length > 0 && prev.some((p) => !p.fromTemplate)) return prev;
+      return templateMaterials.map((m) => ({
+        key: m.id,
+        productId: m.product_id,
+        productName: m.product_name || '',
+        productUnit: m.product_unit || 'un',
+        quantity: String(m.default_quantity).replace('.', ','),
+        currentStock: Number(m.current_stock) || 0,
+        fromTemplate: true,
+      }));
+    });
+  }, [appointment, templateMaterials]);
+
+  useEffect(() => {
     if (applicableRules.length > 0 && serviceValue > 0) {
       const breakdown = applicableRules.map(rule => ({
         rule,
@@ -170,8 +211,40 @@ export function CompleteAppointmentDialog({
     return validation.isValid;
   };
 
+  const buildMaterialsUsage = (): AppointmentMaterialUsageInput[] | null => {
+    const usage: AppointmentMaterialUsageInput[] = [];
+    for (const draft of materialDrafts) {
+      if (!draft.productId && !draft.quantity.trim()) continue;
+      if (!draft.productId) {
+        toast.error('Selecione o material em todas as linhas preenchidas');
+        return null;
+      }
+      const qty = parseQuantityInput(draft.quantity);
+      if (qty == null) {
+        toast.error(`Quantidade inválida em ${draft.productName || 'material'}. Digite um valor como 1 ou 0,2`);
+        return null;
+      }
+      const insufficient = qty > draft.currentStock;
+      if (insufficient && !(canOverrideStock && overrideEnabled)) {
+        toast.error('Há material sem estoque suficiente. Libere com permissão ou ajuste a quantidade.');
+        return null;
+      }
+      usage.push({
+        productId: draft.productId,
+        productName: draft.productName,
+        productUnit: draft.productUnit,
+        quantity: qty,
+        overridden: insufficient,
+        overrideReason: insufficient ? (overrideReason.trim() || 'Liberado sem saldo') : undefined,
+      });
+    }
+    return usage;
+  };
+
   const handleComplete = () => {
     if (!appointment || !canComplete()) return;
+    const materialsUsage = buildMaterialsUsage();
+    if (materialsUsage == null) return;
     onComplete(
       appointment,
       serviceValue,
@@ -182,6 +255,7 @@ export function CompleteAppointmentDialog({
       adjustmentReason.trim() || undefined,
       billingDestination,
       billingDestination === 'receivable' ? dueDate : undefined,
+      materialsUsage,
     );
     onOpenChange(false);
   };
@@ -546,6 +620,22 @@ export function CompleteAppointmentDialog({
               </Card>
             )}
           </div>
+
+          <AppointmentMaterialsEditor
+            drafts={materialDrafts}
+            products={activeProducts.map((p) => ({
+              id: p.id,
+              name: p.name,
+              unit: p.unit,
+              current_stock: Number(p.current_stock) || 0,
+            }))}
+            canOverride={canOverrideStock}
+            overrideEnabled={overrideEnabled}
+            overrideReason={overrideReason}
+            onOverrideEnabledChange={setOverrideEnabled}
+            onOverrideReasonChange={setOverrideReason}
+            onChange={setMaterialDrafts}
+          />
 
           {/* Opção de agendar retorno */}
           <div className="flex items-center space-x-2 rounded-lg border border-border/50 bg-muted/30 p-3">

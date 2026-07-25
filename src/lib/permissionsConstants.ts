@@ -20,6 +20,7 @@ export const PERMISSION_FEATURES = [
   { id: 'contas_receber', label: 'Contas a receber' },
   { id: 'comissoes', label: 'Comissões' },
   { id: 'estoque', label: 'Estoque' },
+  { id: 'estoque_liberar', label: 'Liberar estoque sem saldo' },
   { id: 'procedimentos', label: 'Procedimentos' },
   { id: 'crm', label: 'CRM de Vendas' },
   { id: 'atendimento', label: 'Atendimento' },
@@ -125,6 +126,7 @@ export const PERMISSION_GROUPS: PermissionGroup[] = [
       { feature: 'estoque', label: 'Ver', actions: ['can_view'] },
       { feature: 'estoque', label: 'Criar / Editar', actions: ['can_create', 'can_edit'] },
       { feature: 'estoque', label: 'Excluir', actions: ['can_delete'] },
+      { feature: 'estoque_liberar', label: 'Liberar finalização sem saldo', actions: ['can_edit'] },
     ],
   },
   {
@@ -235,6 +237,9 @@ export function getDefaultPermissionsForRole(role: SystemRole): PermissionRow[] 
 
   if (role === 'receptionist') {
     return base.map((p) => {
+      if (p.feature === 'estoque_liberar') {
+        return { ...p, can_view: true, can_create: false, can_edit: true, can_delete: false };
+      }
       if (['agenda', 'pacientes', 'atendimento', 'dashboard', 'configuracoes', 'financeiro', 'crm'].includes(p.feature)) {
         return { ...p, can_view: true, can_create: true, can_edit: true, can_delete: false };
       }

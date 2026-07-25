@@ -116,21 +116,21 @@ export default function Inventory() {
       return;
     }
 
-    const qty = parseInt(movementQuantity);
-    if (isNaN(qty) || qty <= 0) {
-      toast.error('Quantidade inválida');
+    const qty = Number(String(movementQuantity).trim().replace(',', '.'));
+    if (!Number.isFinite(qty) || qty <= 0) {
+      toast.error('Quantidade inválida (use número, ex.: 1 ou 0,2)');
       return;
     }
 
-    if (movementType === 'saida' && qty > selectedProduct.current_stock) {
+    if (movementType === 'saida' && qty > Number(selectedProduct.current_stock)) {
       toast.error('Quantidade maior que o estoque disponível');
       return;
     }
 
-    const previousStock = selectedProduct.current_stock;
-    const newStock = movementType === 'entrada' 
-      ? previousStock + qty 
-      : previousStock - qty;
+    const previousStock = Number(selectedProduct.current_stock) || 0;
+    const newStock = Math.round(((movementType === 'entrada'
+      ? previousStock + qty
+      : previousStock - qty)) * 1000) / 1000;
 
     await createMovement.mutateAsync({
       product_id: selectedProduct.id,
@@ -168,8 +168,8 @@ export default function Inventory() {
         sku: productSku || null,
         description: productDescription || null,
         category: productCategory || null,
-        current_stock: parseInt(productCurrentStock) || 0,
-        minimum_stock: parseInt(productMinimumStock) || 0,
+        current_stock: Number(String(productCurrentStock).replace(',', '.')) || 0,
+        minimum_stock: Number(String(productMinimumStock).replace(',', '.')) || 0,
         cost_price: null,
         sale_price: null,
         unit: productUnit || 'un',
@@ -468,12 +468,10 @@ export default function Inventory() {
               <Label htmlFor="quantity">Quantidade *</Label>
               <Input
                 id="quantity"
-                type="number"
-                min="1"
-                max={movementType === 'saida' ? selectedProduct?.current_stock : undefined}
+                inputMode="decimal"
                 value={movementQuantity}
                 onChange={(e) => setMovementQuantity(e.target.value)}
-                placeholder="0"
+                placeholder="Ex.: 1 ou 0,2"
               />
             </div>
 
