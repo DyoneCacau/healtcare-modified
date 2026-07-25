@@ -1,8 +1,11 @@
+import { useMemo } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useClinic } from '@/hooks/useClinic';
 import type { ClinicProcedure, ClinicProcedureInput } from '@/types/clinicProcedure';
 import { toast } from 'sonner';
+
+const EMPTY_PROCEDURES: ClinicProcedure[] = [];
 
 const QUERY_KEY = 'clinic-procedures';
 
@@ -46,11 +49,15 @@ export function useClinicProcedures(clinicIdOverride?: string | null) {
     retry: false,
   });
 
-  const procedures = query.data || [];
+  const procedures = query.data ?? EMPTY_PROCEDURES;
+  const activeProcedures = useMemo(
+    () => procedures.filter((procedure) => procedure.is_active),
+    [procedures],
+  );
   return {
     ...query,
     procedures,
-    activeProcedures: procedures.filter((procedure) => procedure.is_active),
+    activeProcedures,
     clinicId,
   };
 }

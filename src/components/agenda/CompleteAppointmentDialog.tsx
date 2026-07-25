@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useCallback } from 'react';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import {
@@ -128,63 +128,91 @@ export function CompleteAppointmentDialog({
     [activeProcedures, selectedProcedureId],
   );
 
+  // Reset do formulário ao abrir o diálogo (não depende de activeProcedures — isso apagava as linhas)
   useEffect(() => {
-    if (appointment) {
-      // Reset states
-      setProceedWithoutRule(false);
-      setScheduleReturn(false);
-      setAdjustmentReason('');
-      setQuantity(1);
-      setBillingDestination('cash');
-      setDueDate(format(new Date(), 'yyyy-MM-dd'));
-      setPaymentMethod('pix');
-      setOverrideEnabled(false);
-      setOverrideReason('');
-      setMaterialDrafts([]);
-      setMaterialsTouched(false);
-      setMaterialsConfirmed(false);
+    if (!open || !appointment) return;
+
+    setProceedWithoutRule(false);
+    setScheduleReturn(false);
+    setAdjustmentReason('');
+    setQuantity(1);
+    setBillingDestination('cash');
+    setDueDate(format(new Date(), 'yyyy-MM-dd'));
+    setPaymentMethod('pix');
+    setOverrideEnabled(false);
+    setOverrideReason('');
+    setMaterialDrafts([
+      {
+        key: `material-${appointment.id}-seed`,
+        productId: '',
+        productName: '',
+        productUnit: 'un',
+        quantity: '',
+        currentStock: 0,
+        fromTemplate: false,
+      },
+    ]);
+    setMaterialsTouched(false);
+    setMaterialsConfirmed(false);
+    setSelectedProcedureId(appointment.procedureId || '');
+    setServiceValue(appointment.procedurePrice ?? 150);
+  }, [open, appointment?.id]);
+
+  // Validação e regras de comissão (não reseta materiais)
+  useEffect(() => {
+    if (!appointment) return;
+
+    setValidation(
+      validateAppointmentCompletion(appointment, commissionRules, [], true),
+    );
+
+    const rules = findApplicableRules(
+      commissionRules,
+      appointment.professional.id,
+      appointment.clinic.id,
+      appointment.procedure,
+      new Date(appointment.date),
+      appointment.sellerId,
+    );
+    setApplicableRules(rules);
+  }, [
+    appointment?.id,
+    appointment?.professional.id,
+    appointment?.clinic.id,
+    appointment?.procedure,
+    appointment?.date,
+    appointment?.sellerId,
+    commissionRules,
+  ]);
+
+  // Resolve procedimento do catálogo quando a lista carregar (sem limpar materiais nem sobrescrever troca manual)
+  useEffect(() => {
+    if (!appointment || activeProcedures.length === 0) return;
+
+    setSelectedProcedureId((prev) => {
+      if (prev && activeProcedures.some((p) => p.id === prev)) return prev;
+
+      if (appointment.procedureId) {
+        const byId = activeProcedures.find((p) => p.id === appointment.procedureId);
+        if (byId) return byId.id;
+      }
 
       const matchedByName = activeProcedures.find(
         (p) => p.name.trim().toLowerCase() === (appointment.procedure || '').trim().toLowerCase(),
       );
-      setSelectedProcedureId(appointment.procedureId || matchedByName?.id || '');
-      
-      // Validate appointment completion
-      const validationResult = validateAppointmentCompletion(
-        appointment,
-        commissionRules,
-        [],
-        true
-      );
-      setValidation(validationResult);
+      return matchedByName?.id || prev || '';
+    });
+  }, [appointment?.id, appointment?.procedureId, appointment?.procedure, activeProcedures]);
 
-      // Snapshot do catálogo no momento do agendamento. O valor continua
-      // editável abaixo para descontos, indicação ou negociação.
-      // Agendamentos legados não têm snapshot do catálogo; mantêm o
-      // comportamento anterior de R$ 150 como sugestão, sempre editável.
-      const suggestedPrice = appointment.procedurePrice ?? matchedByName?.default_price ?? 150;
-      setServiceValue(suggestedPrice);
+  // Preço do catálogo só quando o agendamento não tem snapshot e ainda está no valor padrão
+  useEffect(() => {
+    if (!appointment || appointment.procedurePrice != null || !selectedProcedureId) return;
+    const proc = activeProcedures.find((p) => p.id === selectedProcedureId);
+    if (!proc) return;
+    setServiceValue((prev) => (prev === 150 ? proc.default_price : prev));
+  }, [appointment?.id, appointment?.procedurePrice, selectedProcedureId, activeProcedures]);
 
-      // Find ALL applicable commission rules (professional + seller + reception)
-      const rules = findApplicableRules(
-        commissionRules,
-        appointment.professional.id,
-        appointment.clinic.id,
-        appointment.procedure,
-        new Date(appointment.date),
-        appointment.sellerId
-      );
-      setApplicableRules(rules);
-
-      // Calculate breakdown
-      const breakdown = rules.map(rule => ({
-        rule,
-        amount: calculateCommissionAmount(rule, suggestedPrice, 1)
-      }));
-      setCommissionBreakdown(breakdown);
-    }
-  }, [appointment, commissionRules, activeProcedures]);
-
+  // Preenche materiais sugeridos do procedimento (só se o usuário ainda não editou)
   useEffect(() => {
     if (!appointment || materialsTouched) return;
 
@@ -203,12 +231,11 @@ export function CompleteAppointmentDialog({
       return;
     }
 
-    // Sem composição: uma linha vazia, só se ainda não houver linhas
     setMaterialDrafts((prev) => {
       if (prev.length > 0) return prev;
       return [
         {
-          key: `material-${Date.now()}`,
+          key: `material-${appointment.id}-empty`,
           productId: '',
           productName: '',
           productUnit: 'un',
@@ -219,6 +246,25 @@ export function CompleteAppointmentDialog({
       ];
     });
   }, [appointment?.id, selectedProcedureId, templateMaterials, materialsTouched]);
+
+  const handleMaterialsChange = useCallback((next: ProcedureMaterialDraft[]) => {
+    setMaterialsTouched(true);
+    setMaterialDrafts(
+      next.length > 0
+        ? next
+        : [
+            {
+              key: `material-${Date.now()}`,
+              productId: '',
+              productName: '',
+              productUnit: 'un',
+              quantity: '',
+              currentStock: 0,
+              fromTemplate: false,
+            },
+          ],
+    );
+  }, []);
 
   useEffect(() => {
     if (applicableRules.length > 0 && serviceValue > 0) {
@@ -442,18 +488,7 @@ export function CompleteAppointmentDialog({
             procedureLabel={selectedProcedure?.name || appointment.procedure}
             onOverrideEnabledChange={setOverrideEnabled}
             onOverrideReasonChange={setOverrideReason}
-            onChange={(next) => {
-              setMaterialsTouched(true);
-              setMaterialDrafts(next.length > 0 ? next : [{
-                key: `material-${Date.now()}`,
-                productId: '',
-                productName: '',
-                productUnit: 'un',
-                quantity: '',
-                currentStock: 0,
-                fromTemplate: false,
-              }]);
-            }}
+            onChange={handleMaterialsChange}
           />
 
           <Separator />

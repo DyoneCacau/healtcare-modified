@@ -1,3 +1,4 @@
+import { useEffect, useRef } from 'react';
 import { Package, Plus, Trash2, AlertTriangle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -6,7 +7,6 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { Textarea } from '@/components/ui/textarea';
 import type { ProcedureMaterialDraft } from '@/types/procedureMaterial';
 import { formatQuantity, parseQuantityInput } from '@/lib/quantityInput';
-import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 
 interface ProductOption {
@@ -41,8 +41,8 @@ function emptyDraft(): ProcedureMaterialDraft {
 }
 
 /**
- * Usa <select> nativo de propósito: o Select do Radix dentro do Dialog de
- * finalização falhava ao abrir (tenta abrir e fecha). Native select é estável.
+ * Usa <select> nativo: o Select do Radix dentro do Dialog falhava ao abrir.
+ * Sempre mantém pelo menos uma linha visível para preencher.
  */
 export function AppointmentMaterialsEditor({
   drafts,
@@ -55,24 +55,35 @@ export function AppointmentMaterialsEditor({
   onOverrideReasonChange,
   onChange,
 }: AppointmentMaterialsEditorProps) {
+  const onChangeRef = useRef(onChange);
+  onChangeRef.current = onChange;
+
+  // Se o pai ainda não enviou linhas, cria uma imediatamente (visível)
+  useEffect(() => {
+    if (drafts.length === 0) {
+      onChangeRef.current([emptyDraft()]);
+    }
+  }, [drafts.length]);
+
+  const lines = drafts.length > 0 ? drafts : [emptyDraft()];
+
   const updateDraft = (key: string, patch: Partial<ProcedureMaterialDraft>) => {
-    onChange(drafts.map((d) => (d.key === key ? { ...d, ...patch } : d)));
+    const base = drafts.length > 0 ? drafts : lines;
+    onChange(base.map((d) => (d.key === key ? { ...d, ...patch } : d)));
   };
 
   const addLine = () => {
-    if (products.length === 0) {
-      toast.error('Cadastre produtos em Estoque para incluir materiais aqui');
-      return;
-    }
-    onChange([...drafts, emptyDraft()]);
+    const base = drafts.length > 0 ? drafts : lines;
+    onChange([...base, emptyDraft()]);
   };
 
   const removeLine = (key: string) => {
-    const next = drafts.filter((d) => d.key !== key);
+    const base = drafts.length > 0 ? drafts : lines;
+    const next = base.filter((d) => d.key !== key);
     onChange(next.length === 0 ? [emptyDraft()] : next);
   };
 
-  const insufficient = drafts.filter((d) => {
+  const insufficient = lines.filter((d) => {
     const qty = parseQuantityInput(d.quantity);
     return d.productId && qty != null && qty > d.currentStock;
   });
@@ -98,20 +109,20 @@ export function AppointmentMaterialsEditor({
       </div>
 
       {products.length === 0 && (
-        <p className="text-xs text-amber-800 bg-amber-50 border border-amber-200 rounded-md p-2">
-          Nenhum produto ativo no estoque desta clínica. Cadastre em <strong>Estoque</strong> para
-          selecionar materiais aqui.
+        <p className="text-xs text-amber-900 bg-amber-50 border border-amber-300 rounded-md p-2 font-medium">
+          Nenhum produto no Estoque desta clínica. Vá em <strong>Estoque</strong>, cadastre o material
+          (ex.: Resina, Toxina Renova) e volte aqui para selecionar.
         </p>
       )}
 
       <div className="space-y-2">
-        {drafts.map((draft) => {
+        {lines.map((draft) => {
           const qty = parseQuantityInput(draft.quantity);
           const over = qty != null && qty > draft.currentStock;
           return (
             <div
               key={draft.key}
-              className="grid gap-2 rounded-md border bg-background p-2 sm:grid-cols-[1.4fr_0.7fr_auto]"
+              className="grid gap-2 rounded-md border bg-background p-3 sm:grid-cols-[1.4fr_0.7fr_auto]"
             >
               <div className="space-y-1">
                 <Label className="text-xs text-muted-foreground">Material / marca</Label>
@@ -135,7 +146,9 @@ export function AppointmentMaterialsEditor({
                     });
                   }}
                 >
-                  <option value="">Selecione o material</option>
+                  <option value="">
+                    {products.length === 0 ? 'Cadastre produtos no Estoque' : 'Selecione o material'}
+                  </option>
                   {products.map((p) => (
                     <option key={p.id} value={p.id}>
                       {p.name} ({formatQuantity(Number(p.current_stock) || 0)} {p.unit || 'un'})
