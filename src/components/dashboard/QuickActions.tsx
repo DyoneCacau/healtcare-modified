@@ -5,10 +5,11 @@ import { PatientFormDialog } from "@/components/patients/PatientFormDialog";
 import { AppointmentFormDialog } from "@/components/agenda/AppointmentFormDialog";
 import { PaymentForm } from "@/components/financial/PaymentForm";
 import { usePatientMutations } from "@/hooks/usePatients";
-import { useAppointmentMutations } from "@/hooks/useAppointments";
+import { useAppointmentMutations, useAppointments } from "@/hooks/useAppointments";
 import { useTransactionMutations } from "@/hooks/useFinancial";
 import { useProfessionals } from "@/hooks/useProfessionals";
 import { useClinic } from "@/hooks/useClinic";
+import type { AgendaAppointment } from "@/types/agenda";
 
 export function QuickActions() {
   const [patientDialogOpen, setPatientDialogOpen] = useState(false);
@@ -20,6 +21,34 @@ export function QuickActions() {
   const { createTransaction } = useTransactionMutations();
   const { activeProfessionals } = useProfessionals();
   const { clinic } = useClinic();
+  // Mesma fonte de dados da Agenda: usada aqui só para detectar conflito de horário.
+  const { appointments: rawAppointments } = useAppointments();
+
+  const clinicForDialog = clinic
+    ? { id: clinic.id, name: clinic.name, phone: clinic.phone || '', address: clinic.address || '', cnpj: clinic.cnpj || '' }
+    : null;
+
+  const existingAppointments: AgendaAppointment[] = rawAppointments.map((apt: any) => ({
+    id: apt.id,
+    date: apt.date,
+    startTime: apt.start_time?.slice(0, 5) || '',
+    endTime: apt.end_time?.slice(0, 5) || '',
+    patientId: apt.patient_id,
+    patientName: apt.patient?.name || 'Paciente',
+    professional: {
+      id: apt.professional?.id || apt.professional_id,
+      name: apt.professional?.name || 'Profissional',
+      specialty: apt.professional?.specialty || '',
+      cro: apt.professional?.cro || '',
+    },
+    procedure: apt.procedure,
+    procedureId: apt.procedure_id ?? undefined,
+    procedurePrice: apt.procedure_price == null ? undefined : Number(apt.procedure_price),
+    status: apt.status,
+    paymentStatus: apt.payment_status,
+    notes: apt.notes,
+    clinic: clinicForDialog || { id: apt.clinic_id, name: '', address: '', phone: '', cnpj: '' },
+  }));
 
   const handleSavePatient = async (patientData: any) => {
     await createPatient.mutateAsync({
@@ -48,12 +77,16 @@ export function QuickActions() {
       start_time: appointmentData.startTime,
       end_time: appointmentData.endTime,
       procedure: appointmentData.procedure,
+      procedure_id: appointmentData.procedureId ?? null,
+      procedure_price: appointmentData.procedurePrice ?? null,
       status: appointmentData.status || 'pending',
       payment_status: appointmentData.paymentStatus || 'pending',
       notes: appointmentData.notes || null,
       seller_id: appointmentData.sellerId || null,
       lead_source: appointmentData.leadSource || null,
+      referral_name: appointmentData.referralName ?? null,
       booking_fee: appointmentData.bookingFee ?? null,
+      booking_fee_payment_method: appointmentData.bookingFeePaymentMethod ?? null,
     });
     setAppointmentDialogOpen(false);
   };
@@ -149,14 +182,8 @@ export function QuickActions() {
           specialty: p.specialty,
           cro: p.cro,
         }))}
-        clinics={clinic ? [{
-          id: clinic.id,
-          name: clinic.name,
-          phone: clinic.phone || '',
-          address: clinic.address || '',
-          cnpj: clinic.cnpj || '',
-        }] : []}
-        existingAppointments={[]}
+        clinics={clinicForDialog ? [clinicForDialog] : []}
+        existingAppointments={existingAppointments}
       />
 
       {/* Payment Form Dialog */}
