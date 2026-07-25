@@ -3,7 +3,7 @@ import { createPortal } from 'react-dom';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Patient } from '@/types/patient';
-import { FileDown, X, Phone, Mail, MapPin, ChevronsUpDown, MessageCircle } from 'lucide-react';
+import { FileDown, X, Phone, Mail, MapPin, ChevronsUpDown, MessageCircle, PenLine } from 'lucide-react';
 import { jsPDF } from 'jspdf';
 import html2canvas from 'html2canvas';
 import { format } from 'date-fns';
@@ -24,6 +24,9 @@ import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
 import { generateWhatsAppUrl } from '@/utils/whatsapp';
 import { useClinicMedications, useClinicMedicationMutations } from '@/hooks/useClinicMedications';
+import { useDocumentSignatureMutations } from '@/hooks/useDocumentSignatures';
+import { SIGNATURE_CONSENT_TEXT } from '@/types/documentSignature';
+import { SendForSignatureDialog, type SendForSignatureResult } from './SendForSignatureDialog';
 
 export type DocumentPrintType = 'atestado' | 'declaracao' | 'termo_ciencia' | 'recibo' | 'receituario';
 
@@ -135,6 +138,13 @@ export function DocumentPrintPreview(props: DocumentPrintPreviewProps) {
   /** Uma vez marcado, o receituário inteiro sai no formato de Controle Especial (2 vias). */
   const [hasControlledMedication, setHasControlledMedication] = useState(false);
   const [sharingChannel, setSharingChannel] = useState<'whatsapp' | 'email' | null>(null);
+  const [signatureDialogOpen, setSignatureDialogOpen] = useState(false);
+  const [signatureFilePath, setSignatureFilePath] = useState<string | null>(null);
+  const [signatureDocumentUrl, setSignatureDocumentUrl] = useState<string | null>(null);
+  const [preparingSignature, setPreparingSignature] = useState(false);
+  const [submittingSignature, setSubmittingSignature] = useState(false);
+
+  const { createSignatureRequest } = useDocumentSignatureMutations();
 
   const { activeMedications } = useClinicMedications(clinicId);
   const { createMedication } = useClinicMedicationMutations();
@@ -341,6 +351,88 @@ export function DocumentPrintPreview(props: DocumentPrintPreviewProps) {
       toast.error(err instanceof Error ? err.message : 'Não foi possível preparar o documento para envio.');
     } finally {
       setSharingChannel(null);
+    }
+  };
+
+  /**
+   * Gera e anexa o PDF ao prontuário (igual handleShareDocument) e só então
+   * abre o diálogo de "Enviar para assinatura" com o link de visualização.
+   */
+  const handleOpenSignatureDialog = async () => {
+    if (!patient) {
+      toast.error('Selecione um paciente antes de enviar para assinatura.');
+      return;
+    }
+    if (!clinicId) {
+      toast.error('Clínica não identificada.');
+      return;
+    }
+    setPreparingSignature(true);
+    try {
+      const { pdf, fileName } = await buildPdf();
+      const blob = pdf.output('blob') as Blob;
+      const safeName = fileName.replace(/[^a-zA-Z0-9._-]/g, '_');
+      const path = `${clinicId}/${patient.id}/${Date.now()}-${safeName}`;
+
+      const { error: uploadError } = await supabase.storage
+        .from('patient-files')
+        .upload(path, blob, { contentType: 'application/pdf', upsert: false });
+      if (uploadError) throw new Error(uploadError.message);
+
+      const { error: insertError } = await supabase.from('patient_files').insert({
+        clinic_id: clinicId,
+        patient_id: patient.id,
+        name: fileName,
+        file_path: path,
+        mime_type: 'application/pdf',
+        file_size: blob.size,
+        category: 'documento',
+      });
+      if (insertError) console.error('Falha ao registrar o documento no prontuário:', insertError);
+
+      const { data: signed } = await supabase.storage.from('patient-files').createSignedUrl(path, 60 * 30);
+
+      setSignatureFilePath(path);
+      setSignatureDocumentUrl(signed?.signedUrl ?? null);
+      setSignatureDialogOpen(true);
+    } catch (err) {
+      console.error('Erro ao preparar documento para assinatura:', err);
+      toast.error(err instanceof Error ? err.message : 'Não foi possível preparar o documento.');
+    } finally {
+      setPreparingSignature(false);
+    }
+  };
+
+  const handleConfirmSignatureRequest = async (result: SendForSignatureResult) => {
+    if (!signatureFilePath || !clinicId) return;
+    setSubmittingSignature(true);
+    try {
+      const created = await createSignatureRequest.mutateAsync({
+        patient_id: patient?.id || null,
+        document_type: type,
+        document_name: titles[type],
+        file_path: signatureFilePath,
+        signer_name: result.signerName,
+        signer_cpf: result.signerCpf || null,
+        signer_cro: result.signerCro || null,
+        signer_state: result.signerState || null,
+        signer_whatsapp: result.signerWhatsapp,
+        signer_birth_date: result.signerBirthDate || null,
+        consent_text: SIGNATURE_CONSENT_TEXT,
+      });
+
+      const signLink = `${window.location.origin}/assinar/${created.token}`;
+      const firstName = result.signerName.split(' ')[0] || result.signerName;
+      const message = `Olá, ${firstName}! Você recebeu um documento para assinatura eletrônica: ${titles[type]} (${clinicName || clinicRazaoSocial}).\n\nAbra o link pra visualizar e assinar:\n${signLink}`;
+      window.open(generateWhatsAppUrl(result.signerWhatsapp, message), '_blank');
+
+      toast.success('Solicitação de assinatura enviada por WhatsApp!');
+      setSignatureDialogOpen(false);
+    } catch (err) {
+      console.error('Erro ao enviar para assinatura:', err);
+      toast.error('Não foi possível enviar para assinatura.');
+    } finally {
+      setSubmittingSignature(false);
     }
   };
 
@@ -820,6 +912,7 @@ export function DocumentPrintPreview(props: DocumentPrintPreviewProps) {
   const documentShellStyle = { fontFamily: "'Times New Roman', serif" } as const;
 
   return (
+    <>
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
@@ -894,11 +987,33 @@ export function DocumentPrintPreview(props: DocumentPrintPreviewProps) {
             <Mail className="mr-2 h-4 w-4" />
             {sharingChannel === 'email' ? 'Preparando...' : 'E-mail'}
           </Button>
+          <Button
+            variant="outline"
+            onClick={handleOpenSignatureDialog}
+            disabled={preparingSignature || !patient}
+            title={!patient ? 'Selecione um paciente' : undefined}
+          >
+            <PenLine className="mr-2 h-4 w-4" />
+            {preparingSignature ? 'Preparando...' : 'Enviar para assinatura'}
+          </Button>
           <Button onClick={handleGeneratePdf} disabled={generatingPdf}>
             <FileDown className="mr-2 h-4 w-4" />{generatingPdf ? 'Gerando PDF...' : 'Gerar PDF'}
           </Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>
+
+    <SendForSignatureDialog
+      open={signatureDialogOpen}
+      onOpenChange={setSignatureDialogOpen}
+      professionals={professionals}
+      defaultSignerName={patient?.name || ''}
+      defaultCpf={patient?.cpf || ''}
+      defaultWhatsapp={patient?.phone || ''}
+      documentUrl={signatureDocumentUrl}
+      isSubmitting={submittingSignature}
+      onConfirm={handleConfirmSignatureRequest}
+    />
+    </>
   );
 }

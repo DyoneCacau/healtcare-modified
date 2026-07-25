@@ -32,3 +32,6 @@ verify_jwt = true
 
 [functions.add-clinic-unit]
 verify_jwt = false
+
+[functions.document-signature]
+verify_jwt = false

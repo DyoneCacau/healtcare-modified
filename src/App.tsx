@@ -34,6 +34,7 @@ const Settings = React.lazy(() => import("./pages/Settings"));
 // TODO(go-live): reativar módulo Atendimento omnichannel (Meta WhatsApp)
 // import Atendimento from "./pages/Atendimento";
 const Privacy = React.lazy(() => import("./pages/Privacy"));
+const SignDocument = React.lazy(() => import("./pages/SignDocument"));
 const SelectClinic = React.lazy(() => import("./pages/SelectClinic"));
 const NotFound = React.lazy(() => import("./pages/NotFound"));
 const Billing = React.lazy(() => import("./pages/Billing"));
@@ -160,6 +161,7 @@ function AppRoutes() {
       <Route path="/privacidade" element={<Privacy />} />
       <Route path="/forgot-password" element={<ForgotPassword />} />
       <Route path="/reset-password" element={<ResetPassword />} />
+      <Route path="/assinar/:token" element={<SignDocument />} />
 
       <Route element={<AuthenticatedAppLayout />}>
         <Route path="/app" element={<Index />} />
