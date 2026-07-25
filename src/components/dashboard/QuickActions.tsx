@@ -339,6 +339,7 @@ export function QuickActions() {
         onOpenChange={setDocumentPrintOpen}
         type={documentType}
         patient={documentPatient}
+        clinicId={clinic?.id}
         clinicName={clinic?.name || ''}
         clinicCnpj={clinic?.cnpj || ''}
         clinicRazaoSocial={clinic?.razao_social || clinic?.name || ''}

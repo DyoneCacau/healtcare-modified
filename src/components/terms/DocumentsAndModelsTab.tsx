@@ -235,6 +235,7 @@ export function DocumentsAndModelsTab() {
         onOpenChange={setPrintOpen}
         type={printType}
         patient={selectedPatient}
+        clinicId={clinic?.id}
         clinicName={clinicName}
         clinicCnpj={clinicCnpj}
         clinicRazaoSocial={clinicRazaoSocial}

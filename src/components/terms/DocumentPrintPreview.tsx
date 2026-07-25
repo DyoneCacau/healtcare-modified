@@ -1,9 +1,9 @@
-import { useRef, useState, useEffect } from 'react';
+import { useMemo, useRef, useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Patient } from '@/types/patient';
-import { FileDown, X, Phone, Mail, MapPin } from 'lucide-react';
+import { FileDown, X, Phone, Mail, MapPin, ChevronsUpDown, MessageCircle } from 'lucide-react';
 import { jsPDF } from 'jspdf';
 import html2canvas from 'html2canvas';
 import { format } from 'date-fns';
@@ -15,8 +15,15 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from '@/components/ui/command';
+import { Checkbox } from '@/components/ui/checkbox';
+import { Badge } from '@/components/ui/badge';
 import { Label } from '@/components/ui/label';
 import { toast } from 'sonner';
+import { supabase } from '@/integrations/supabase/client';
+import { generateWhatsAppUrl } from '@/utils/whatsapp';
+import { useClinicMedications, useClinicMedicationMutations } from '@/hooks/useClinicMedications';
 
 export type DocumentPrintType = 'atestado' | 'declaracao' | 'termo_ciencia' | 'recibo' | 'receituario';
 
@@ -45,6 +52,8 @@ interface DocumentPrintPreviewProps {
   onOpenChange: (open: boolean) => void;
   type: DocumentPrintType;
   patient: Patient | null;
+  /** Usado pra salvar medicamentos no catálogo da clínica e pra anexar o PDF ao enviar por WhatsApp/e-mail */
+  clinicId?: string | null;
   clinicName: string;
   clinicCnpj: string;
   clinicRazaoSocial: string;
@@ -80,6 +89,7 @@ export function DocumentPrintPreview(props: DocumentPrintPreviewProps) {
     onOpenChange,
     type,
     patient,
+    clinicId,
     clinicName,
     clinicCnpj,
     clinicRazaoSocial,
@@ -119,6 +129,19 @@ export function DocumentPrintPreview(props: DocumentPrintPreviewProps) {
   const [medFrequency, setMedFrequency] = useState(FREQUENCY_OPTIONS[2]);
   const [medDuration, setMedDuration] = useState('');
   const [medItemCount, setMedItemCount] = useState(0);
+  const [medIsControlled, setMedIsControlled] = useState(false);
+  const [medSaveToCatalog, setMedSaveToCatalog] = useState(true);
+  const [medComboOpen, setMedComboOpen] = useState(false);
+  /** Uma vez marcado, o receituário inteiro sai no formato de Controle Especial (2 vias). */
+  const [hasControlledMedication, setHasControlledMedication] = useState(false);
+  const [sharingChannel, setSharingChannel] = useState<'whatsapp' | 'email' | null>(null);
+
+  const { activeMedications } = useClinicMedications(clinicId);
+  const { createMedication } = useClinicMedicationMutations();
+  const isKnownMedication = useMemo(
+    () => activeMedications.some((m) => m.name.trim().toLowerCase() === medName.trim().toLowerCase()),
+    [activeMedications, medName]
+  );
 
   const selectedProf = professionals.find((p) => p.id === selectedProfId) || professionals[0];
   const profName = selectedProf?.name || '________________';
@@ -147,6 +170,9 @@ export function DocumentPrintPreview(props: DocumentPrintPreviewProps) {
       setMedFrequency(FREQUENCY_OPTIONS[2]);
       setMedDuration('');
       setMedItemCount(0);
+      setMedIsControlled(false);
+      setMedSaveToCatalog(true);
+      setHasControlledMedication(false);
     }
   }, [open, type]);
 
@@ -154,22 +180,39 @@ export function DocumentPrintPreview(props: DocumentPrintPreviewProps) {
    * Monta a linha "N. medicamento — dose, frequência, por X dias" e adiciona
    * na prescrição. Na primeira adição, substitui o modelo de preenchimento
    * manual; depois disso, o textarea continua 100% editável na mão.
+   * Se marcado como controle especial, o receituário inteiro passa a sair
+   * no formato de 2 vias (Farmácia/Paciente) ao gerar o PDF.
    */
   const handleAddMedication = () => {
-    if (!medName.trim()) {
+    const trimmedName = medName.trim();
+    if (!trimmedName) {
       toast.error('Informe o nome do medicamento');
       return;
     }
     const nextNumber = medItemCount + 1;
     const dosePart = medDosage.trim() ? `${medDosage.trim()} — ` : '';
     const durationPart = medDuration.trim() ? `, por ${medDuration.trim()}` : '';
-    const line = `${nextNumber}. ${medName.trim()}\n   Uso: ${dosePart}${medFrequency}${durationPart}`;
+    const controlledTag = medIsControlled ? ' [Controle Especial]' : '';
+    const line = `${nextNumber}. ${trimmedName}${controlledTag}\n   Uso: ${dosePart}${medFrequency}${durationPart}`;
 
     setReceituarioConteudo((prev) => (medItemCount === 0 ? `Rp.\n\n${line}` : `${prev}\n\n${line}`));
     setMedItemCount(nextNumber);
+    if (medIsControlled) setHasControlledMedication(true);
+
+    if (medSaveToCatalog && !isKnownMedication && clinicId) {
+      createMedication.mutate({
+        name: trimmedName,
+        is_controlled: medIsControlled,
+        default_posologia: null,
+        is_active: true,
+      });
+    }
+
     setMedName('');
     setMedDosage('');
     setMedDuration('');
+    setMedIsControlled(false);
+    setMedSaveToCatalog(true);
   };
 
   useEffect(() => {
@@ -181,42 +224,123 @@ export function DocumentPrintPreview(props: DocumentPrintPreviewProps) {
   const printRef = useRef<HTMLDivElement>(null);
   const [generatingPdf, setGeneratingPdf] = useState(false);
 
-  const handleGeneratePdf = async () => {
+  /** Faz o screenshot do documento offscreen e monta o jsPDF (sem salvar/baixar ainda). */
+  const buildPdf = async (): Promise<{ pdf: jsPDF; fileName: string }> => {
     const printContent = printRef.current;
-    if (!printContent) return;
+    if (!printContent) throw new Error('Não foi possível preparar o conteúdo do documento.');
+    const canvas = await html2canvas(printContent, {
+      scale: 2,
+      useCORS: true,
+      logging: false,
+      backgroundColor: '#ffffff',
+    });
+    const imgData = canvas.toDataURL('image/png');
+    const pdf = new jsPDF({
+      orientation: 'portrait',
+      unit: 'mm',
+      format: 'a4',
+    });
+    const pdfW = pdf.internal.pageSize.getWidth();
+    const pdfH = pdf.internal.pageSize.getHeight();
+    const imgW = canvas.width;
+    const imgH = canvas.height;
+    const pxToMm = 25.4 / 96;
+    const imgWmm = imgW * pxToMm;
+    const imgHmm = imgH * pxToMm;
+    const ratio = Math.min((pdfW - 10) / imgWmm, (pdfH - 10) / imgHmm);
+    const finalW = imgWmm * ratio;
+    const finalH = imgHmm * ratio;
+    const imgX = (pdfW - finalW) / 2;
+    const imgY = 5;
+    pdf.addImage(imgData, 'PNG', imgX, imgY, finalW, finalH);
+    const fileName = `${titles[type].replace(/\s+/g, '_')}_${format(new Date(), 'yyyy-MM-dd_HH-mm')}.pdf`;
+    return { pdf, fileName };
+  };
+
+  const handleGeneratePdf = async () => {
     setGeneratingPdf(true);
     try {
-      const canvas = await html2canvas(printContent, {
-        scale: 2,
-        useCORS: true,
-        logging: false,
-        backgroundColor: '#ffffff',
-      });
-      const imgData = canvas.toDataURL('image/png');
-      const pdf = new jsPDF({
-        orientation: 'portrait',
-        unit: 'mm',
-        format: 'a4',
-      });
-      const pdfW = pdf.internal.pageSize.getWidth();
-      const pdfH = pdf.internal.pageSize.getHeight();
-      const imgW = canvas.width;
-      const imgH = canvas.height;
-      const pxToMm = 25.4 / 96;
-      const imgWmm = imgW * pxToMm;
-      const imgHmm = imgH * pxToMm;
-      const ratio = Math.min((pdfW - 10) / imgWmm, (pdfH - 10) / imgHmm);
-      const finalW = imgWmm * ratio;
-      const finalH = imgHmm * ratio;
-      const imgX = (pdfW - finalW) / 2;
-      const imgY = 5;
-      pdf.addImage(imgData, 'PNG', imgX, imgY, finalW, finalH);
-      const fileName = `${titles[type].replace(/\s+/g, '_')}_${format(new Date(), 'yyyy-MM-dd_HH-mm')}.pdf`;
+      const { pdf, fileName } = await buildPdf();
       pdf.save(fileName);
     } catch (err) {
       console.error('Erro ao gerar PDF:', err);
+      toast.error('Erro ao gerar PDF');
     } finally {
       setGeneratingPdf(false);
+    }
+  };
+
+  /**
+   * Gera o PDF, anexa ao prontuário do paciente (patient_files) e abre o
+   * WhatsApp/e-mail com um link assinado pra ele. Não há envio automático
+   * por e-mail transacional hoje — abre o cliente de e-mail do usuário com
+   * o link já preenchido (mesma ideia do WhatsApp, sem precisar anexar).
+   */
+  const handleShareDocument = async (channel: 'whatsapp' | 'email') => {
+    if (!patient) {
+      toast.error('Selecione um paciente antes de enviar.');
+      return;
+    }
+    if (channel === 'whatsapp' && !patient.phone) {
+      toast.error('Este paciente não tem telefone cadastrado.');
+      return;
+    }
+    if (channel === 'email' && !patient.email) {
+      toast.error('Este paciente não tem e-mail cadastrado.');
+      return;
+    }
+    if (!clinicId) {
+      toast.error('Clínica não identificada.');
+      return;
+    }
+
+    setSharingChannel(channel);
+    try {
+      const { pdf, fileName } = await buildPdf();
+      const blob = pdf.output('blob') as Blob;
+      const safeName = fileName.replace(/[^a-zA-Z0-9._-]/g, '_');
+      const path = `${clinicId}/${patient.id}/${Date.now()}-${safeName}`;
+
+      const { error: uploadError } = await supabase.storage
+        .from('patient-files')
+        .upload(path, blob, { contentType: 'application/pdf', upsert: false });
+      if (uploadError) throw new Error(uploadError.message);
+
+      const { error: insertError } = await supabase.from('patient_files').insert({
+        clinic_id: clinicId,
+        patient_id: patient.id,
+        name: fileName,
+        file_path: path,
+        mime_type: 'application/pdf',
+        file_size: blob.size,
+        category: 'documento',
+      });
+      if (insertError) {
+        console.error('Falha ao registrar o documento no prontuário:', insertError);
+      }
+
+      const { data: signed, error: signError } = await supabase.storage
+        .from('patient-files')
+        .createSignedUrl(path, 60 * 60 * 24 * 7);
+      if (signError || !signed?.signedUrl) {
+        throw new Error('Não foi possível gerar o link do documento.');
+      }
+
+      const firstName = patient.name?.split(' ')[0] || patient.name;
+      const message = `Olá${firstName ? `, ${firstName}` : ''}! Segue seu(sua) ${titles[type].toLowerCase()} da ${clinicName || clinicRazaoSocial}:\n${signed.signedUrl}\n\nO link fica disponível por 7 dias.`;
+
+      if (channel === 'whatsapp') {
+        window.open(generateWhatsAppUrl(patient.phone, message), '_blank');
+      } else {
+        const subject = encodeURIComponent(`${titles[type]} - ${clinicName || clinicRazaoSocial}`);
+        const body = encodeURIComponent(message);
+        window.open(`mailto:${patient.email}?subject=${subject}&body=${body}`, '_blank');
+      }
+    } catch (err) {
+      console.error('Erro ao compartilhar documento:', err);
+      toast.error(err instanceof Error ? err.message : 'Não foi possível preparar o documento para envio.');
+    } finally {
+      setSharingChannel(null);
     }
   };
 
@@ -399,13 +523,56 @@ export function DocumentPrintPreview(props: DocumentPrintPreviewProps) {
               <div className="mb-3 space-y-2 rounded-md border border-dashed border-border bg-muted/20 p-3">
                 <p className="text-sm font-medium">Adicionar medicamento</p>
                 <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-                  <input
-                    type="text"
-                    value={medName}
-                    onChange={(e) => setMedName(e.target.value)}
-                    placeholder="Medicamento (ex: Amoxicilina 500mg)"
-                    className="rounded border border-border bg-background px-2 py-1.5 text-sm"
-                  />
+                  <Popover open={medComboOpen} onOpenChange={setMedComboOpen}>
+                    <PopoverTrigger asChild>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        role="combobox"
+                        className="h-9 justify-between rounded border-border bg-background px-2 text-sm font-normal"
+                      >
+                        <span className="truncate">{medName || 'Medicamento (ex: Amoxicilina 500mg)'}</span>
+                        <ChevronsUpDown className="h-4 w-4 shrink-0 opacity-50" />
+                      </Button>
+                    </PopoverTrigger>
+                    <PopoverContent className="w-[300px] p-0" align="start">
+                      <Command>
+                        <CommandInput
+                          value={medName}
+                          onValueChange={(v) => {
+                            setMedName(v);
+                            setMedIsControlled(false);
+                          }}
+                          placeholder="Buscar ou digitar medicamento..."
+                        />
+                        <CommandList>
+                          <CommandEmpty className="px-3 py-2 text-sm text-muted-foreground">
+                            Nenhum medicamento salvo com esse nome. Pode digitar um novo.
+                          </CommandEmpty>
+                          <CommandGroup heading={activeMedications.length > 0 ? 'Catálogo da clínica' : undefined}>
+                            {activeMedications.map((m) => (
+                              <CommandItem
+                                key={m.id}
+                                value={m.name}
+                                onSelect={() => {
+                                  setMedName(m.name);
+                                  setMedIsControlled(m.is_controlled);
+                                  setMedComboOpen(false);
+                                }}
+                              >
+                                <span className="flex-1 truncate">{m.name}</span>
+                                {m.is_controlled && (
+                                  <Badge variant="destructive" className="ml-2 text-[10px]">
+                                    Controlado
+                                  </Badge>
+                                )}
+                              </CommandItem>
+                            ))}
+                          </CommandGroup>
+                        </CommandList>
+                      </Command>
+                    </PopoverContent>
+                  </Popover>
                   <input
                     type="text"
                     value={medDosage}
@@ -438,6 +605,21 @@ export function DocumentPrintPreview(props: DocumentPrintPreviewProps) {
                     Adicionar
                   </Button>
                 </div>
+                <label className="flex items-center gap-2 text-xs">
+                  <Checkbox checked={medIsControlled} onCheckedChange={(c) => setMedIsControlled(c === true)} />
+                  Este medicamento exige receita de controle especial
+                </label>
+                {medName.trim() && !isKnownMedication && (
+                  <label className="flex items-center gap-2 text-xs text-muted-foreground">
+                    <Checkbox checked={medSaveToCatalog} onCheckedChange={(c) => setMedSaveToCatalog(c === true)} />
+                    Salvar "{medName.trim()}" no catálogo da clínica pra sugerir da próxima vez
+                  </label>
+                )}
+                {hasControlledMedication && (
+                  <p className="text-xs font-medium text-destructive">
+                    ⚠ Este receituário sairá no formato de Controle Especial (2 vias) ao gerar o PDF, pois inclui medicamento controlado.
+                  </p>
+                )}
                 <p className="text-xs text-muted-foreground">
                   Preenche a prescrição abaixo automaticamente. Você pode editar o texto na mão a qualquer momento, inclusive depois de adicionar.
                 </p>
@@ -563,6 +745,76 @@ export function DocumentPrintPreview(props: DocumentPrintPreviewProps) {
     </>
   );
 
+  /**
+   * Formato de Notificação de Receita / Controle Especial (Portaria 344/98
+   * ANVISA): 2 vias (Farmácia e Paciente), cada uma com a identificação do
+   * comprador e do fornecedor. Usado só na geração do PDF quando algum
+   * medicamento adicionado foi marcado como controle especial — a edição
+   * continua no mesmo formulário simples de sempre.
+   */
+  const renderControlledVia = (viaLabel: string, viaOwner: string) => (
+    <div className="pb-6 mb-6 border-b-2 border-dashed border-black/40 last:border-b-0 last:pb-0 last:mb-0">
+      <div className="flex items-center justify-between text-xs mb-4">
+        <span className="font-semibold">{clinicName || clinicRazaoSocial}</span>
+        <span className="text-right font-semibold">
+          {viaLabel}
+          <br />
+          <span className="font-normal text-black/70">{viaOwner}</span>
+        </span>
+      </div>
+      <h2 className="text-center text-lg font-bold mb-4 uppercase">Receituário de Controle Especial</h2>
+      <p className="mb-4">
+        <strong>Paciente:</strong> {receituarioPaciente || patient?.name || '________________'}
+      </p>
+      <div className="whitespace-pre-wrap min-h-[100px] mb-8">{receituarioConteudo}</div>
+      {receituarioUso && <p className="mb-8 whitespace-pre-wrap"><strong>Orientações:</strong> {receituarioUso}</p>}
+
+      <div className="text-center w-[60%] mx-auto mt-8 mb-8">
+        <div className="border-t-2 pt-2" style={{ borderColor: primaryColor }}>
+          <p className="font-medium">{profName}</p>
+          <p className="text-sm text-black/80">{profSpecialty}</p>
+          <p className="text-xs text-black/80">CRO {profCro}</p>
+          <p className="text-xs text-black/80 mt-1">{currentDate}</p>
+        </div>
+      </div>
+
+      <table className="w-full border border-black text-xs">
+        <thead>
+          <tr>
+            <th className="border border-black p-2 w-1/2">IDENTIFICAÇÃO DO COMPRADOR</th>
+            <th className="border border-black p-2 w-1/2">IDENTIFICAÇÃO DO FORNECEDOR</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td className="border border-black p-3 align-top">
+              <p className="mb-4">Nome: ________________________________</p>
+              <p className="mb-4">Ident.: _____________ Org. Emissor: ________</p>
+              <p className="mb-4">End.: __________________________________</p>
+              <p className="mb-4">Cidade: __________________ UF: ______</p>
+              <p>Telefone: _______________________________</p>
+            </td>
+            <td className="border border-black p-3 align-top">
+              <div className="mt-16 flex justify-between gap-2 px-1">
+                <span className="flex-1 border-t border-black pt-1 text-center">ASSINATURA DO FARMACÊUTICO</span>
+                <span className="w-1/3 border-t border-black pt-1 text-center">DATA</span>
+              </div>
+            </td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  );
+
+  const renderControlledPrescriptionShell = () => (
+    <div className="relative z-10 flex flex-col text-black">
+      {renderControlledVia('1ª VIA', 'FARMÁCIA')}
+      {renderControlledVia('2ª VIA', 'PACIENTE')}
+    </div>
+  );
+
+  const isControlledReceituario = type === 'receituario' && hasControlledMedication;
+
   const documentShellClassName =
     "bg-white p-8 border-0 rounded-none relative w-full max-w-[210mm] min-h-[297mm] mx-auto";
   const documentShellStyle = { fontFamily: "'Times New Roman', serif" } as const;
@@ -615,14 +867,32 @@ export function DocumentPrintPreview(props: DocumentPrintPreviewProps) {
             className={`${documentShellClassName} fixed left-[-9999px] top-0 pointer-events-none`}
             style={documentShellStyle}
           >
-            {renderDocumentShell(true)}
+            {isControlledReceituario ? renderControlledPrescriptionShell() : renderDocumentShell(true)}
           </div>,
           document.body
         )}
 
-        <DialogFooter>
+        <DialogFooter className="flex-wrap gap-2">
           <Button variant="outline" onClick={() => onOpenChange(false)}>
             <X className="mr-2 h-4 w-4" />Fechar
+          </Button>
+          <Button
+            variant="outline"
+            onClick={() => handleShareDocument('whatsapp')}
+            disabled={sharingChannel !== null || !patient?.phone}
+            title={!patient?.phone ? 'Paciente sem telefone cadastrado' : undefined}
+          >
+            <MessageCircle className="mr-2 h-4 w-4" />
+            {sharingChannel === 'whatsapp' ? 'Preparando...' : 'WhatsApp'}
+          </Button>
+          <Button
+            variant="outline"
+            onClick={() => handleShareDocument('email')}
+            disabled={sharingChannel !== null || !patient?.email}
+            title={!patient?.email ? 'Paciente sem e-mail cadastrado' : undefined}
+          >
+            <Mail className="mr-2 h-4 w-4" />
+            {sharingChannel === 'email' ? 'Preparando...' : 'E-mail'}
           </Button>
           <Button onClick={handleGeneratePdf} disabled={generatingPdf}>
             <FileDown className="mr-2 h-4 w-4" />{generatingPdf ? 'Gerando PDF...' : 'Gerar PDF'}
