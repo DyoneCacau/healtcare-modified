@@ -283,6 +283,18 @@ export function AppointmentFormDialog({
   const activePatients = patients.filter((p) => p.status === 'active');
   const selectedPatientAllergies = patients.find((p) => p.id === patientId)?.allergies || [];
 
+  // Ao escolher/trocar o paciente em um agendamento novo, traz a origem do
+  // lead já cadastrada no paciente (evita ter que reinformar manualmente).
+  const handlePatientChange = (value: string) => {
+    setPatientId(value);
+    if (isEditing) return;
+    const selected = patients.find((p) => p.id === value);
+    if (selected?.lead_source) {
+      setLeadSource(selected.lead_source as LeadSource);
+      setReferralName(selected.lead_source === 'referral' ? (selected.referral_name || '') : '');
+    }
+  };
+
   const procedureSelectValue = procedureId
     || (procedure === 'Outros' ? '__custom__' : procedure ? `legacy:${procedure}` : '');
 
@@ -338,7 +350,7 @@ export function AppointmentFormDialog({
         <div className="grid gap-4 py-4">
           <div className="grid gap-2">
             <Label htmlFor="patient">Paciente *</Label>
-            <Select value={patientId} onValueChange={setPatientId}>
+            <Select value={patientId} onValueChange={handlePatientChange}>
               <SelectTrigger>
                 <SelectValue placeholder="Selecione o paciente" />
               </SelectTrigger>
