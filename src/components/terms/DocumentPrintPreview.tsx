@@ -115,12 +115,11 @@ export function DocumentPrintPreview(props: DocumentPrintPreviewProps) {
   const [selectedProfId, setSelectedProfId] = useState<string>('');
   const [atestadoPaciente, setAtestadoPaciente] = useState('');
   const [atestadoRg, setAtestadoRg] = useState('');
-  const [atestadoEndereco, setAtestadoEndereco] = useState('');
   const [atestadoHoraInicio, setAtestadoHoraInicio] = useState('14:00');
   const [atestadoHoraFim, setAtestadoHoraFim] = useState('16:00');
   const [atestadoData, setAtestadoData] = useState(format(new Date(), 'dd/MM/yyyy'));
   const [atestadoConvalescenca, setAtestadoConvalescenca] = useState<'sim' | 'nao'>('nao');
-  const [atestadoDias, setAtestadoDias] = useState('1');
+  const [atestadoDias, setAtestadoDias] = useState('');
   const [atestadoCid, setAtestadoCid] = useState('');
   const [atestadoCidQuery, setAtestadoCidQuery] = useState('');
   const [atestadoCidComboOpen, setAtestadoCidComboOpen] = useState(false);
@@ -169,7 +168,6 @@ export function DocumentPrintPreview(props: DocumentPrintPreviewProps) {
   useEffect(() => {
     if (patient) {
       setAtestadoPaciente(patient.name);
-      setAtestadoEndereco(patient.address || '');
       setDeclaracaoPaciente(patient.name);
       setDeclaracaoCpf(patient.cpf || '');
       setReceituarioPaciente(patient.name);
@@ -499,14 +497,6 @@ export function DocumentPrintPreview(props: DocumentPrintPreviewProps) {
             )}
           </p>
           <p>
-            residente e domiciliado(a) a{' '}
-            {forPrint ? (
-              <span>{atestadoEndereco || patient?.address || '________________'}</span>
-            ) : (
-              <InlineInput value={atestadoEndereco} onChange={setAtestadoEndereco} placeholder="Endereco" className="min-w-[200px]" />
-            )}
-          </p>
-          <p>
             esteve sob tratamento Odontologico neste consultorio, no periodo das{' '}
             {forPrint ? (
               <span>{atestadoHoraInicio}</span>
@@ -535,17 +525,23 @@ export function DocumentPrintPreview(props: DocumentPrintPreviewProps) {
               </span>
             )}
           </p>
-          {atestadoConvalescenca === 'sim' && (
-            <p>
-              Periodo{' '}
-              {forPrint ? (
-                <span>{atestadoDias} {parseInt(atestadoDias) === 1 ? 'dia' : 'dias'}</span>
-              ) : (
-                <>
-                  <input type="number" min="1" value={atestadoDias} onChange={(e) => setAtestadoDias(e.target.value)} className="w-14 border-b border-foreground bg-transparent px-1 text-center" />{' '}
-                  {parseInt(atestadoDias) === 1 ? 'dia' : 'dias'}
-                </>
-              )}
+          {forPrint ? (
+            parseInt(atestadoDias) > 0 && (
+              <p>
+                Periodo de afastamento: {atestadoDias} {parseInt(atestadoDias) === 1 ? 'dia' : 'dias'}
+              </p>
+            )
+          ) : (
+            <p className="flex items-center gap-2">
+              Quantidade de dias (opcional):{' '}
+              <input
+                type="number"
+                min="1"
+                value={atestadoDias}
+                onChange={(e) => setAtestadoDias(e.target.value)}
+                placeholder="0"
+                className="w-16 border-b border-foreground bg-transparent px-1 text-center"
+              />
             </p>
           )}
           {(atestadoCid || !forPrint) && (
@@ -587,7 +583,7 @@ export function DocumentPrintPreview(props: DocumentPrintPreviewProps) {
                               key={cid.code}
                               value={cid.code}
                               onSelect={() => {
-                                setAtestadoCid(`${cid.code} - ${cid.description}`);
+                                setAtestadoCid(cid.code);
                                 setAtestadoCidComboOpen(false);
                               }}
                             >
