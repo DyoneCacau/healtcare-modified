@@ -1,4 +1,5 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { format } from 'date-fns';
 import { supabase } from '@/integrations/supabase/client';
 import { useClinic } from './useClinic';
 import { toast } from 'sonner';
@@ -86,7 +87,10 @@ export function useAppointments(dateFilter?: string, clinicIdsOverride?: string[
 }
 
 export function useTodayAppointments() {
-  const today = new Date().toISOString().split('T')[0];
+  // Usa a data local (mesmo cálculo usado ao salvar o agendamento), não UTC.
+  // `toISOString()` usaria o dia em UTC, o que faz "hoje" pular pro dia
+  // seguinte entre ~21h e 23h59 no horário do Brasil (UTC-3).
+  const today = format(new Date(), 'yyyy-MM-dd');
   return useAppointments(today);
 }
 

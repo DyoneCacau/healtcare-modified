@@ -1,4 +1,5 @@
 import { useQuery } from '@tanstack/react-query';
+import { format, subDays, startOfMonth as startOfMonthFn } from 'date-fns';
 import { supabase } from '@/integrations/supabase/client';
 import { netBalance } from '@/lib/financialAggregation';
 import { useClinic } from './useClinic';
@@ -11,9 +12,14 @@ export function useDashboardStats() {
     queryFn: async () => {
       if (!clinicId) return null;
 
-      const today = new Date().toISOString().split('T')[0];
-      const yesterday = new Date(Date.now() - 86400000).toISOString().split('T')[0];
-      const startOfMonth = new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString().split('T')[0];
+      // Datas locais (mesmo cálculo usado ao salvar agendamentos), não UTC.
+      // `toISOString()` usaria o dia em UTC, o que faz "hoje" pular pro dia
+      // seguinte entre ~21h e 23h59 no horário do Brasil (UTC-3), fazendo os
+      // agendamentos de hoje somem das estatísticas nesse intervalo.
+      const now = new Date();
+      const today = format(now, 'yyyy-MM-dd');
+      const yesterday = format(subDays(now, 1), 'yyyy-MM-dd');
+      const startOfMonth = format(startOfMonthFn(now), 'yyyy-MM-dd');
 
       // Today's appointments
       const { data: todayAppointments, error: todayError } = await supabase
