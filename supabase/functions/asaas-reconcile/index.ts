@@ -3,6 +3,7 @@ import {
   errorResponse,
   handleOptions,
   json,
+  notifyClinicOwnerOfPaymentEvent,
   requireCron,
   serviceClient,
 } from '../_shared/asaas.ts'
@@ -45,9 +46,12 @@ Deno.serve(async (req) => {
     if (pendingEventsError) throw pendingEventsError
 
     for (const event of pendingEvents || []) {
-      const { error } = await supabase.rpc('asaas_apply_payment_event', {
+      const { data, error } = await supabase.rpc('asaas_apply_payment_event', {
         p_event_id: event.event_id,
-      })
+      }) as {
+        data: { subscription_id?: string; payment_id?: string } | null
+        error: { code?: string; message: string } | null
+      }
       if (error) {
         result.errors++
         const { error: markError } = await supabase.rpc('asaas_mark_event_error', {
@@ -63,6 +67,9 @@ Deno.serve(async (req) => {
         }
       } else {
         result.pending_events_processed++
+        if (data?.subscription_id && data?.payment_id) {
+          await notifyClinicOwnerOfPaymentEvent(supabase, data.subscription_id, data.payment_id)
+        }
       }
     }
 
@@ -120,6 +127,7 @@ Deno.serve(async (req) => {
             }
           } else {
             result.payments_applied++
+            await notifyClinicOwnerOfPaymentEvent(supabase, subscription.id, payment.id)
           }
         }
       } catch (error) {

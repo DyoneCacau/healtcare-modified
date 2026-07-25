@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { Bell, Calendar, Check, CreditCard, Wallet, UserPlus } from "lucide-react";
+import { Bell, Calendar, Check, CreditCard, Wallet, UserPlus, Building2, AlertTriangle } from "lucide-react";
 import { format, formatDistanceToNow } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { Button } from "@/components/ui/button";
@@ -193,7 +193,23 @@ export function NotificationBell({ collapsed }: NotificationBellProps) {
 
   const handleNotificationClick = (n: UserNotification) => {
     if (n.type === "appointment_created" && n.reference_id) navigate("/agenda");
+    if (n.type === "payment_confirmed" || n.type === "payment_overdue" || n.type === "clinic_created") {
+      navigate("/billing");
+    }
     setOpen(false);
+  };
+
+  const getNotificationIcon = (type: string) => {
+    switch (type) {
+      case "payment_confirmed":
+        return <CreditCard className="h-4 w-4" />;
+      case "payment_overdue":
+        return <AlertTriangle className="h-4 w-4" />;
+      case "clinic_created":
+        return <Building2 className="h-4 w-4" />;
+      default:
+        return <Calendar className="h-4 w-4" />;
+    }
   };
 
   if (!user) return null;
@@ -302,8 +318,13 @@ export function NotificationBell({ collapsed }: NotificationBellProps) {
                 onClick={() => handleNotificationClick(n)}
                 className={cn("flex w-full items-start gap-3 px-4 py-3 text-left hover:bg-muted/50", !n.is_read && "bg-primary/5")}
               >
-                <div className="mt-0.5 flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary">
-                  <Calendar className="h-4 w-4" />
+                <div
+                  className={cn(
+                    "mt-0.5 flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full",
+                    n.type === "payment_overdue" ? "bg-amber-500/10 text-amber-600" : "bg-primary/10 text-primary"
+                  )}
+                >
+                  {getNotificationIcon(n.type)}
                 </div>
                 <div className="flex-1 overflow-hidden">
                   <div className="flex items-center gap-2">

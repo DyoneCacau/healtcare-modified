@@ -1,4 +1,5 @@
 import { createClient, type SupabaseClient } from 'https://esm.sh/@supabase/supabase-js@2.49.1'
+import { notifyOwnerOfNewClinic } from '../_shared/asaas.ts'
 
 const MAX_BODY_BYTES = 32_000
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
@@ -460,6 +461,14 @@ Deno.serve(async (req) => {
     if (createSubError || !subscription) {
       throw new Error(dbErrorMessage('Falha ao criar assinatura da unidade', createSubError))
     }
+
+    await notifyOwnerOfNewClinic(supabase, {
+      ownerUserId,
+      clinicId: clinicRow.id,
+      clinicName: input.name,
+      planName: plan.name,
+      subscriptionId: subscription.id,
+    })
 
     return json(req, {
       clinic_id: clinicRow.id,

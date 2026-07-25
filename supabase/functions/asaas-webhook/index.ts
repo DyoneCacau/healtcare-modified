@@ -3,6 +3,7 @@ import {
   handleOptions,
   HttpError,
   json,
+  notifyClinicOwnerOfPaymentEvent,
   serviceClient,
   verifyWebhookToken,
 } from '../_shared/asaas.ts'
@@ -37,7 +38,16 @@ Deno.serve(async (req) => {
     }
 
     const { data: result, error: processError } = await supabase
-      .rpc('asaas_apply_payment_event', { p_event_id: payload.id })
+      .rpc('asaas_apply_payment_event', { p_event_id: payload.id }) as {
+        data: {
+          processed?: boolean
+          duplicate?: boolean
+          ignored?: boolean
+          subscription_id?: string
+          payment_id?: string
+        } | null
+        error: { code?: string; message: string } | null
+      }
 
     if (processError) {
       console.error('Webhook processing deferred', {
@@ -50,6 +60,10 @@ Deno.serve(async (req) => {
       })
       // O evento já está persistido; 200 evita retentativas desnecessárias do Asaas.
       return json(req, { received: true, persisted: true, processed: false })
+    }
+
+    if (result?.processed && !result.duplicate && !result.ignored && result.subscription_id && result.payment_id) {
+      await notifyClinicOwnerOfPaymentEvent(supabase, result.subscription_id, result.payment_id)
     }
 
     return json(req, {
