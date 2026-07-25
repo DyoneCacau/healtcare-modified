@@ -1,4 +1,4 @@
-import { Clock, User, MapPin, MoreVertical, MessageSquare, Edit, Trash2, Check, X, CheckCircle, UserX } from 'lucide-react';
+import { Clock, User, MapPin, MoreVertical, MessageSquare, Edit, Check, X, CheckCircle, UserX, Package } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import {
   DropdownMenu,
@@ -18,6 +18,7 @@ interface AppointmentCardProps {
   onConfirm: (appointment: AgendaAppointment) => void;
   onComplete?: (appointment: AgendaAppointment) => void;
   onMarkNoShow?: (appointment: AgendaAppointment) => void;
+  onEditMaterials?: (appointment: AgendaAppointment) => void;
   onWhatsApp: (appointment: AgendaAppointment) => void;
   compact?: boolean;
 }
@@ -81,6 +82,7 @@ function AppointmentActionsMenu({
   onConfirm,
   onComplete,
   onMarkNoShow,
+  onEditMaterials,
   onWhatsApp,
   triggerClassName,
   iconClassName,
@@ -126,6 +128,12 @@ function AppointmentActionsMenu({
             Marcar como faltou
           </DropdownMenuItem>
         )}
+        {appointment.status === 'completed' && onEditMaterials && (
+          <DropdownMenuItem onClick={() => onEditMaterials(appointment)}>
+            <Package className="mr-2 h-4 w-4" />
+            Editar materiais
+          </DropdownMenuItem>
+        )}
         <DropdownMenuItem onClick={() => onEdit(appointment)}>
           <Edit className="mr-2 h-4 w-4" />
           Editar
@@ -150,6 +158,7 @@ export function AppointmentCard({
   onConfirm,
   onComplete,
   onMarkNoShow,
+  onEditMaterials,
   onWhatsApp,
   compact = false,
 }: AppointmentCardProps) {
@@ -178,6 +187,7 @@ export function AppointmentCard({
           onConfirm={onConfirm}
           onComplete={onComplete}
           onMarkNoShow={onMarkNoShow}
+          onEditMaterials={onEditMaterials}
           onWhatsApp={onWhatsApp}
           triggerClassName="h-5 w-5 shrink-0 opacity-0 group-hover:opacity-100 focus-visible:opacity-100"
           iconClassName="h-3 w-3"
@@ -244,6 +254,7 @@ export function AppointmentCard({
           onConfirm={onConfirm}
           onComplete={onComplete}
           onMarkNoShow={onMarkNoShow}
+          onEditMaterials={onEditMaterials}
           onWhatsApp={onWhatsApp}
         />
       </div>

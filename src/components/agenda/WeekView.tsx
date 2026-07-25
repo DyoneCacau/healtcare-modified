@@ -14,6 +14,7 @@ interface WeekViewProps {
   onConfirm: (appointment: AgendaAppointment) => void;
   onComplete: (appointment: AgendaAppointment) => void;
   onMarkNoShow?: (appointment: AgendaAppointment) => void;
+  onEditMaterials?: (appointment: AgendaAppointment) => void;
   onWhatsApp: (appointment: AgendaAppointment) => void;
   /** Clique em uma célula (dia + horário) para abrir formulário de novo agendamento */
   onSlotClick?: (day: Date, startTime: string) => void;
@@ -32,6 +33,7 @@ export function WeekView({
   onConfirm,
   onComplete,
   onMarkNoShow,
+  onEditMaterials,
   onWhatsApp,
   onSlotClick,
 }: WeekViewProps) {
@@ -141,6 +143,7 @@ export function WeekView({
                       onConfirm={onConfirm}
                       onComplete={onComplete}
                       onMarkNoShow={onMarkNoShow}
+                      onEditMaterials={onEditMaterials}
                       onWhatsApp={onWhatsApp}
                       compact
                     />

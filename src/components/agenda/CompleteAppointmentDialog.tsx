@@ -114,6 +114,7 @@ export function CompleteAppointmentDialog({
   const [overrideReason, setOverrideReason] = useState('');
   const [selectedProcedureId, setSelectedProcedureId] = useState<string>('');
   const [materialsTouched, setMaterialsTouched] = useState(false);
+  const [materialsConfirmed, setMaterialsConfirmed] = useState(false);
 
   const { isSuperAdmin } = useAuth();
   const { can } = usePermissions();
@@ -141,6 +142,7 @@ export function CompleteAppointmentDialog({
       setOverrideReason('');
       setMaterialDrafts([]);
       setMaterialsTouched(false);
+      setMaterialsConfirmed(false);
 
       const matchedByName = activeProcedures.find(
         (p) => p.name.trim().toLowerCase() === (appointment.procedure || '').trim().toLowerCase(),
@@ -280,6 +282,10 @@ export function CompleteAppointmentDialog({
     if (!appointment || !canComplete()) return;
     const materialsUsage = buildMaterialsUsage();
     if (materialsUsage == null) return;
+    if (!materialsConfirmed) {
+      toast.error('Confirme que conferiu os materiais usados no procedimento antes de finalizar');
+      return;
+    }
 
     const completedAppointment: AgendaAppointment = {
       ...appointment,
@@ -725,6 +731,24 @@ export function CompleteAppointmentDialog({
               Agendar retorno após finalizar
             </label>
           </div>
+
+          <div className="flex items-start space-x-2 rounded-lg border border-emerald-200 bg-emerald-50/70 p-3">
+            <Checkbox
+              id="materialsConfirmed"
+              checked={materialsConfirmed}
+              onCheckedChange={(checked) => setMaterialsConfirmed(checked === true)}
+              disabled={validation.errorCode === 'DUPLICATE'}
+            />
+            <label
+              htmlFor="materialsConfirmed"
+              className="text-sm leading-snug cursor-pointer"
+            >
+              <span className="font-medium">Confirmei os materiais usados no procedimento</span>
+              <span className="block text-xs text-muted-foreground mt-0.5">
+                Revise marca e quantidade (ml/un). Depois da finalização ainda é possível editar na Agenda; tudo fica na auditoria.
+              </span>
+            </label>
+          </div>
         </div>
 
         <DialogFooter className="gap-2">
@@ -733,10 +757,10 @@ export function CompleteAppointmentDialog({
           </Button>
           <Button
             onClick={handleComplete}
-            disabled={!canComplete()}
+            disabled={!canComplete() || !materialsConfirmed}
             className={cn(
               "bg-emerald-600 hover:bg-emerald-700",
-              !canComplete() && "opacity-50 cursor-not-allowed"
+              (!canComplete() || !materialsConfirmed) && "opacity-50 cursor-not-allowed"
             )}
           >
             <CheckCircle className="mr-2 h-4 w-4" />

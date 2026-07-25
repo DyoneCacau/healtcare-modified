@@ -42,6 +42,7 @@ import { usePatients } from '@/hooks/usePatients';
 import { useClinicProcedures } from '@/hooks/useClinicProcedures';
 import { PROCEDURE_OPTIONS } from '@/lib/procedures';
 import { DEFAULT_BOOKING_FEE } from '@/lib/bookingFee';
+import { ProcedureMaterialsPreview } from '@/components/agenda/ProcedureMaterialsPreview';
 import { toast } from 'sonner';
 
 type BookingFeePaymentMethod = NonNullable<AgendaAppointment['bookingFeePaymentMethod']>;
@@ -549,6 +550,10 @@ export function AppointmentFormDialog({
                 ? 'Catálogo indisponível; usando a lista anterior e procedimento personalizado.'
                 : 'Cadastre preços em Procedimentos para preencher valor e duração automaticamente.'}
             </p>
+            <ProcedureMaterialsPreview
+              procedureId={procedureId}
+              procedureName={procedure === 'Outros' ? customProcedure : procedure}
+            />
           </div>
 
           <div className="grid grid-cols-2 gap-4">
