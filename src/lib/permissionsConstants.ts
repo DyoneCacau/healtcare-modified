@@ -24,6 +24,7 @@ export const PERMISSION_FEATURES = [
   { id: 'procedimentos', label: 'Procedimentos' },
   { id: 'crm', label: 'CRM de Vendas' },
   { id: 'atendimento', label: 'Atendimento' },
+  { id: 'integracoes', label: 'Integrações' },
   { id: 'relatorios', label: 'Relatórios' },
   { id: 'ponto', label: 'Ponto' },
   { id: 'termos', label: 'Termos' },
@@ -156,6 +157,16 @@ export const PERMISSION_GROUPS: PermissionGroup[] = [
       { feature: 'atendimento', label: 'Ver inbox', actions: ['can_view'] },
       { feature: 'atendimento', label: 'Responder conversas', actions: ['can_create', 'can_edit'] },
       { feature: 'atendimento', label: 'Configurar canais e fluxos', actions: ['can_edit', 'can_delete'] },
+    ],
+  },
+  {
+    id: 'gr_integracoes',
+    label: 'Integrações',
+    children: [
+      { feature: 'integracoes', label: 'Ver conexões e logs', actions: ['can_view'] },
+      { feature: 'integracoes', label: 'Criar conexão / token', actions: ['can_create'] },
+      { feature: 'integracoes', label: 'Editar conexão e fluxos', actions: ['can_edit'] },
+      { feature: 'integracoes', label: 'Remover conexão / revogar token', actions: ['can_delete'] },
     ],
   },
   {

@@ -23,6 +23,9 @@ Asaas opcional por clínica. Mercado Pago permanece removido.
 | `asaas-set-card-recurring` | Atualiza assinatura para cartão e abre fatura para cadastro | Secrets Asaas |
 | `asaas-choose-payment-method` | Cliente escolhe Pix, boleto ou cartão na plataforma | Secrets Asaas |
 | `asaas-reconcile` | Reconciliação diária de eventos/cobranças | Secrets Asaas e `CRON_SECRET` |
+| `integrations-webhook` | Webhook genérico de entrada por integração (resolve o tenant pelo slug) | `SUPABASE_SERVICE_ROLE_KEY`, `APP_URL` |
+| `integrations-api` | API REST do tenant para n8n / Make / Zapier / ERPs (auth por `api_tokens`) | `SUPABASE_SERVICE_ROLE_KEY`, `APP_URL` |
+| `integrations-dispatch` | Ações do app: testar conexão, disparar fluxo, reprocessar webhook | `SUPABASE_SERVICE_ROLE_KEY`, `APP_URL` |
 
 ## Legado (não usar em vendas diretas)
 
@@ -51,7 +54,18 @@ supabase functions deploy asaas-cancel-subscription
 supabase functions deploy asaas-set-card-recurring
 supabase functions deploy asaas-choose-payment-method
 supabase functions deploy asaas-reconcile --no-verify-jwt
+
+# Integrações (execute antes: supabase/PRODUCAO_25_INTEGRACOES.sql)
+supabase functions deploy integrations-webhook --no-verify-jwt
+supabase functions deploy integrations-api --no-verify-jwt
+supabase functions deploy integrations-dispatch
 ```
+
+`integrations-webhook` e `integrations-api` sobem com `--no-verify-jwt`: o
+chamador é um sistema externo. A autenticação é o segredo da integração
+(header `x-healthcare-signature`) e o token do tenant (`api_tokens`),
+respectivamente. Em ambos os casos o `clinic_id` vem do banco, nunca da
+requisição.
 
 Secrets adicionais (Dashboard → Edge Functions → Secrets):
 

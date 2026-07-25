@@ -19,6 +19,11 @@ export const PLAN_MODULES = [
     always: true,
   },
   { id: 'termos', name: 'Termos e Contratos', description: 'Criação de termos e contratos' },
+  {
+    id: 'integracoes',
+    name: 'Integrações',
+    description: 'Lead Ads, WhatsApp, webhooks, n8n, Make, Zapier e APIs',
+  },
   { id: 'multi_clinica', name: 'Multi-Clínica', description: 'Gestão de múltiplas unidades' },
 ] as const;
 

@@ -27,6 +27,7 @@ const Inventory = React.lazy(() => import("./pages/Inventory"));
 const Professionals = React.lazy(() => import("./pages/Professionals"));
 const Procedures = React.lazy(() => import("./pages/Procedures"));
 const Crm = React.lazy(() => import("./pages/Crm"));
+const Integrations = React.lazy(() => import("./pages/Integrations"));
 const TimeClock = React.lazy(() => import("./pages/TimeClock"));
 const Administration = React.lazy(() => import("./pages/Administration"));
 const SuperAdmin = React.lazy(() => import("./pages/SuperAdmin"));
@@ -270,6 +271,15 @@ function AppRoutes() {
           element={
             <RequireFeature feature="ponto">
               <TimeClock />
+            </RequireFeature>
+          }
+        />
+
+        <Route
+          path="/integracoes"
+          element={
+            <RequireFeature feature="integracoes">
+              <Integrations />
             </RequireFeature>
           }
         />
