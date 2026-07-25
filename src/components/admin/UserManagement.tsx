@@ -39,6 +39,7 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { Switch } from '@/components/ui/switch';
+import { Checkbox } from '@/components/ui/checkbox';
 import {
   Users,
   Plus,
@@ -57,7 +58,8 @@ import {
 import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
 import type { Database } from '@/integrations/supabase/types';
-import { useClinic } from '@/hooks/useClinic';
+import { useClinic, useClinics } from '@/hooks/useClinic';
+import { getClinicDisplayName } from '@/lib/utils';
 
 type UserRole = Database['public']['Enums']['app_role'];
 type AssignableSystemRole = Exclude<UserRole, 'superadmin'>;
@@ -88,6 +90,7 @@ interface UserManagementProps {
 
 export function UserManagement({ users, onRefresh, isSuperAdmin }: UserManagementProps) {
   const { clinicId } = useClinic();
+  const { clinics } = useClinics();
   const [searchTerm, setSearchTerm] = useState('');
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingUser, setEditingUser] = useState<SystemUser | null>(null);
@@ -98,6 +101,7 @@ export function UserManagement({ users, onRefresh, isSuperAdmin }: UserManagemen
     password: '',
     role: 'receptionist' as string,
   });
+  const [selectedClinicIds, setSelectedClinicIds] = useState<string[]>([]);
   const [customRoles, setCustomRoles] = useState<{ id: string; name: string }[]>([]);
   const [newRoleDialogOpen, setNewRoleDialogOpen] = useState(false);
   const [newRoleName, setNewRoleName] = useState('');
@@ -148,8 +152,20 @@ export function UserManagement({ users, onRefresh, isSuperAdmin }: UserManagemen
         password: '',
         role: 'receptionist',
       });
+      setSelectedClinicIds(clinicId ? [clinicId] : []);
     }
     setDialogOpen(true);
+  };
+
+  const toggleSelectedClinic = (id: string) => {
+    setSelectedClinicIds((prev) => {
+      if (prev.includes(id)) {
+        // A clínica atual precisa continuar marcada (é onde o cadastro é feito por padrão)
+        if (id === clinicId) return prev;
+        return prev.filter((c) => c !== id);
+      }
+      return [...prev, id];
+    });
   };
 
   const isSystemRole = (value: string): value is AssignableSystemRole =>
@@ -220,23 +236,54 @@ export function UserManagement({ users, onRefresh, isSuperAdmin }: UserManagemen
           setIsLoading(false);
           return;
         }
-
-        // Verificar se email já existe
-        const { data: existingUser, error: checkError } = await supabase
-          .from('profiles')
-          .select('email')
-          .ilike('email', formData.email)
-          .maybeSingle();
-
-        if (checkError && checkError.code !== 'PGRST116') throw checkError;
-        
-        if (existingUser) {
-          toast.error('Este e-mail já está cadastrado no sistema.');
+        if (selectedClinicIds.length === 0) {
+          toast.error('Selecione ao menos uma clínica para dar acesso.');
           setIsLoading(false);
           return;
         }
 
-        // Create new user (skip_auto_clinic: trigger não criará clínica nova; usuário entra na clínica atual)
+        // Verificar se email já existe
+        const { data: existingProfile, error: checkError } = await supabase
+          .from('profiles')
+          .select('user_id, email')
+          .ilike('email', formData.email)
+          .maybeSingle();
+
+        if (checkError && checkError.code !== 'PGRST116') throw checkError;
+
+        if (existingProfile) {
+          // E-mail já tem conta: em vez de bloquear, concede acesso deste usuário
+          // existente às clínicas marcadas que ele ainda não tem (sem criar login duplicado).
+          const { data: existingLinks, error: linksError } = await supabase
+            .from('clinic_users')
+            .select('clinic_id')
+            .eq('user_id', existingProfile.user_id);
+          if (linksError) throw linksError;
+
+          const alreadyLinkedIds = new Set((existingLinks || []).map((l) => l.clinic_id));
+          const clinicIdsToLink = selectedClinicIds.filter((id) => !alreadyLinkedIds.has(id));
+
+          if (clinicIdsToLink.length === 0) {
+            toast.error('Este e-mail já está cadastrado e já tem acesso a todas as clínicas selecionadas.');
+            setIsLoading(false);
+            return;
+          }
+
+          const { error: linkError } = await supabase.from('clinic_users').insert(
+            clinicIdsToLink.map((id) => ({ clinic_id: id, user_id: existingProfile.user_id, is_owner: false }))
+          );
+          if (linkError) throw linkError;
+
+          toast.success(
+            `E-mail já cadastrado no sistema — concedi acesso do usuário existente a ${clinicIdsToLink.length} clínica(s) adicional(is), sem criar um novo login.`
+          );
+          setDialogOpen(false);
+          onRefresh();
+          setIsLoading(false);
+          return;
+        }
+
+        // Create new user (skip_auto_clinic: trigger não criará clínica nova; usuário entra na(s) clínica(s) marcada(s))
         const { data: { session: adminSession } } = await supabase.auth.getSession();
 
         const { data: authData, error: authError } = await supabase.auth.signUp({
@@ -251,15 +298,11 @@ export function UserManagement({ users, onRefresh, isSuperAdmin }: UserManagemen
         if (authError) throw authError;
 
         if (authData.user) {
-          // 1) Vincular à clínica PRIMEIRO (RLS em user_roles exige que o user_id já esteja na clínica)
-          if (clinicId) {
-            const { error: clinicError } = await supabase.from('clinic_users').insert({
-              clinic_id: clinicId,
-              user_id: authData.user.id,
-              is_owner: false,
-            });
-            if (clinicError) throw clinicError;
-          }
+          // 1) Vincular às clínicas marcadas PRIMEIRO (RLS em user_roles exige que o user_id já esteja na clínica)
+          const { error: clinicError } = await supabase.from('clinic_users').insert(
+            selectedClinicIds.map((id) => ({ clinic_id: id, user_id: authData.user!.id, is_owner: false }))
+          );
+          if (clinicError) throw clinicError;
 
           // 2) Role: sistema ou função personalizada
           const roleValue = formData.role;
@@ -271,6 +314,8 @@ export function UserManagement({ users, onRefresh, isSuperAdmin }: UserManagemen
             if (roleError) throw roleError;
           } else {
             await supabase.from('user_roles').insert({ user_id: authData.user.id, role: 'receptionist' });
+            // Função personalizada é específica da clínica atual; nas demais clínicas
+            // marcadas, o usuário usa a permissão padrão (fallback) até definir uma função lá.
             const { error: customErr } = await supabase.from('user_clinic_custom_roles').insert({
               user_id: authData.user.id,
               clinic_id: clinicId,
@@ -304,7 +349,11 @@ export function UserManagement({ users, onRefresh, isSuperAdmin }: UserManagemen
           }
         }
 
-        toast.success('Usuário criado com sucesso!');
+        toast.success(
+          selectedClinicIds.length > 1
+            ? `Usuário criado com acesso a ${selectedClinicIds.length} clínicas!`
+            : 'Usuário criado com sucesso!'
+        );
       }
 
       setDialogOpen(false);
@@ -637,6 +686,34 @@ export function UserManagement({ users, onRefresh, isSuperAdmin }: UserManagemen
                   minLength={6}
                   required
                 />
+              </div>
+            )}
+
+            {!editingUser && clinics.length > 1 && (
+              <div className="space-y-2 rounded-md border p-3">
+                <Label>Acesso às clínicas</Label>
+                <p className="text-xs text-muted-foreground">
+                  Marque em quais clínicas este usuário vai ter acesso. Se o e-mail já existir,
+                  o usuário existente só é vinculado às clínicas marcadas (sem criar login duplicado).
+                </p>
+                <div className="space-y-2 pt-1">
+                  {clinics.map((clinic: { id: string; name?: string | null; unit_name?: string | null }) => (
+                    <div key={clinic.id} className="flex items-center gap-2">
+                      <Checkbox
+                        id={`user-clinic-${clinic.id}`}
+                        checked={selectedClinicIds.includes(clinic.id)}
+                        onCheckedChange={() => toggleSelectedClinic(clinic.id)}
+                        disabled={clinic.id === clinicId}
+                      />
+                      <Label htmlFor={`user-clinic-${clinic.id}`} className="text-sm font-normal cursor-pointer">
+                        {getClinicDisplayName(clinic)}
+                        {clinic.id === clinicId && (
+                          <span className="text-muted-foreground"> (atual)</span>
+                        )}
+                      </Label>
+                    </div>
+                  ))}
+                </div>
               </div>
             )}
 
