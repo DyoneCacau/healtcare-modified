@@ -231,6 +231,17 @@ Contexto para agentes rodando no Cursor Cloud (o *update script* já rodou `npm 
 
   Não editar os arquivos de migration para "corrigir" a ordem a menos que explicitamente pedido.
 
+- **Grants (obrigatório após aplicar migrations manualmente):** como as migrations foram aplicadas como `postgres` (fora do fluxo do `supabase db reset`), os `GRANT` padrão do Supabase para `anon`/`authenticated`/`service_role` **não** são aplicados e o PostgREST retorna `42501 permission denied for table` (HTTP 403). O RLS continua valendo linha a linha, então basta replicar os grants padrão:
+
+  ```bash
+  docker exec -i "$DB" psql -U postgres -d postgres <<'SQL'
+  GRANT USAGE ON SCHEMA public TO anon, authenticated, service_role;
+  GRANT ALL ON ALL TABLES IN SCHEMA public TO anon, authenticated, service_role;
+  GRANT ALL ON ALL SEQUENCES IN SCHEMA public TO anon, authenticated, service_role;
+  GRANT ALL ON ALL ROUTINES IN SCHEMA public TO anon, authenticated, service_role;
+  SQL
+  ```
+
 ### Signup / usuário de teste
 
 - **Não há tela de auto-cadastro** (o Login só faz sign-in; clientes novos usam "Solicitar acesso"). Para obter uma conta de teste, criar o usuário pela **Auth admin API** com a `service_role key` local — o trigger `create_clinic_on_signup` provisiona automaticamente clínica + assinatura `trial` (7 dias) + role `admin`:
