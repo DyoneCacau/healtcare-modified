@@ -30,9 +30,19 @@ export function IntegrationCard({
         <div className="flex items-start justify-between gap-2">
           <div className="min-w-0">
             <h3 className="truncate font-semibold">{definition.name}</h3>
-            <Badge variant="secondary" className="mt-1 text-[11px]">
-              {INTEGRATION_CATEGORY_LABELS[definition.category]}
-            </Badge>
+            <div className="mt-1 flex flex-wrap gap-1">
+              <Badge variant="secondary" className="text-[11px]">
+                {INTEGRATION_CATEGORY_LABELS[definition.category]}
+              </Badge>
+              {definition.createsLeads && (
+                <Badge
+                  variant="outline"
+                  className="border-emerald-200 bg-emerald-50 text-[11px] text-emerald-800"
+                >
+                  Cria lead
+                </Badge>
+              )}
+            </div>
           </div>
           <a
             href={definition.docsUrl}

@@ -237,6 +237,13 @@ export function IntegrationFormDialog({
             <Switch checked={isActive} onCheckedChange={setIsActive} disabled={!canEdit} />
           </div>
 
+          {activeDefinition?.createsLeads && (
+            <p className="rounded-md border border-emerald-300 bg-emerald-50 p-2.5 text-xs text-emerald-900">
+              Todo evento recebido nesta conexão vira lead no CRM, sem duplicar o mesmo
+              contato.
+            </p>
+          )}
+
           {activeDefinition?.requiresCredentials && (
             <p className="flex items-start gap-2 rounded-md border border-amber-300 bg-amber-50 p-2.5 text-xs text-amber-900">
               <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />

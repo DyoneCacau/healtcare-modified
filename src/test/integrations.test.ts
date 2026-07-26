@@ -13,6 +13,7 @@ import {
   maskToken,
   tokenPrefix,
 } from '@/lib/integrationSecurity';
+import { LEAD_CAPTURE_PROVIDERS } from '../../supabase/functions/_shared/leadPayload.ts';
 
 describe('catálogo de provedores', () => {
   it('cobre todos os provedores previstos', () => {
@@ -46,6 +47,19 @@ describe('catálogo de provedores', () => {
 
   it('provedor de saída não expõe webhook de entrada', () => {
     expect(getProviderDefinition('external_api')?.supportsInboundWebhook).toBe(false);
+  });
+
+  it('o flag "Cria lead" do app bate com o registro das Edge Functions', () => {
+    const noApp = INTEGRATION_PROVIDERS.filter((p) => p.createsLeads)
+      .map((p) => p.id)
+      .sort();
+    expect(noApp).toEqual([...LEAD_CAPTURE_PROVIDERS].sort());
+  });
+
+  it('provedor que cria lead precisa receber webhook de entrada', () => {
+    for (const provider of LEAD_CAPTURE_PROVIDERS) {
+      expect(getProviderDefinition(provider)?.supportsInboundWebhook).toBe(true);
+    }
   });
 });
 

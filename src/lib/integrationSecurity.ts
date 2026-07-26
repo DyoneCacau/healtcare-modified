@@ -57,10 +57,19 @@ export async function hashSecret(value: string): Promise<string> {
     .join('');
 }
 
+function functionsBaseUrl(): string {
+  return `${(import.meta.env.VITE_SUPABASE_URL || '').replace(/\/$/, '')}/functions/v1`;
+}
+
 /** URL pública do webhook de entrada da integração. */
 export function buildWebhookUrl(slug: string): string {
-  const baseUrl = (import.meta.env.VITE_SUPABASE_URL || '').replace(/\/$/, '');
-  return `${baseUrl}/functions/v1/integrations-webhook/${slug}`;
+  return `${functionsBaseUrl()}/integrations-webhook/${slug}`;
+}
+
+/** Base da API REST do tenant (leads, fluxos, logs). */
+export function buildIntegrationsApiUrl(path = ''): string {
+  const suffix = path ? `/${path.replace(/^\//, '')}` : '';
+  return `${functionsBaseUrl()}/integrations-api${suffix}`;
 }
 
 /** Token expirado ou revogado não autentica. */

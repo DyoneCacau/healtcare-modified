@@ -18,6 +18,11 @@ export interface IntegrationProviderDefinition {
   supportsInboundWebhook: boolean;
   /** Precisa de token/API key guardado como secret (nunca no banco) */
   requiresCredentials: boolean;
+  /**
+   * Eventos recebidos viram lead no CRM automaticamente.
+   * Pode ser invertido por conexão com `config.lead_capture`.
+   */
+  createsLeads: boolean;
   /** Documentação oficial para quem for implementar */
   docsUrl: string;
 }
@@ -36,6 +41,7 @@ export const INTEGRATION_PROVIDERS: IntegrationProviderDefinition[] = [
     direction: 'inbound',
     supportsInboundWebhook: true,
     requiresCredentials: true,
+    createsLeads: true,
     docsUrl: 'https://developers.facebook.com/docs/marketing-api/guides/lead-ads',
   },
   {
@@ -46,6 +52,7 @@ export const INTEGRATION_PROVIDERS: IntegrationProviderDefinition[] = [
     direction: 'inbound',
     supportsInboundWebhook: true,
     requiresCredentials: true,
+    createsLeads: true,
     docsUrl: 'https://developers.facebook.com/docs/instagram-platform',
   },
   {
@@ -56,6 +63,7 @@ export const INTEGRATION_PROVIDERS: IntegrationProviderDefinition[] = [
     direction: 'bidirectional',
     supportsInboundWebhook: true,
     requiresCredentials: true,
+    createsLeads: false,
     docsUrl: 'https://developers.facebook.com/docs/whatsapp/cloud-api',
   },
   {
@@ -66,6 +74,7 @@ export const INTEGRATION_PROVIDERS: IntegrationProviderDefinition[] = [
     direction: 'inbound',
     supportsInboundWebhook: true,
     requiresCredentials: false,
+    createsLeads: true,
     docsUrl: 'https://supabase.com/docs/guides/functions',
   },
   {
@@ -76,6 +85,7 @@ export const INTEGRATION_PROVIDERS: IntegrationProviderDefinition[] = [
     direction: 'inbound',
     supportsInboundWebhook: true,
     requiresCredentials: false,
+    createsLeads: true,
     docsUrl: 'https://supabase.com/docs/guides/functions',
   },
   {
@@ -86,6 +96,7 @@ export const INTEGRATION_PROVIDERS: IntegrationProviderDefinition[] = [
     direction: 'outbound',
     supportsInboundWebhook: false,
     requiresCredentials: true,
+    createsLeads: false,
     docsUrl: 'https://supabase.com/docs/guides/functions',
   },
   {
@@ -96,6 +107,7 @@ export const INTEGRATION_PROVIDERS: IntegrationProviderDefinition[] = [
     direction: 'bidirectional',
     supportsInboundWebhook: true,
     requiresCredentials: false,
+    createsLeads: true,
     docsUrl: 'https://docs.n8n.io/integrations/builtin/core-nodes/n8n-nodes-base.webhook/',
   },
   {
@@ -106,6 +118,7 @@ export const INTEGRATION_PROVIDERS: IntegrationProviderDefinition[] = [
     direction: 'bidirectional',
     supportsInboundWebhook: true,
     requiresCredentials: false,
+    createsLeads: true,
     docsUrl: 'https://www.make.com/en/help/tools/webhooks',
   },
   {
@@ -116,6 +129,7 @@ export const INTEGRATION_PROVIDERS: IntegrationProviderDefinition[] = [
     direction: 'bidirectional',
     supportsInboundWebhook: true,
     requiresCredentials: false,
+    createsLeads: true,
     docsUrl: 'https://platform.zapier.com/build/webhooks',
   },
 ];

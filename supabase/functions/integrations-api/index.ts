@@ -21,8 +21,37 @@ import { describeRoutes, resolveRoute, type Route } from './router.ts'
 import { getIntegration, listIntegrations } from './controllers/integrations.ts'
 import { getFlow, listFlows, runFlow } from './controllers/automationFlows.ts'
 import { listAutomationLogs, listWebhookLogs } from './controllers/logs.ts'
+import { createLeads, getLead, listLeads, updateLead } from './controllers/leads.ts'
 
 const routes: Route[] = [
+  {
+    method: 'POST',
+    pattern: 'leads',
+    scope: 'leads:write',
+    description: 'Cria lead(s) no CRM a partir de qualquer formato de payload',
+    handler: async (ctx) => createLeads(ctx.clinicId, ctx.payload),
+  },
+  {
+    method: 'GET',
+    pattern: 'leads',
+    scope: 'leads:read',
+    description: 'Lista leads (filtros: stage, lead_source, phone, since, limit)',
+    handler: async (ctx) => listLeads(ctx.clinicId, ctx.searchParams),
+  },
+  {
+    method: 'GET',
+    pattern: 'leads/:id',
+    scope: 'leads:read',
+    description: 'Detalha um lead',
+    handler: async (ctx) => getLead(ctx.clinicId, ctx.segments[1]),
+  },
+  {
+    method: 'PATCH',
+    pattern: 'leads/:id',
+    scope: 'leads:write',
+    description: 'Atualiza etapa, follow-up, interesse ou observação do lead',
+    handler: async (ctx) => updateLead(ctx.clinicId, ctx.segments[1], ctx.payload),
+  },
   {
     method: 'GET',
     pattern: 'integrations',

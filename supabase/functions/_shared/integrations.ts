@@ -303,19 +303,8 @@ export type ProviderWebhookHandler = (
   ctx: ProviderWebhookContext,
 ) => Promise<ProviderWebhookResult>
 
-/**
- * Registro de handlers por provedor.
- *
- * Vazio de propósito: nenhuma integração está implementada. Enquanto o
- * provedor não tiver handler, o webhook apenas registra o evento em
- * webhook_logs (auditoria) e responde 202 — nada é perdido e nada é
- * inventado.
- */
-export const PROVIDER_WEBHOOK_HANDLERS: Partial<Record<string, ProviderWebhookHandler>> = {}
-
-export function getProviderWebhookHandler(provider: string): ProviderWebhookHandler | null {
-  return PROVIDER_WEBHOOK_HANDLERS[provider] ?? null
-}
+// O registro de handlers vive em providerRegistry.ts: este arquivo é a base
+// de todos os módulos e não pode importar handlers (evita ciclo).
 
 /** Extrai o id do evento para idempotência, sem conhecer o provedor. */
 export function extractExternalEventId(req: Request, payload: unknown): string | null {

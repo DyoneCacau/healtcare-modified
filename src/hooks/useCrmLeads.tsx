@@ -25,6 +25,9 @@ type CrmLeadRow = {
   patient_id: string | null;
   appointment_id: string | null;
   lost_reason: string | null;
+  /** Preenchido quando o lead veio de uma integração (PRODUCAO_26) */
+  integration_id?: string | null;
+  external_lead_id?: string | null;
   created_at: string;
   updated_at: string;
 };
@@ -50,6 +53,8 @@ function mapRow(row: CrmLeadRow, ownerName?: string | null): CrmLead {
     patientId: row.patient_id,
     appointmentId: row.appointment_id,
     lostReason: row.lost_reason,
+    integrationId: row.integration_id ?? null,
+    externalLeadId: row.external_lead_id ?? null,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };

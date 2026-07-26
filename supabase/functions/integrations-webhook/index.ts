@@ -16,7 +16,6 @@
 import {
   errorResponse,
   extractExternalEventId,
-  getProviderWebhookHandler,
   handleOptions,
   HttpError,
   json,
@@ -26,6 +25,7 @@ import {
   serviceClient,
   verifyIntegrationSignature,
 } from '../_shared/integrations.ts'
+import { resolveWebhookHandler } from '../_shared/providerRegistry.ts'
 
 const MAX_BODY_BYTES = 1_000_000
 
@@ -79,7 +79,7 @@ Deno.serve(async (req) => {
     }
 
     const externalEventId = extractExternalEventId(req, payload)
-    const handler = getProviderWebhookHandler(integration.provider)
+    const handler = resolveWebhookHandler(integration)
 
     // Sem handler: registra e devolve 202 (aceito, ainda não processado)
     if (!handler) {

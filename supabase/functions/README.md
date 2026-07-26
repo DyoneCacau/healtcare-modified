@@ -23,8 +23,8 @@ Asaas opcional por clínica. Mercado Pago permanece removido.
 | `asaas-set-card-recurring` | Atualiza assinatura para cartão e abre fatura para cadastro | Secrets Asaas |
 | `asaas-choose-payment-method` | Cliente escolhe Pix, boleto ou cartão na plataforma | Secrets Asaas |
 | `asaas-reconcile` | Reconciliação diária de eventos/cobranças | Secrets Asaas e `CRON_SECRET` |
-| `integrations-webhook` | Webhook genérico de entrada por integração (resolve o tenant pelo slug) | `SUPABASE_SERVICE_ROLE_KEY`, `APP_URL` |
-| `integrations-api` | API REST do tenant para n8n / Make / Zapier / ERPs (auth por `api_tokens`) | `SUPABASE_SERVICE_ROLE_KEY`, `APP_URL` |
+| `integrations-webhook` | Webhook genérico de entrada por integração; cria lead no CRM | `SUPABASE_SERVICE_ROLE_KEY`, `APP_URL` |
+| `integrations-api` | API REST do tenant (leads, fluxos, logs) para n8n / Make / Zapier / ERPs | `SUPABASE_SERVICE_ROLE_KEY`, `APP_URL` |
 | `integrations-dispatch` | Ações do app: testar conexão, disparar fluxo, reprocessar webhook | `SUPABASE_SERVICE_ROLE_KEY`, `APP_URL` |
 
 ## Legado (não usar em vendas diretas)
@@ -55,7 +55,7 @@ supabase functions deploy asaas-set-card-recurring
 supabase functions deploy asaas-choose-payment-method
 supabase functions deploy asaas-reconcile --no-verify-jwt
 
-# Integrações (execute antes: supabase/PRODUCAO_25_INTEGRACOES.sql)
+# Integrações (execute antes: PRODUCAO_25_INTEGRACOES.sql e PRODUCAO_26_LEADS_API.sql)
 supabase functions deploy integrations-webhook --no-verify-jwt
 supabase functions deploy integrations-api --no-verify-jwt
 supabase functions deploy integrations-dispatch
@@ -66,6 +66,38 @@ chamador é um sistema externo. A autenticação é o segredo da integração
 (header `x-healthcare-signature`) e o token do tenant (`api_tokens`),
 respectivamente. Em ambos os casos o `clinic_id` vem do banco, nunca da
 requisição.
+
+## API universal de leads
+
+Qualquer integração cria lead no CRM pelo mesmo caminho. O formato do payload
+não importa: `_shared/leadPayload.ts` reconhece JSON plano em português ou
+inglês, `field_data` do Meta e listas de campos de formulário.
+
+```bash
+curl -X POST "https://SEU-PROJETO.supabase.co/functions/v1/integrations-api/leads" \
+  -H "Authorization: Bearer hc_live_SEU_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"nome":"Maria","telefone":"(11) 98888-7777","origem":"instagram"}'
+```
+
+Rotas de lead (escopo exigido no token):
+
+| Método | Rota | Escopo |
+|--------|------|--------|
+| POST | `/leads` | `leads:write` |
+| GET | `/leads` | `leads:read` |
+| GET | `/leads/:id` | `leads:read` |
+| PATCH | `/leads/:id` | `leads:write` |
+
+Pelo webhook, os provedores de `LEAD_CAPTURE_PROVIDERS`
+(`_shared/leadPayload.ts`) criam lead automaticamente. Para inverter em uma
+conexão específica, use `integrations.config.lead_capture` (`true` liga em
+WhatsApp/API externa, `false` desliga).
+
+Sem lead duplicado: o mesmo `external_lead_id` na mesma integração nunca entra
+duas vezes, e o mesmo telefone/e-mail nos últimos 30 dias reaproveita o card
+existente preenchendo só os campos vazios. Para forçar a criação, envie
+`"dedupe": "none"`.
 
 Secrets adicionais (Dashboard → Edge Functions → Secrets):
 

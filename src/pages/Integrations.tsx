@@ -11,6 +11,7 @@ import { IntegrationFormDialog } from '@/components/integrations/IntegrationForm
 import { AutomationFlowsPanel } from '@/components/integrations/AutomationFlowsPanel';
 import { IntegrationLogsPanel } from '@/components/integrations/IntegrationLogsPanel';
 import { ApiTokensPanel } from '@/components/integrations/ApiTokensPanel';
+import { LeadsApiPanel } from '@/components/integrations/LeadsApiPanel';
 import { useAuth } from '@/hooks/useAuth';
 import { usePermissions } from '@/hooks/usePermissions';
 import { useIntegrations } from '@/hooks/useIntegrations';
@@ -88,9 +89,10 @@ export default function Integrations() {
         <CardContent className="flex items-start gap-2 p-3 text-sm">
           <Info className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
           <p className="text-muted-foreground">
-            Infraestrutura pronta: cada conexão já é isolada por clínica, com endpoint de
-            entrada, logs e tokens próprios. Os provedores ainda não trocam dados — quando
-            forem implementados, nada aqui muda de lugar.
+            Cada conexão é isolada por clínica, com endpoint de entrada, logs e tokens
+            próprios. A captação de leads já funciona: provedores marcados com
+            <span className="font-medium"> Cria lead</span> transformam o que recebem em card
+            no CRM, e qualquer sistema pode usar a API de Leads.
           </p>
         </CardContent>
       </Card>
@@ -98,6 +100,7 @@ export default function Integrations() {
       <Tabs defaultValue="conexoes" className="space-y-4">
         <TabsList>
           <TabsTrigger value="conexoes">Conexões</TabsTrigger>
+          <TabsTrigger value="leads">API de Leads</TabsTrigger>
           <TabsTrigger value="automacoes">Automações</TabsTrigger>
           <TabsTrigger value="logs">Logs</TabsTrigger>
           <TabsTrigger value="tokens">Tokens de API</TabsTrigger>
@@ -134,6 +137,10 @@ export default function Integrations() {
               );
             })
           )}
+        </TabsContent>
+
+        <TabsContent value="leads">
+          <LeadsApiPanel />
         </TabsContent>
 
         <TabsContent value="automacoes">
