@@ -1,6 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import {
   collectLeadFields,
+  isLeadDedupeMode,
+  isLeadSourceValue,
+  LEAD_DEDUPE_MODES,
+  LEAD_SOURCE_VALUES,
   normalizeLeadCpf,
   normalizeLeadEmail,
   normalizeLeadPayload,
@@ -248,5 +252,22 @@ describe('normalizeLeadPayload', () => {
     const lead = normalizeLeadPayload(null);
     expect(lead.name).toBe('Lead sem identificação');
     expect(lead.externalLeadId).toBeNull();
+  });
+});
+
+describe('validação de enum da API (400, não 500)', () => {
+  it('aceita só as origens do CHECK do banco', () => {
+    for (const value of LEAD_SOURCE_VALUES) {
+      expect(isLeadSourceValue(value)).toBe(true);
+    }
+    expect(isLeadSourceValue('tiktok')).toBe(false);
+    expect(isLeadSourceValue('Instagram')).toBe(false);
+  });
+
+  it('aceita só os modos de dedupe documentados', () => {
+    for (const value of LEAD_DEDUPE_MODES) {
+      expect(isLeadDedupeMode(value)).toBe(true);
+    }
+    expect(isLeadDedupeMode('fuzzy')).toBe(false);
   });
 });

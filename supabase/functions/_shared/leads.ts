@@ -9,17 +9,19 @@
  * Tenant: `clinicId` vem sempre resolvido (token ou slug), nunca do payload.
  */
 import type { SupabaseClient } from 'https://esm.sh/@supabase/supabase-js@2.49.1'
-import { HttpError } from './integrations.ts'
+import { HttpError } from './httpError.ts'
 import {
   normalizeLeadPayload,
+  type LeadDedupeMode,
   type LeadSourceValue,
   type NormalizedLead,
 } from './leadPayload.ts'
 
+export type { LeadDedupeMode } from './leadPayload.ts'
+export { isLeadDedupeMode, LEAD_DEDUPE_MODES } from './leadPayload.ts'
+
 /** Janela em que um mesmo contato é tratado como o mesmo lead. */
 const CONTACT_DEDUPE_WINDOW_DAYS = 30
-
-export type LeadDedupeMode = 'auto' | 'external_id' | 'none'
 
 export interface IngestLeadInput {
   clinicId: string

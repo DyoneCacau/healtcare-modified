@@ -1,0 +1,96 @@
+import { Facebook, Loader2, Settings2 } from 'lucide-react';
+import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
+import { Card, CardContent } from '@/components/ui/card';
+import { IntegrationStatusBadge } from './IntegrationStatusBadge';
+import { useMetaConnectionMutations } from '@/hooks/useMetaConnection';
+import { META_PHASE_LABELS, readMetaPublicConfig } from '@/lib/metaConnection';
+import type { Integration } from '@/types/integration';
+
+interface MetaCardProps {
+  connection: Integration | null;
+  canCreate: boolean;
+  canEdit: boolean;
+  onManage: (integration: Integration) => void;
+}
+
+export function MetaCard({ connection, canCreate, canEdit, onManage }: MetaCardProps) {
+  const { startOAuth } = useMetaConnectionMutations();
+  const meta = connection ? readMetaPublicConfig(connection.config) : null;
+
+  return (
+    <Card className="flex h-full flex-col border-primary/25 bg-gradient-to-br from-background to-[#1877F2]/5">
+      <CardContent className="flex flex-1 flex-col gap-3 p-4">
+        <div className="flex items-start justify-between gap-2">
+          <div className="min-w-0">
+            <h3 className="flex items-center gap-2 font-semibold">
+              <Facebook className="h-5 w-5 text-[#1877F2]" />
+              Meta
+            </h3>
+            <div className="mt-1 flex flex-wrap gap-1">
+              <Badge variant="secondary" className="text-[11px]">
+                Facebook + Instagram
+              </Badge>
+              <Badge variant="outline" className="text-[11px]">
+                OAuth
+              </Badge>
+            </div>
+          </div>
+          {connection && <IntegrationStatusBadge status={connection.status} />}
+        </div>
+
+        <p className="text-sm text-muted-foreground">
+          Conecte a conta Meta da clínica, escolha Página, Instagram e Conta de anúncios.
+          A importação de Lead Ads fica para a próxima etapa.
+        </p>
+
+        {connection && meta ? (
+          <div className="space-y-1 rounded-md border bg-background/80 px-3 py-2 text-sm">
+            <p className="font-medium">{META_PHASE_LABELS[meta.connection_phase]}</p>
+            <p className="text-muted-foreground">
+              {meta.page_name
+                ? `Página: ${meta.page_name}`
+                : 'Nenhuma página selecionada ainda'}
+            </p>
+            {meta.instagram_username && (
+              <p className="text-muted-foreground">Instagram: @{meta.instagram_username}</p>
+            )}
+          </div>
+        ) : (
+          <p className="text-sm text-muted-foreground">Nenhuma conta Meta conectada nesta clínica.</p>
+        )}
+
+        <div className="mt-auto flex flex-col gap-2 pt-1">
+          {connection && canEdit && (
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="w-full"
+              onClick={() => onManage(connection)}
+            >
+              <Settings2 className="mr-1 h-3.5 w-3.5" />
+              Gerenciar conexão
+            </Button>
+          )}
+          {(canCreate || canEdit) && (
+            <Button
+              type="button"
+              size="sm"
+              className="w-full"
+              disabled={startOAuth.isPending}
+              onClick={() => startOAuth.mutate(connection?.id ?? null)}
+            >
+              {startOAuth.isPending ? (
+                <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" />
+              ) : (
+                <Facebook className="mr-1 h-3.5 w-3.5" />
+              )}
+              {connection ? 'Reconectar Meta' : 'Conectar Meta'}
+            </Button>
+          )}
+        </div>
+      </CardContent>
+    </Card>
+  );
+}

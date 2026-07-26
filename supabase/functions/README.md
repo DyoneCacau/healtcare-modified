@@ -16,6 +16,8 @@ Asaas opcional por clínica. Mercado Pago permanece removido.
 | `meta-webhook` | Webhook Meta WhatsApp (receber mensagens + fluxo bot) | `META_WEBHOOK_VERIFY_TOKEN`, `SUPABASE_SERVICE_ROLE_KEY` |
 | `meta-send-message` | Enviar mensagem outbound via Cloud API | `SUPABASE_SERVICE_ROLE_KEY`, `SUPABASE_ANON_KEY` |
 | `meta-save-channel` | Salva credenciais Meta sem expô-las ao PostgREST | `SUPABASE_SERVICE_ROLE_KEY`, `APP_URL` |
+| `meta-oauth` | OAuth Facebook/Instagram (start + callback) — Central de Integrações | `META_APP_ID`, `META_APP_SECRET`, `APP_URL`, `SUPABASE_SERVICE_ROLE_KEY` |
+| `meta-connection` | Ativos Meta, status, reconectar/desconectar (sem Lead Ads) | `META_APP_ID`, `META_APP_SECRET`, `APP_URL`, `SUPABASE_SERVICE_ROLE_KEY` |
 | `asaas-webhook` | Persistência e processamento idempotente de eventos | `ASAAS_WEBHOOK_TOKEN`, `SUPABASE_SERVICE_ROLE_KEY` |
 | `asaas-create-checkout` | Cria cliente/assinatura e taxa de adesão opcional | `ASAAS_API_KEY`, `ASAAS_API_BASE_URL`, `ASAAS_ENV` |
 | `asaas-list-payments` | Lista faturas da assinatura com isolamento por clínica | Secrets Asaas |
@@ -55,15 +57,19 @@ supabase functions deploy asaas-set-card-recurring
 supabase functions deploy asaas-choose-payment-method
 supabase functions deploy asaas-reconcile --no-verify-jwt
 
-# Integrações (execute antes: PRODUCAO_25, PRODUCAO_26 e PRODUCAO_27)
+# Integrações (execute antes: PRODUCAO_25 … PRODUCAO_29)
 supabase functions deploy integrations-webhook --no-verify-jwt
 supabase functions deploy integrations-api --no-verify-jwt
 supabase functions deploy integrations-dispatch
+# Central Meta (OAuth callback é público; start/gestão usam JWT do usuário)
+supabase functions deploy meta-oauth --no-verify-jwt
+supabase functions deploy meta-connection
 ```
 
-`integrations-webhook` e `integrations-api` sobem com `--no-verify-jwt`: o
-chamador é um sistema externo. Em ambos os casos o `clinic_id` vem do banco,
-nunca da requisição.
+`integrations-webhook`, `integrations-api` e o callback de `meta-oauth` sobem
+com JWT desligado no gateway: o chamador é externo ou o redirect da Meta.
+Em todos os casos o `clinic_id` vem do banco (token/state), nunca do body sem
+validação.
 
 ### Autenticação da entrada de webhook
 
@@ -72,7 +78,7 @@ recebe evento.
 
 | Provedor | Esquema | Como autentica |
 |----------|---------|----------------|
-| Facebook Lead Ads, Instagram Lead Ads, WhatsApp Business | `meta_hmac` | HMAC-SHA256 do corpo em `X-Hub-Signature-256`, com o secret `META_APP_SECRET` |
+| Meta, Facebook Lead Ads, Instagram Lead Ads, WhatsApp Business | `meta_hmac` | HMAC-SHA256 do corpo em `X-Hub-Signature-256`, com o secret `META_APP_SECRET` |
 | Landing pages, webhook, n8n, Make, Zapier, API externa | `shared_secret` | Segredo da própria integração no header `x-healthcare-secret` |
 
 Cadastro do endpoint na Meta (Callback URL + Verify token):
@@ -125,7 +131,9 @@ existente preenchendo só os campos vazios. Para forçar a criação, envie
 Secrets adicionais (Dashboard → Edge Functions → Secrets):
 
 - `META_WEBHOOK_VERIFY_TOKEN` — token usado na verificação do webhook no Meta Developers
-- `META_APP_SECRET` — obrigatório para validar `X-Hub-Signature-256`
+- `META_APP_ID` — App ID para OAuth da Central de Integrações
+- `META_APP_SECRET` — OAuth + validação `X-Hub-Signature-256`
+- `META_OAUTH_REDIRECT_URI` — opcional; padrão `{SUPABASE_URL}/functions/v1/meta-oauth/callback`
 - `APP_URL` — origem autorizada para chamadas do navegador
 - `ASAAS_ENV`, `ASAAS_API_BASE_URL`, `ASAAS_API_KEY`, `ASAAS_WEBHOOK_TOKEN`
 

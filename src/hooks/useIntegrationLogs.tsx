@@ -1,5 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
+import { WEBHOOK_LOG_SELECT } from '@/lib/webhookLogColumns';
 import { useClinic } from './useClinic';
 import type {
   AutomationLog,
@@ -10,6 +11,10 @@ import type {
 const DEFAULT_LIMIT = 100;
 const EMPTY_AUTOMATION_LOGS: AutomationLog[] = [];
 const EMPTY_WEBHOOK_LOGS: WebhookLog[] = [];
+
+/** Sem payload/result: PII e corpo bruto ficam só no service_role. */
+const AUTOMATION_LOG_SELECT =
+  'id, clinic_id, flow_id, integration_id, status, trigger_type, steps_total, steps_completed, error_message, correlation_id, started_at, finished_at, duration_ms, created_at, flow:automation_flows(name)';
 
 function asRecord(value: unknown): Record<string, unknown> | null {
   return value && typeof value === 'object' && !Array.isArray(value)
@@ -28,8 +33,8 @@ function normalizeAutomationLog(row: Record<string, unknown>): AutomationLog {
     trigger_type: (row.trigger_type as string) ?? null,
     steps_total: Number(row.steps_total || 0),
     steps_completed: Number(row.steps_completed || 0),
-    payload: asRecord(row.payload),
-    result: asRecord(row.result),
+    payload: null,
+    result: null,
     error_message: (row.error_message as string) ?? null,
     correlation_id: (row.correlation_id as string) ?? null,
     started_at: String(row.started_at),
@@ -53,9 +58,9 @@ function normalizeWebhookLog(row: Record<string, unknown>): WebhookLog {
     status: (row.status as WebhookLog['status']) || 'received',
     status_code: row.status_code == null ? null : Number(row.status_code),
     signature_valid: row.signature_valid == null ? null : Boolean(row.signature_valid),
-    headers: asRecord(row.headers),
-    payload: asRecord(row.payload),
-    response: asRecord(row.response),
+    headers: null,
+    payload: null,
+    response: null,
     external_event_id: (row.external_event_id as string) ?? null,
     error_message: (row.error_message as string) ?? null,
     processed_at: (row.processed_at as string) ?? null,
@@ -74,7 +79,7 @@ export function useAutomationLogs(filters: IntegrationLogFilters = {}) {
 
       let request = (supabase as any)
         .from('automation_logs')
-        .select('*, flow:automation_flows(name)')
+        .select(AUTOMATION_LOG_SELECT)
         .eq('clinic_id', clinicId)
         .order('created_at', { ascending: false })
         .limit(limit);
@@ -109,7 +114,7 @@ export function useWebhookLogs(filters: IntegrationLogFilters = {}) {
 
       let request = (supabase as any)
         .from('webhook_logs')
-        .select('*')
+        .select(WEBHOOK_LOG_SELECT)
         .eq('clinic_id', clinicId)
         .order('created_at', { ascending: false })
         .limit(limit);
