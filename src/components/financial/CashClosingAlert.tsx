@@ -58,7 +58,7 @@ export function CashClosingAlert() {
           to="/financeiro"
           className="font-medium text-amber-700 dark:text-amber-300 hover:underline underline-offset-2"
         >
-          Fechar no Financeiro
+          Fechar no Caixa
         </Link>
       </div>
     </div>

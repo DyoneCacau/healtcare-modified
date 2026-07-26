@@ -1,8 +1,10 @@
-import { format } from 'date-fns';
+import { format, isSameDay } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { cn } from '@/lib/utils';
 import { AppointmentCard } from './AppointmentCard';
 import { AgendaAppointment } from '@/types/agenda';
+import { CurrentTimeIndicator } from './CurrentTimeIndicator';
+import { useCurrentTime } from '@/hooks/useCurrentTime';
 
 interface DayViewProps {
   date: Date;
@@ -12,6 +14,7 @@ interface DayViewProps {
   onConfirm: (appointment: AgendaAppointment) => void;
   onComplete: (appointment: AgendaAppointment) => void;
   onMarkNoShow?: (appointment: AgendaAppointment) => void;
+  onEditMaterials?: (appointment: AgendaAppointment) => void;
   onWhatsApp: (appointment: AgendaAppointment) => void;
   /** Clique em um horário (slot) para abrir formulário de novo agendamento com essa data e horário */
   onSlotClick?: (startTime: string) => void;
@@ -25,6 +28,11 @@ const timeSlots = [
   '19:00', '19:30', '20:00',
 ];
 
+function slotToMinutes(slot: string): number {
+  const [h, m] = slot.split(':').map(Number);
+  return h * 60 + m;
+}
+
 export function DayView({
   date,
   appointments,
@@ -33,9 +41,12 @@ export function DayView({
   onConfirm,
   onComplete,
   onMarkNoShow,
+  onEditMaterials,
   onWhatsApp,
   onSlotClick,
 }: DayViewProps) {
+  const now = useCurrentTime();
+
   const sortedSlots = (() => {
     const slotSet = new Set(timeSlots);
     appointments.forEach((apt) => {
@@ -49,6 +60,23 @@ export function DayView({
   const getAppointmentsForSlot = (slot: string) => {
     return appointments.filter((apt) => apt.startTime === slot);
   };
+
+  // Linha "agora": só no dia de hoje, e só dentro do intervalo de horários exibido.
+  const currentTimeInfo = (() => {
+    if (!isSameDay(date, now)) return null;
+    const nowMinutes = now.getHours() * 60 + now.getMinutes();
+    if (sortedSlots.length === 0 || nowMinutes < slotToMinutes(sortedSlots[0])) return null;
+
+    for (let i = 0; i < sortedSlots.length; i++) {
+      const slotStart = slotToMinutes(sortedSlots[i]);
+      const nextSlot = sortedSlots[i + 1];
+      const slotEnd = nextSlot ? slotToMinutes(nextSlot) : slotStart + 30;
+      if (nowMinutes >= slotStart && nowMinutes < slotEnd) {
+        return { slot: sortedSlots[i], fraction: (nowMinutes - slotStart) / (slotEnd - slotStart) };
+      }
+    }
+    return null;
+  })();
 
   return (
     <div className="rounded-xl border border-border bg-card">
@@ -71,11 +99,14 @@ export function DayView({
               key={slot}
               onClick={() => onSlotClick?.(slot)}
               className={cn(
-                'flex min-h-[60px]',
+                'relative flex min-h-[60px]',
                 hasAppointments ? 'bg-card' : 'bg-muted/20',
                 onSlotClick && 'cursor-pointer hover:bg-muted/40 transition-colors'
               )}
             >
+              {currentTimeInfo?.slot === slot && (
+                <CurrentTimeIndicator fraction={currentTimeInfo.fraction} offsetClassName="ml-20" />
+              )}
               <div className="w-20 flex-shrink-0 border-r border-border px-3 py-2">
                 <span className="text-sm font-medium text-muted-foreground">
                   {slot}
@@ -93,6 +124,7 @@ export function DayView({
                         onConfirm={onConfirm}
                         onComplete={onComplete}
                         onMarkNoShow={onMarkNoShow}
+                        onEditMaterials={onEditMaterials}
                         onWhatsApp={onWhatsApp}
                       />
                     ))}

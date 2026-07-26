@@ -1,6 +1,6 @@
 import { useState, useMemo, useEffect } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { format } from 'date-fns';
+import { format, parseISO } from 'date-fns';
 import { Plus } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { MainLayout } from '@/components/layout/MainLayout';
@@ -12,18 +12,24 @@ import { MonthView } from '@/components/agenda/MonthView';
 import { AppointmentFormDialog } from '@/components/agenda/AppointmentFormDialog';
 import { CompleteAppointmentDialog } from '@/components/agenda/CompleteAppointmentDialog';
 import { NoShowFeeDialog } from '@/components/agenda/NoShowFeeDialog';
-import { AgendaAppointment, AgendaView, Professional } from '@/types/agenda';
+import { EditAppointmentMaterialsDialog } from '@/components/agenda/EditAppointmentMaterialsDialog';
+import { AgendaAppointment, AgendaView, Professional, LeadSource } from '@/types/agenda';
 import { PaymentMethod } from '@/types/financial';
 import { useAppointments, useAppointmentMutations } from '@/hooks/useAppointments';
 import { useProfessionals } from '@/hooks/useProfessionals';
 import { useClinic, useClinics, useClinicsOfSameOwner } from '@/hooks/useClinic';
 import { useCommissionRules, useCommissionMutations } from '@/hooks/useCommissions';
-import type { CommissionBreakdownItem } from '@/components/agenda/CompleteAppointmentDialog';
+import type { CommissionBreakdownItem, BillingDestination } from '@/components/agenda/CompleteAppointmentDialog';
 import { useTransactionMutations } from '@/hooks/useFinancial';
+import { useReceivableMutations } from '@/hooks/useReceivables';
+import { useCrmLeadMutations } from '@/hooks/useCrmLeads';
 import { usePermissions } from '@/hooks/usePermissions';
 import { toast } from 'sonner';
 import { Skeleton } from '@/components/ui/skeleton';
 import { prepareAgendaWhatsAppMessage } from '@/utils/whatsapp';
+import { remainingAfterBookingFee } from '@/lib/bookingFee';
+import { useProcedureMaterialMutations } from '@/hooks/useProcedureMaterials';
+import type { AppointmentMaterialUsageInput } from '@/types/procedureMaterial';
 
 export default function Agenda() {
   const [searchParams, setSearchParams] = useSearchParams();
@@ -36,12 +42,20 @@ export default function Agenda() {
   const [editingAppointment, setEditingAppointment] = useState<AgendaAppointment | null>(null);
   const [prefillPatientId, setPrefillPatientId] = useState<string | null>(null);
   const [prefillProcedure, setPrefillProcedure] = useState<string>('');
+  const [prefillLeadSource, setPrefillLeadSource] = useState<LeadSource | ''>('');
+  const [prefillReferralName, setPrefillReferralName] = useState('');
+  const [prefillSellerId, setPrefillSellerId] = useState('');
+  const [prefillNotes, setPrefillNotes] = useState('');
+  const [crmLeadId, setCrmLeadId] = useState<string | null>(null);
+  const [crmTargetStage, setCrmTargetStage] = useState<'scheduled' | 'won'>('scheduled');
   const [prefillSlotDate, setPrefillSlotDate] = useState<Date | null>(null);
   const [prefillSlotStartTime, setPrefillSlotStartTime] = useState<string | null>(null);
   const [completeDialogOpen, setCompleteDialogOpen] = useState(false);
   const [completingAppointment, setCompletingAppointment] = useState<AgendaAppointment | null>(null);
   const [noShowFeeDialogOpen, setNoShowFeeDialogOpen] = useState(false);
   const [noShowAppointment, setNoShowAppointment] = useState<AgendaAppointment | null>(null);
+  const [editMaterialsOpen, setEditMaterialsOpen] = useState(false);
+  const [editingMaterialsAppointment, setEditingMaterialsAppointment] = useState<AgendaAppointment | null>(null);
 
   const { clinic } = useClinic();
   const { clinics: userClinics } = useClinics();
@@ -67,8 +81,16 @@ export default function Agenda() {
   );
   const { activeProfessionals, isLoading: isLoadingProfessionals } = useProfessionals();
   const { createAppointment, updateAppointment } = useAppointmentMutations();
-  const { createTransaction, syncBookingFeePaymentMethod } = useTransactionMutations();
+  const {
+    createTransaction,
+    syncBookingFeePaymentMethod,
+    ensureBookingFeeIncome,
+    findBookingFeeTransaction,
+  } = useTransactionMutations();
+  const { createReceivable } = useReceivableMutations();
   const { createCommission } = useCommissionMutations();
+  const { recordAppointmentMaterials } = useProcedureMaterialMutations();
+  const { updateLead } = useCrmLeadMutations();
   const { rules: commissionRules } = useCommissionRules();
 
   // Mapa de clínicas por ID para preencher os dados da agenda
@@ -100,6 +122,8 @@ export default function Agenda() {
         cro: apt.professional?.cro || '',
       } as Professional,
       procedure: apt.procedure,
+      procedureId: apt.procedure_id ?? undefined,
+      procedurePrice: apt.procedure_price == null ? undefined : Number(apt.procedure_price),
       status: apt.status as AgendaAppointment['status'],
       paymentStatus: apt.payment_status as AgendaAppointment['paymentStatus'],
       notes: apt.notes,
@@ -169,14 +193,28 @@ export default function Agenda() {
     return filteredAppointments.filter((apt) => apt.date === dateStr);
   }, [filteredAppointments, selectedDate]);
 
-  // Abrir formulário com paciente/procedimento pré-preenchidos (vindo do Alerta de Retorno)
+  // Abrir formulário com paciente/procedimento pré-preenchidos (Alerta de Retorno ou CRM)
   useEffect(() => {
     const patientId = searchParams.get('patientId');
     const procedure = searchParams.get('procedure');
     const fromAlert = searchParams.get('fromAlert');
-    if (fromAlert && patientId) {
+    const fromCrm = searchParams.get('fromCrm');
+    const leadSource = searchParams.get('leadSource') as LeadSource | null;
+    const referralName = searchParams.get('referralName');
+    const sellerId = searchParams.get('sellerId');
+    const notes = searchParams.get('notes');
+    const leadId = searchParams.get('crmLeadId');
+    const targetStage = searchParams.get('crmTargetStage');
+
+    if ((fromAlert || fromCrm) && patientId) {
       setPrefillPatientId(patientId);
-      setPrefillProcedure(procedure || 'Retorno');
+      setPrefillProcedure(procedure || (fromCrm ? '' : 'Retorno'));
+      setPrefillLeadSource(leadSource || '');
+      setPrefillReferralName(referralName || '');
+      setPrefillSellerId(sellerId || '');
+      setPrefillNotes(notes || '');
+      setCrmLeadId(fromCrm ? leadId : null);
+      setCrmTargetStage(targetStage === 'won' ? 'won' : 'scheduled');
       setFormDialogOpen(true);
       setEditingAppointment(null);
       setSearchParams({}, { replace: true });
@@ -200,7 +238,26 @@ export default function Agenda() {
       id: appointment.id,
       status: 'cancelled',
     });
-    toast.success('Agendamento cancelado');
+    const fee = appointment.bookingFee ?? 0;
+    if (fee > 0) {
+      // Sinal já lançado no agendamento permanece no caixa (não reembolsado).
+      try {
+        await ensureBookingFeeIncome.mutateAsync({
+          appointmentId: appointment.id,
+          amount: fee,
+          paymentMethod: appointment.bookingFeePaymentMethod || 'pix',
+          patientName: appointment.patientName,
+          patientId: appointment.patientId,
+          descriptionSuffix: 'cancelou — retido',
+          silent: true,
+        });
+      } catch (err) {
+        console.error('Erro ao atualizar origem do sinal no cancelamento:', err);
+      }
+      toast.success(`Agendamento cancelado. Sinal de R$ ${fee.toFixed(2)} permanece no caixa.`);
+    } else {
+      toast.success('Agendamento cancelado');
+    }
   };
 
   const handleMarkNoShow = async (appointment: AgendaAppointment, paymentMethod?: PaymentMethod) => {
@@ -210,34 +267,45 @@ export default function Agenda() {
     });
     const fee = appointment.bookingFee ?? 0;
     if (fee > 0) {
-      await createTransaction.mutateAsync({
-        type: 'income',
+      const method = paymentMethod ?? appointment.bookingFeePaymentMethod ?? 'pix';
+      // Idempotente: se o sinal já entrou no caixa ao agendar, só atualiza a origem.
+      await ensureBookingFeeIncome.mutateAsync({
+        appointmentId: appointment.id,
         amount: fee,
-        description: `Taxa de agendamento - ${appointment.patientName} (faltou)`,
-        category: 'Taxa de agendamento',
-        payment_method: paymentMethod ?? 'cash',
-        reference_type: 'appointment',
-        reference_id: appointment.id,
+        paymentMethod: method,
+        patientName: appointment.patientName,
+        patientId: appointment.patientId,
+        descriptionSuffix: 'faltou — retido',
+        silent: true,
       });
-      const methodLabel = { cash: 'Dinheiro', pix: 'PIX', credit: 'Cartão Crédito', debit: 'Cartão Débito' }[paymentMethod ?? 'cash'];
-      toast.success(`Marcado como faltou. Taxa de R$ ${fee.toFixed(2)} registrada no caixa (${methodLabel}).`);
+      toast.success(`Marcado como faltou. Sinal de R$ ${fee.toFixed(2)} permanece no caixa (não reembolsado).`);
     } else {
       toast.success('Marcado como faltou');
     }
   };
 
-  const handleMarkNoShowClick = (appointment: AgendaAppointment) => {
+  const handleMarkNoShowClick = async (appointment: AgendaAppointment) => {
     const fee = appointment.bookingFee ?? 0;
-    const paymentMethod = appointment.bookingFeePaymentMethod;
-    // Se já tem forma de pagamento definida no agendamento, usa direto; senão abre o diálogo
-    if (fee > 0 && (paymentMethod === 'cash' || paymentMethod === 'pix' || paymentMethod === 'credit' || paymentMethod === 'debit')) {
-      handleMarkNoShow(appointment, paymentMethod);
-    } else if (fee > 0) {
-      setNoShowAppointment(appointment);
-      setNoShowFeeDialogOpen(true);
-    } else {
+    if (!(fee > 0)) {
       handleMarkNoShow(appointment);
+      return;
     }
+
+    const paymentMethod = appointment.bookingFeePaymentMethod;
+    try {
+      const existing = await findBookingFeeTransaction(appointment.id);
+      // Sinal já no caixa ou forma já definida: não precisa perguntar de novo.
+      if (existing || paymentMethod === 'cash' || paymentMethod === 'pix' || paymentMethod === 'credit' || paymentMethod === 'debit') {
+        await handleMarkNoShow(appointment, paymentMethod || undefined);
+        return;
+      }
+    } catch (err) {
+      console.error('Erro ao consultar sinal do agendamento:', err);
+    }
+
+    // Legado: taxa marcada sem forma/lançamento — pede a forma antes de registrar.
+    setNoShowAppointment(appointment);
+    setNoShowFeeDialogOpen(true);
   };
 
   const handleConfirm = async (appointment: AgendaAppointment) => {
@@ -253,33 +321,111 @@ export default function Agenda() {
     setCompleteDialogOpen(true);
   };
 
+  const handleEditMaterials = (appointment: AgendaAppointment) => {
+    setEditingMaterialsAppointment(appointment);
+    setEditMaterialsOpen(true);
+  };
+
+  // Abrir direto um agendamento especifico (ex: clique em "Próximas Consultas"
+  // no Dashboard) já na tela de edição, ou já no fluxo de finalizar.
+  useEffect(() => {
+    const focusId = searchParams.get('focusAppointmentId');
+    if (!focusId) return;
+    if (isLoadingAppointments) return;
+
+    const target = appointments.find((apt) => apt.id === focusId);
+    if (!target) {
+      toast.error('Agendamento não encontrado');
+      setSearchParams({}, { replace: true });
+      return;
+    }
+
+    setSelectedDate(parseISO(target.date));
+    setView('day');
+    if (searchParams.get('focusAction') === 'complete' && (target.status === 'pending' || target.status === 'confirmed')) {
+      handleComplete(target);
+    } else {
+      handleEdit(target);
+    }
+    setSearchParams({}, { replace: true });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchParams, appointments, isLoadingAppointments]);
+
   const handleCompleteConfirm = async (
     appointment: AgendaAppointment,
     serviceValue: number,
     paymentMethod: PaymentMethod,
     quantity: number,
     commissionBreakdown: CommissionBreakdownItem[],
-    scheduleReturn?: boolean
+    scheduleReturn?: boolean,
+    adjustmentReason?: string,
+    billingDestination: BillingDestination = 'cash',
+    dueDate?: string,
+    materialsUsage: AppointmentMaterialUsageInput[] = [],
   ) => {
-    // Update appointment status
+    const isReceivable = billingDestination === 'receivable';
+    const bookingFee = appointment.bookingFee ?? 0;
+    const remaining = remainingAfterBookingFee(serviceValue, bookingFee);
+    // Com saldo zero após o sinal, não há nada a receber depois.
+    const paymentStatus = isReceivable && remaining > 0 ? 'pending' : 'paid';
+
     await updateAppointment.mutateAsync({
       id: appointment.id,
       status: 'completed',
-      payment_status: 'paid',
+      payment_status: paymentStatus,
+      procedure: appointment.procedure,
+      procedure_id: appointment.procedureId ?? null,
+      procedure_price: appointment.procedurePrice ?? null,
     });
 
-    // Create financial transaction
-    await createTransaction.mutateAsync({
-      type: 'income',
-      amount: serviceValue,
-      description: `${appointment.procedure} - ${appointment.patientName}`,
-      category: 'Procedimento',
-      payment_method: paymentMethod,
-      reference_type: 'appointment',
-      reference_id: appointment.id,
-    });
+    const feeNote = bookingFee > 0
+      ? `Sinal R$ ${bookingFee.toFixed(2)} abatido`
+      : null;
+    const description = [
+      `${appointment.procedure} - ${appointment.patientName}`,
+      feeNote,
+      adjustmentReason ? `Ajuste: ${adjustmentReason}` : null,
+    ].filter(Boolean).join(' | ');
 
-    // Registrar comissões no banco
+    if (remaining > 0) {
+      if (isReceivable) {
+        await createReceivable.mutateAsync({
+          patient_id: appointment.patientId || null,
+          appointment_id: appointment.id,
+          description,
+          amount: remaining,
+          due_date: dueDate || format(new Date(), 'yyyy-MM-dd'),
+        });
+      } else {
+        await createTransaction.mutateAsync({
+          type: 'income',
+          amount: remaining,
+          description,
+          category: 'Procedimento',
+          payment_method: paymentMethod,
+          reference_type: 'appointment',
+          reference_id: appointment.id,
+          patient_id: appointment.patientId || null,
+        });
+      }
+    } else if (bookingFee > 0) {
+      // Procedimento quitado só com o sinal já lançado no agendamento.
+      try {
+        await ensureBookingFeeIncome.mutateAsync({
+          appointmentId: appointment.id,
+          amount: bookingFee,
+          paymentMethod: appointment.bookingFeePaymentMethod || paymentMethod,
+          patientName: appointment.patientName,
+          patientId: appointment.patientId,
+          descriptionSuffix: 'abatido no procedimento',
+          silent: true,
+        });
+      } catch (err) {
+        console.error('Erro ao atualizar origem do sinal na finalização:', err);
+      }
+    }
+
+    // Registrar comissões no banco (sobre o valor bruto do procedimento)
     try {
       for (const { rule, amount } of commissionBreakdown) {
         const beneficiaryId =
@@ -316,7 +462,29 @@ export default function Agenda() {
       return;
     }
 
-    toast.success(`Atendimento finalizado! Valor: R$ ${serviceValue.toFixed(2)}`);
+    if (materialsUsage.length > 0) {
+      try {
+        await recordAppointmentMaterials.mutateAsync({
+          appointmentId: appointment.id,
+          patientName: appointment.patientName,
+          procedureName: appointment.procedure,
+          items: materialsUsage,
+        });
+        toast.success(`${materialsUsage.length} material(is) baixado(s) do estoque e registrados no histórico.`);
+      } catch (err) {
+        console.error('Erro ao baixar materiais:', err);
+      }
+    }
+
+    if (remaining <= 0 && bookingFee > 0) {
+      toast.success(`Atendimento finalizado. Procedimento quitado com o sinal de R$ ${bookingFee.toFixed(2)} já no caixa.`);
+    } else if (isReceivable) {
+      const feeMsg = bookingFee > 0 ? ` (sinal R$ ${bookingFee.toFixed(2)} abatido)` : '';
+      toast.success(`Atendimento finalizado. R$ ${remaining.toFixed(2)} em Contas a receber${feeMsg}.`);
+    } else {
+      const feeMsg = bookingFee > 0 ? ` (sinal R$ ${bookingFee.toFixed(2)} abatido)` : '';
+      toast.success(`Atendimento finalizado! R$ ${remaining.toFixed(2)} no Caixa${feeMsg}.`);
+    }
 
     if (scheduleReturn) {
       setCompleteDialogOpen(false);
@@ -350,6 +518,8 @@ export default function Agenda() {
         start_time: data.startTime,
         end_time: data.endTime,
         procedure: data.procedure,
+        procedure_id: data.procedureId ?? null,
+        procedure_price: data.procedurePrice ?? null,
         status: data.status,
         payment_status: data.paymentStatus,
         notes: data.notes,
@@ -359,20 +529,30 @@ export default function Agenda() {
         booking_fee: data.bookingFee ?? null,
         booking_fee_payment_method: data.bookingFeePaymentMethod ?? null,
       });
-      // Sincronizar forma de pagamento da taxa no financeiro (se já existe transação de no-show)
+      // Garante sinal no caixa se a taxa foi marcada/alterada na edição
       if ((data.bookingFee ?? 0) > 0 && data.bookingFeePaymentMethod) {
         try {
-          await syncBookingFeePaymentMethod.mutateAsync({
+          await ensureBookingFeeIncome.mutateAsync({
             appointmentId: data.id,
+            amount: data.bookingFee!,
             paymentMethod: data.bookingFeePaymentMethod,
+            patientName: data.patientName || 'Paciente',
+            patientId: data.patientId,
           });
         } catch {
-          // Silencioso: transação pode não existir ainda (paciente não faltou)
+          try {
+            await syncBookingFeePaymentMethod.mutateAsync({
+              appointmentId: data.id,
+              paymentMethod: data.bookingFeePaymentMethod,
+            });
+          } catch {
+            // Melhor esforço: não bloqueia a edição do agendamento
+          }
         }
       }
     } else {
       // Create new
-      await createAppointment.mutateAsync({
+      const created = await createAppointment.mutateAsync({
         clinic_id: data.clinic?.id,
         patient_id: data.patientId!,
         professional_id: data.professional!.id,
@@ -380,6 +560,8 @@ export default function Agenda() {
         start_time: data.startTime!,
         end_time: data.endTime!,
         procedure: data.procedure!,
+        procedure_id: data.procedureId ?? null,
+        procedure_price: data.procedurePrice ?? null,
         status: data.status || 'pending',
         payment_status: data.paymentStatus || 'pending',
         notes: data.notes,
@@ -389,6 +571,38 @@ export default function Agenda() {
         booking_fee: data.bookingFee ?? null,
         booking_fee_payment_method: data.bookingFeePaymentMethod ?? null,
       });
+
+      // Sinal entra no caixa/financeiro na criação, com origem no agendamento
+      if (created?.id && (data.bookingFee ?? 0) > 0) {
+        try {
+          await ensureBookingFeeIncome.mutateAsync({
+            appointmentId: created.id,
+            amount: data.bookingFee!,
+            paymentMethod: data.bookingFeePaymentMethod || 'pix',
+            patientName: data.patientName || 'Paciente',
+            patientId: data.patientId,
+          });
+        } catch (err) {
+          console.error('Erro ao lançar sinal de agendamento:', err);
+          toast.error('Agendamento criado, mas o sinal não entrou no caixa. Lance manualmente no Financeiro.');
+        }
+      }
+
+      // Vínculo de volta ao CRM (origem + paciente + agendamento)
+      if (crmLeadId && created?.id) {
+        try {
+          await updateLead.mutateAsync({
+            id: crmLeadId,
+            patient_id: data.patientId || null,
+            appointment_id: created.id,
+            stage: crmTargetStage,
+          });
+        } catch (err) {
+          console.error('Erro ao vincular lead do CRM:', err);
+        }
+      }
+      setCrmLeadId(null);
+      setCrmTargetStage('scheduled');
     }
   };
 
@@ -478,6 +692,7 @@ export default function Agenda() {
             onConfirm={handleConfirm}
             onComplete={handleComplete}
             onMarkNoShow={handleMarkNoShowClick}
+            onEditMaterials={handleEditMaterials}
             onWhatsApp={handleWhatsApp}
             onSlotClick={handleSlotClickDay}
           />
@@ -492,6 +707,7 @@ export default function Agenda() {
             onConfirm={handleConfirm}
             onComplete={handleComplete}
             onMarkNoShow={handleMarkNoShowClick}
+            onEditMaterials={handleEditMaterials}
             onWhatsApp={handleWhatsApp}
             onSlotClick={handleSlotClickWeek}
           />
@@ -515,6 +731,12 @@ export default function Agenda() {
             setEditingAppointment(null);
             setPrefillPatientId(null);
             setPrefillProcedure('');
+            setPrefillLeadSource('');
+            setPrefillReferralName('');
+            setPrefillSellerId('');
+            setPrefillNotes('');
+            setCrmLeadId(null);
+            setCrmTargetStage('scheduled');
             setPrefillSlotDate(null);
             setPrefillSlotStartTime(null);
           }
@@ -526,8 +748,13 @@ export default function Agenda() {
         onSave={handleSave}
         prefillPatientId={prefillPatientId}
         prefillProcedure={prefillProcedure}
+        prefillLeadSource={prefillLeadSource}
+        prefillReferralName={prefillReferralName}
+        prefillSellerId={prefillSellerId}
+        prefillNotes={prefillNotes}
         initialDate={prefillSlotDate ?? selectedDate}
         initialStartTime={prefillSlotStartTime ?? undefined}
+        defaultClinicId={clinic?.id}
       />
 
       {/* Complete Appointment Dialog */}
@@ -549,6 +776,15 @@ export default function Agenda() {
         }}
         appointment={noShowAppointment}
         onConfirm={handleMarkNoShow}
+      />
+
+      <EditAppointmentMaterialsDialog
+        open={editMaterialsOpen}
+        onOpenChange={(open) => {
+          setEditMaterialsOpen(open);
+          if (!open) setEditingMaterialsAppointment(null);
+        }}
+        appointment={editingMaterialsAppointment}
       />
     </MainLayout>
   );

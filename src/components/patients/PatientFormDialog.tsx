@@ -22,6 +22,8 @@ import { Badge } from '@/components/ui/badge';
 import { Patient } from '@/types/patient';
 import { toast } from 'sonner';
 import { useClinic } from '@/hooks/useClinic';
+import { leadSourceLabels, type LeadSource } from '@/types/agenda';
+import { LeadSourceLabel } from '@/components/crm/LeadSourceBadge';
 
 interface PatientFormDialogProps {
   open: boolean;
@@ -91,6 +93,8 @@ export const PatientFormDialog = ({
     birthDate: '',
     clinicalNotes: '',
     status: 'active' as 'active' | 'inactive',
+    leadSource: '' as '' | LeadSource,
+    referralName: '',
   });
   const [allergies, setAllergies] = useState<string[]>([]);
   const [newAllergy, setNewAllergy] = useState('');
@@ -107,6 +111,8 @@ export const PatientFormDialog = ({
         birthDate: patient.birthDate,
         clinicalNotes: patient.clinicalNotes,
         status: patient.status,
+        leadSource: (patient.leadSource as LeadSource) || '',
+        referralName: patient.referralName || '',
       });
       setAllergies(patient.allergies);
     } else {
@@ -119,6 +125,8 @@ export const PatientFormDialog = ({
         birthDate: '',
         clinicalNotes: '',
         status: 'active',
+        leadSource: '',
+        referralName: '',
       });
       setAllergies([]);
     }
@@ -260,6 +268,43 @@ export const PatientFormDialog = ({
                 </SelectContent>
               </Select>
             </div>
+
+            <div>
+              <Label htmlFor="leadSource">Origem</Label>
+              <Select
+                value={formData.leadSource || 'none'}
+                onValueChange={(value) =>
+                  setFormData({
+                    ...formData,
+                    leadSource: value === 'none' ? '' : (value as LeadSource),
+                  })
+                }
+              >
+                <SelectTrigger id="leadSource">
+                  <SelectValue placeholder="Como conheceu a clínica" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">Não informado</SelectItem>
+                  {(Object.keys(leadSourceLabels) as LeadSource[]).map((key) => (
+                    <SelectItem key={key} value={key}>
+                      <LeadSourceLabel source={key} />
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            {formData.leadSource === 'referral' && (
+              <div>
+                <Label htmlFor="referralName">Quem indicou</Label>
+                <Input
+                  id="referralName"
+                  value={formData.referralName}
+                  onChange={(e) => setFormData({ ...formData, referralName: e.target.value })}
+                  placeholder="Nome de quem indicou"
+                />
+              </div>
+            )}
           </div>
 
           <div>

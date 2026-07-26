@@ -174,12 +174,14 @@ export function useClinicBranding() {
     refetchInterval: (SIGNED_URL_TTL_SECONDS - 60) * 1000,
   });
 
-  const rawColor = (clinic as { primary_color?: string | null })?.primary_color;
+  // Edicao de cor da identidade visual foi desativada (documentos sempre
+  // sem cor de fundo, so preto/branco), mesmo que a clinica tenha uma cor
+  // salva de antes dessa mudanca.
   const branding: ClinicBranding = {
     clinicId: clinicId || '',
     logo: signedLogoUrl || undefined,
-    primaryColor: rawColor || '#000000',
-    hasCustomColor: !!rawColor,
+    primaryColor: '#000000',
+    hasCustomColor: false,
   };
 
   const updateBranding = useMutation({

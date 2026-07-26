@@ -15,13 +15,37 @@ export interface PatientData {
   birth_date: string | null;
   clinical_notes: string | null;
   allergies: string[];
+  lead_source: string | null;
+  referral_name: string | null;
   status: string;
   created_at: string;
   updated_at: string;
 }
 
-export function usePatients() {
-  const { clinicId } = useClinic();
+/**
+ * Propaga o nome do paciente para os leads do CRM vinculados a ele
+ * (crm_leads.patient_id). Silencioso: não deve quebrar a atualização do
+ * paciente caso o módulo de CRM não esteja habilitado/instalado na clínica.
+ */
+async function syncNameToLinkedLeads(patientId: string, name: string) {
+  const { error } = await supabase
+    .from('crm_leads' as any)
+    .update({ name, updated_at: new Date().toISOString() })
+    .eq('patient_id', patientId);
+  if (error && (error as { code?: string }).code !== '42P01') {
+    console.error('Failed to sync patient name to linked CRM leads', error);
+  }
+}
+
+/**
+ * @param overrideClinicId Usa essa clinica no lugar da clinica ativa na sidebar.
+ * Necessario em telas que editam registros de OUTRA clinica (ex.: editar um
+ * agendamento de uma unidade diferente na Agenda com "Todas as clinicas"),
+ * senao a lista de pacientes vem da clinica errada e o Select aparece vazio.
+ */
+export function usePatients(overrideClinicId?: string | null) {
+  const { clinicId: activeClinicId } = useClinic();
+  const clinicId = overrideClinicId || activeClinicId;
 
   const { data: patients, isLoading, error, refetch } = useQuery({
     queryKey: ['patients', clinicId],
@@ -115,6 +139,11 @@ export function usePatientMutations() {
         .single();
 
       if (error) throw error;
+
+      // Sincroniza o nome de volta para o lead do CRM vinculado (se houver)
+      if (data.name != null && data.name !== beforeData?.name) {
+        await syncNameToLinkedLeads(id, data.name);
+      }
 
       if (clinicId && user?.id) {
         const { error: eventError } = await supabase.from('audit_events').insert({

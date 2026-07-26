@@ -1,9 +1,10 @@
 // Adicionar Unidade a Cliente Existente - SuperAdmin
 // Cada unidade gera assinatura própria e pode iniciar cobrança Asaas.
 import { useState } from "react";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { CurrencyInput } from "@/components/ui/currency-input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -67,16 +68,6 @@ const initialClinic: ClinicFormData = {
   email: "",
 };
 
-function parseMoneyInput(value: string): number {
-  const trimmed = value.trim();
-  if (!trimmed) return 0;
-  const normalized = trimmed.includes(",")
-    ? trimmed.replace(/\./g, "").replace(",", ".")
-    : trimmed;
-  const n = Number(normalized);
-  return Number.isFinite(n) && n >= 0 ? n : 0;
-}
-
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null;
 }
@@ -94,7 +85,7 @@ export function AddClinicToClient() {
   const [loading, setLoading] = useState(false);
   const [adminEmail, setAdminEmail] = useState("");
   const [adminFound, setAdminFound] = useState<FoundAdmin | null>(null);
-  const [setupFee, setSetupFee] = useState("");
+  const [setupFee, setSetupFee] = useState(0);
   const [billingDay, setBillingDay] = useState(DEFAULT_BILLING_DAY);
   const [scheduleFirstCharge, setScheduleFirstCharge] = useState(false);
   const [firstDueDate, setFirstDueDate] = useState(defaultPromoFirstDueDate());
@@ -203,7 +194,7 @@ export function AddClinicToClient() {
 
     setLoading(true);
     try {
-      const { data, error } = await supabase.functions.invoke<AddClinicUnitResult>(
+      const { data, error } = await supabase.functions.invoke<AddClinicUnitResult & { error?: string }>(
         "add-clinic-unit",
         {
           body: {
@@ -219,7 +210,7 @@ export function AddClinicToClient() {
             zipcode: formData.zipcode || null,
             phone: formData.phone || null,
             email: formData.email || null,
-            setupFee: parseMoneyInput(setupFee),
+            setupFee,
             billingDay,
             billingDeferDays: 0,
             billingFirstDueDate: scheduleFirstCharge ? firstDueDate : null,
@@ -228,7 +219,11 @@ export function AddClinicToClient() {
         },
       );
 
-      if (error) throw new Error(await getFunctionErrorMessage(error));
+      if (error) {
+        const fromBody = data && typeof data.error === "string" ? data.error : null;
+        throw new Error(fromBody || (await getFunctionErrorMessage(error)));
+      }
+      if (data && typeof data.error === "string") throw new Error(data.error);
       if (!data?.subscription_id) throw new Error("Resposta inválida ao criar a unidade");
 
       let asaasFailed = false;
@@ -236,7 +231,7 @@ export function AddClinicToClient() {
         try {
           await asaasBillingService.createCheckout(
             data.subscription_id,
-            parseMoneyInput(setupFee) > 0,
+            setupFee > 0,
             {
               billingDay,
               scheduleFirstCharge,
@@ -262,7 +257,7 @@ export function AddClinicToClient() {
       setFormData(initialClinic);
       setAdminFound(null);
       setAdminEmail("");
-      setSetupFee("");
+      setSetupFee(0);
       setBillingDay(DEFAULT_BILLING_DAY);
       setScheduleFirstCharge(false);
       setFirstDueDate(defaultPromoFirstDueDate());
@@ -295,11 +290,11 @@ export function AddClinicToClient() {
             <Building2 className="h-5 w-5" />
             Adicionar Nova Unidade a Cliente Existente
           </DialogTitle>
+          <DialogDescription>
+            Cada unidade entra no mesmo grupo do dono, com assinatura e cobrança próprias
+            (modelo por unidade). O limite de unidades vem do plano.
+          </DialogDescription>
         </DialogHeader>
-        <p className="text-sm text-muted-foreground">
-          Cada unidade entra no mesmo grupo do dono, com assinatura e cobrança próprias
-          (modelo por unidade). O limite de unidades vem do plano.
-        </p>
         <form onSubmit={handleSubmit} className="space-y-6">
           <Card>
             <CardHeader>
@@ -407,19 +402,16 @@ export function AddClinicToClient() {
                   </div>
                   <div className="space-y-2">
                     <Label>Taxa de adesão desta unidade (R$)</Label>
-                    <Input
-                      type="text"
-                      inputMode="decimal"
+                    <CurrencyInput
                       value={setupFee}
-                      onChange={(e) => setSetupFee(e.target.value.replace(/[^\d.,]/g, ""))}
-                      placeholder="0,00"
+                      onValueChange={setSetupFee}
                     />
                   </div>
                   <div className="space-y-2">
                     <Label>Mensalidade do plano (R$)</Label>
-                    <Input
-                      type="number"
+                    <CurrencyInput
                       value={adminFound.monthly_fee}
+                      onValueChange={() => {}}
                       readOnly
                       className="bg-muted"
                     />

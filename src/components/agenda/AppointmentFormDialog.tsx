@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
-import { format } from 'date-fns';
+import { format, parseISO } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
-import { CalendarIcon, HelpCircle } from 'lucide-react';
+import { CalendarIcon, HelpCircle, AlertTriangle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Calendar } from '@/components/ui/calendar';
 import {
@@ -36,9 +36,13 @@ import {
 } from '@/components/ui/tooltip';
 import { cn } from '@/lib/utils';
 import { AgendaAppointment, Professional, LeadSource, leadSourceLabels } from '@/types/agenda';
+import { LeadSourceLabel } from '@/components/crm/LeadSourceBadge';
 import { Clinic } from '@/types/clinic';
 import { usePatients } from '@/hooks/usePatients';
+import { useClinicProcedures } from '@/hooks/useClinicProcedures';
 import { PROCEDURE_OPTIONS } from '@/lib/procedures';
+import { DEFAULT_BOOKING_FEE } from '@/lib/bookingFee';
+import { ProcedureMaterialsPreview } from '@/components/agenda/ProcedureMaterialsPreview';
 import { toast } from 'sonner';
 
 type BookingFeePaymentMethod = NonNullable<AgendaAppointment['bookingFeePaymentMethod']>;
@@ -64,12 +68,24 @@ interface AppointmentFormDialogProps {
   /** Pré-preenche paciente e procedimento (ex: vindo do Alerta de Retorno) */
   prefillPatientId?: string | null;
   prefillProcedure?: string;
+  /** Prefill comercial (ex.: CRM de Vendas) */
+  prefillLeadSource?: LeadSource | '' | null;
+  prefillReferralName?: string | null;
+  prefillSellerId?: string | null;
+  prefillNotes?: string | null;
   /** Data inicial ao criar (ex: data selecionada na Agenda) */
   initialDate?: Date;
   /** Horário inicial ao criar (ex: clique no slot da Agenda) */
   initialStartTime?: string;
   /** Horário final ao criar; se omitido, usa 30min após initialStartTime */
   initialEndTime?: string;
+  /**
+   * Clínica ativa (selecionada na sidebar) pra pré-selecionar ao criar um
+   * agendamento novo. Sem isso, cairia em `clinics[0]` (1ª da lista, ordem
+   * alfabética quando "Todas as clínicas" está ativo) — podendo criar o
+   * agendamento silenciosamente numa unidade diferente da pretendida.
+   */
+  defaultClinicId?: string | null;
 }
 
 export function AppointmentFormDialog({
@@ -82,9 +98,14 @@ export function AppointmentFormDialog({
   onSave,
   prefillPatientId,
   prefillProcedure,
+  prefillLeadSource,
+  prefillReferralName,
+  prefillSellerId,
+  prefillNotes,
   initialDate,
   initialStartTime,
   initialEndTime,
+  defaultClinicId,
 }: AppointmentFormDialogProps) {
   const [date, setDate] = useState<Date>(new Date());
   const [startTime, setStartTime] = useState('09:00');
@@ -93,6 +114,8 @@ export function AppointmentFormDialog({
   const [professionalId, setProfessionalId] = useState('');
   const [clinicId, setClinicId] = useState('');
   const [procedure, setProcedure] = useState('');
+  const [procedureId, setProcedureId] = useState<string | null>(null);
+  const [procedurePrice, setProcedurePrice] = useState<number | null>(null);
   const [status, setStatus] = useState<AgendaAppointment['status']>('pending');
   const [paymentStatus, setPaymentStatus] = useState<AgendaAppointment['paymentStatus']>('pending');
   const [notes, setNotes] = useState('');
@@ -104,7 +127,11 @@ export function AppointmentFormDialog({
   const [bookingFee, setBookingFee] = useState<number | null>(null);
   const [bookingFeePaymentMethod, setBookingFeePaymentMethod] = useState<BookingFeePaymentMethod | null>(null);
 
-  const { patients } = usePatients();
+  // Usa a clinica do proprio agendamento/formulario, nao a clinica ativa na
+  // sidebar — senao, ao editar um agendamento de outra unidade (com "Todas
+  // as clinicas" na Agenda), o paciente nao aparece na lista e o campo some.
+  const { patients } = usePatients(clinicId);
+  const { activeProcedures, error: proceduresError } = useClinicProcedures(clinicId);
 
   const isEditing = !!appointment;
   const prevOpenRef = useRef(false);
@@ -119,13 +146,18 @@ export function AppointmentFormDialog({
 
     if (appointment) {
       // Edição: preservar data e todos os dados do agendamento
-      setDate(new Date(appointment.date));
+      // (parseISO, nao "new Date(string)" — evita voltar 1 dia por fuso horário)
+      setDate(parseISO(appointment.date));
       setStartTime(appointment.startTime);
       setEndTime(appointment.endTime);
       setPatientId(appointment.patientId);
       setProfessionalId(appointment.professional.id);
       setClinicId(appointment.clinic.id);
-      setProcedure(PROCEDURE_OPTIONS.includes(appointment.procedure as any) ? appointment.procedure : 'Outros');
+      setProcedure(appointment.procedureId ? appointment.procedure : (
+        PROCEDURE_OPTIONS.includes(appointment.procedure as any) ? appointment.procedure : 'Outros'
+      ));
+      setProcedureId(appointment.procedureId || null);
+      setProcedurePrice(appointment.procedurePrice ?? null);
       setStatus(appointment.status);
       setPaymentStatus(appointment.paymentStatus);
       setNotes(appointment.notes || '');
@@ -142,19 +174,40 @@ export function AppointmentFormDialog({
       setEndTime(initialEndTime || (initialStartTime ? add30Min(initialStartTime) : '09:30'));
       setPatientId(prefillPatientId || '');
       setProfessionalId('');
-      setClinicId(clinics[0]?.id || '');
+      // Prioriza a clínica ativa (sidebar); só cai pra 1ª da lista se ela não
+      // estiver entre as clínicas disponíveis neste contexto.
+      const preferredClinicId = defaultClinicId && clinics.some((c) => c.id === defaultClinicId)
+        ? defaultClinicId
+        : clinics[0]?.id || '';
+      setClinicId(preferredClinicId);
       setProcedure(prefillProcedure || '');
+      setProcedureId(null);
+      setProcedurePrice(null);
       setStatus('pending');
       setPaymentStatus('pending');
-      setNotes('');
-      setSellerId('');
-      setLeadSource('');
-      setReferralName('');
+      setNotes(prefillNotes || '');
+      setSellerId(prefillSellerId || '');
+      setLeadSource(prefillLeadSource || '');
+      setReferralName(prefillReferralName || '');
       setCustomProcedure('');
       setBookingFee(null);
       setBookingFeePaymentMethod(null);
     }
-  }, [open, appointment, clinics, prefillPatientId, prefillProcedure, initialDate, initialStartTime, initialEndTime]);
+  }, [
+    open,
+    appointment,
+    clinics,
+    prefillPatientId,
+    prefillProcedure,
+    prefillLeadSource,
+    prefillReferralName,
+    prefillSellerId,
+    prefillNotes,
+    initialDate,
+    initialStartTime,
+    initialEndTime,
+    defaultClinicId,
+  ]);
 
   const checkConflict = (): boolean => {
     if (!professionalId || !date) return false;
@@ -209,6 +262,8 @@ export function AppointmentFormDialog({
         patientName: patient.name,
         professional,
         procedure: effectiveProcedure,
+        procedureId,
+        procedurePrice,
         status,
         paymentStatus,
         notes,
@@ -246,6 +301,57 @@ export function AppointmentFormDialog({
   };
 
   const activePatients = patients.filter((p) => p.status === 'active');
+  const selectedPatientAllergies = patients.find((p) => p.id === patientId)?.allergies || [];
+
+  // Ao escolher/trocar o paciente em um agendamento novo, traz a origem do
+  // lead já cadastrada no paciente (evita ter que reinformar manualmente).
+  const handlePatientChange = (value: string) => {
+    setPatientId(value);
+    if (isEditing) return;
+    const selected = patients.find((p) => p.id === value);
+    if (selected?.lead_source) {
+      setLeadSource(selected.lead_source as LeadSource);
+      setReferralName(selected.lead_source === 'referral' ? (selected.referral_name || '') : '');
+    }
+  };
+
+  const procedureSelectValue = procedureId
+    || (procedure === 'Outros' ? '__custom__' : procedure ? `legacy:${procedure}` : '');
+
+  const handleProcedureChange = (value: string) => {
+    if (value === '__custom__') {
+      setProcedure('Outros');
+      setProcedureId(null);
+      setProcedurePrice(null);
+      return;
+    }
+    if (value.startsWith('legacy:')) {
+      setProcedure(value.slice('legacy:'.length));
+      setProcedureId(null);
+      setProcedurePrice(null);
+      setCustomProcedure('');
+      return;
+    }
+    const selected = activeProcedures.find((item) => item.id === value);
+    if (!selected) return;
+    setProcedure(selected.name);
+    setProcedureId(selected.id);
+    setProcedurePrice(selected.default_price);
+    setCustomProcedure('');
+    setEndTime(addMinutesToTime(startTime, selected.duration_minutes));
+  };
+
+  const handleClinicChange = (value: string) => {
+    if (value !== clinicId) {
+      // Procedimentos pertencem à unidade. Ao trocar a clínica, evita
+      // gravar um procedure_id de outra unidade no novo agendamento.
+      setProcedure('');
+      setProcedureId(null);
+      setProcedurePrice(null);
+      setCustomProcedure('');
+    }
+    setClinicId(value);
+  };
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -264,7 +370,7 @@ export function AppointmentFormDialog({
         <div className="grid gap-4 py-4">
           <div className="grid gap-2">
             <Label htmlFor="patient">Paciente *</Label>
-            <Select value={patientId} onValueChange={setPatientId}>
+            <Select value={patientId} onValueChange={handlePatientChange}>
               <SelectTrigger>
                 <SelectValue placeholder="Selecione o paciente" />
               </SelectTrigger>
@@ -282,6 +388,14 @@ export function AppointmentFormDialog({
                 )}
               </SelectContent>
             </Select>
+            {selectedPatientAllergies.length > 0 && (
+              <div className="flex items-start gap-2 rounded-md border border-destructive/30 bg-destructive/5 px-3 py-2 text-xs text-destructive">
+                <AlertTriangle className="h-4 w-4 shrink-0 mt-0.5" />
+                <span>
+                  <strong>Alergias:</strong> {selectedPatientAllergies.join(', ')}
+                </span>
+              </div>
+            )}
           </div>
 
           <div className="grid grid-cols-2 gap-4">
@@ -319,7 +433,7 @@ export function AppointmentFormDialog({
 
             <div className="grid gap-2">
               <Label htmlFor="clinic">Clínica *</Label>
-              <Select value={clinicId} onValueChange={setClinicId}>
+              <Select value={clinicId} onValueChange={handleClinicChange}>
                 <SelectTrigger>
                   <SelectValue placeholder="Selecione" />
                 </SelectTrigger>
@@ -399,19 +513,27 @@ export function AppointmentFormDialog({
 
           <div className="grid gap-2">
             <Label htmlFor="procedure">Procedimento *</Label>
-            <Select value={procedure || ''} onValueChange={(v) => { setProcedure(v); if (v !== 'Outros') setCustomProcedure(''); }}>
+            <Select value={procedureSelectValue} onValueChange={handleProcedureChange}>
               <SelectTrigger id="procedure">
                 <SelectValue placeholder="Selecione o procedimento" />
               </SelectTrigger>
               <SelectContent>
-                {PROCEDURE_OPTIONS.map((p) => (
-                  <SelectItem key={p} value={p}>
-                    {p}
+                {activeProcedures.map((item) => (
+                  <SelectItem key={item.id} value={item.id}>
+                    {item.name} — R$ {item.default_price.toFixed(2).replace('.', ',')} · {item.duration_minutes} min
                   </SelectItem>
                 ))}
-                {procedure && !PROCEDURE_OPTIONS.includes(procedure as any) && (
-                  <SelectItem value={procedure}>{procedure} (atual)</SelectItem>
+                {activeProcedures.length === 0 && PROCEDURE_OPTIONS.filter((p) => p !== 'Outros').map((p) => (
+                  <SelectItem key={p} value={`legacy:${p}`}>{p}</SelectItem>
+                ))}
+                {procedureId && !activeProcedures.some((item) => item.id === procedureId) && (
+                  <SelectItem value={procedureId}>{procedure} (atual)</SelectItem>
                 )}
+                {procedure && !procedureId && procedure !== 'Outros'
+                  && (activeProcedures.length > 0 || !PROCEDURE_OPTIONS.includes(procedure as any)) && (
+                  <SelectItem value={`legacy:${procedure}`}>{procedure} (atual)</SelectItem>
+                )}
+                <SelectItem value="__custom__">Outro / personalizado</SelectItem>
               </SelectContent>
             </Select>
             {procedure === 'Outros' && (
@@ -422,8 +544,16 @@ export function AppointmentFormDialog({
               />
             )}
             <p className="text-xs text-muted-foreground">
-              Use a mesma lista das regras de comissão para o cálculo bater ao finalizar.
+              {procedureId && procedurePrice != null
+                ? `Preço sugerido: R$ ${procedurePrice.toFixed(2).replace('.', ',')}. Pode ser alterado ao finalizar.`
+                : proceduresError
+                ? 'Catálogo indisponível; usando a lista anterior e procedimento personalizado.'
+                : 'Cadastre preços em Procedimentos para preencher valor e duração automaticamente.'}
             </p>
+            <ProcedureMaterialsPreview
+              procedureId={procedureId}
+              procedureName={procedure === 'Outros' ? customProcedure : procedure}
+            />
           </div>
 
           <div className="grid grid-cols-2 gap-4">
@@ -487,13 +617,13 @@ export function AppointmentFormDialog({
                 id="bookingFee"
                 checked={bookingFee !== null}
                 onCheckedChange={(checked) => {
-                  setBookingFee(checked ? 50 : null);
+                  setBookingFee(checked ? DEFAULT_BOOKING_FEE : null);
                   if (!checked) setBookingFeePaymentMethod(null);
                   else setBookingFeePaymentMethod((p) => p ?? 'pix');
                 }}
               />
               <label htmlFor="bookingFee" className="text-sm font-medium cursor-pointer">
-                Taxa de agendamento (R$ 50) — se faltar/desistir, valor entra no caixa
+                {`Sinal / taxa de agendamento (R$ ${DEFAULT_BOOKING_FEE}) — entra no caixa agora; abate no procedimento se vier; retido se faltar/cancelar`}
               </label>
             </div>
             {bookingFee !== null && (
@@ -531,9 +661,9 @@ export function AppointmentFormDialog({
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="none">Não informado</SelectItem>
-                {(Object.entries(leadSourceLabels) as [LeadSource, string][]).map(([value, label]) => (
+                {(Object.entries(leadSourceLabels) as [LeadSource, string][]).map(([value]) => (
                   <SelectItem key={value} value={value}>
-                    {label}
+                    <LeadSourceLabel source={value} />
                   </SelectItem>
                 ))}
               </SelectContent>

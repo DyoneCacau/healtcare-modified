@@ -16,10 +16,15 @@ export const PERMISSION_FEATURES = [
   { id: 'agenda_todas_clinicas', label: 'Agenda - todas as clínicas' },
   { id: 'pacientes', label: 'Pacientes' },
   { id: 'profissionais', label: 'Profissionais' },
-  { id: 'financeiro', label: 'Financeiro' },
+  { id: 'financeiro', label: 'Caixa' },
+  { id: 'contas_receber', label: 'Contas a receber' },
   { id: 'comissoes', label: 'Comissões' },
   { id: 'estoque', label: 'Estoque' },
+  { id: 'estoque_liberar', label: 'Liberar estoque sem saldo' },
+  { id: 'procedimentos', label: 'Procedimentos' },
+  { id: 'crm', label: 'CRM de Vendas' },
   { id: 'atendimento', label: 'Atendimento' },
+  { id: 'integracoes', label: 'Integrações' },
   { id: 'relatorios', label: 'Relatórios' },
   { id: 'ponto', label: 'Ponto' },
   { id: 'termos', label: 'Termos' },
@@ -68,12 +73,22 @@ export const PERMISSION_GROUPS: PermissionGroup[] = [
   },
   {
     id: 'gr_financeiro',
-    label: 'Financeiro',
+    label: 'Caixa',
     children: [
-      { feature: 'financeiro', label: 'Acessar financeiro / caixa', actions: ['can_view'] },
+      { feature: 'financeiro', label: 'Acessar caixa do dia', actions: ['can_view'] },
       { feature: 'financeiro', label: 'Incluir e retirar', actions: ['can_create'] },
       { feature: 'financeiro', label: 'Editar e estorno', actions: ['can_edit'] },
       { feature: 'financeiro', label: 'Apagar registro', actions: ['can_delete'] },
+    ],
+  },
+  {
+    id: 'gr_contas_receber',
+    label: 'Contas a receber',
+    children: [
+      { feature: 'contas_receber', label: 'Ver contas', actions: ['can_view'] },
+      { feature: 'contas_receber', label: 'Criar lançamento', actions: ['can_create'] },
+      { feature: 'contas_receber', label: 'Dar baixa / editar', actions: ['can_edit'] },
+      { feature: 'contas_receber', label: 'Cancelar', actions: ['can_delete'] },
     ],
   },
   {
@@ -112,6 +127,27 @@ export const PERMISSION_GROUPS: PermissionGroup[] = [
       { feature: 'estoque', label: 'Ver', actions: ['can_view'] },
       { feature: 'estoque', label: 'Criar / Editar', actions: ['can_create', 'can_edit'] },
       { feature: 'estoque', label: 'Excluir', actions: ['can_delete'] },
+      { feature: 'estoque_liberar', label: 'Liberar finalização sem saldo', actions: ['can_edit'] },
+    ],
+  },
+  {
+    id: 'gr_procedimentos',
+    label: 'Procedimentos',
+    children: [
+      { feature: 'procedimentos', label: 'Ver catálogo', actions: ['can_view'] },
+      { feature: 'procedimentos', label: 'Criar', actions: ['can_create'] },
+      { feature: 'procedimentos', label: 'Editar', actions: ['can_edit'] },
+      { feature: 'procedimentos', label: 'Excluir', actions: ['can_delete'] },
+    ],
+  },
+  {
+    id: 'gr_crm',
+    label: 'CRM de Vendas',
+    children: [
+      { feature: 'crm', label: 'Ver pipeline', actions: ['can_view'] },
+      { feature: 'crm', label: 'Criar lead', actions: ['can_create'] },
+      { feature: 'crm', label: 'Editar / mover etapa', actions: ['can_edit'] },
+      { feature: 'crm', label: 'Excluir lead', actions: ['can_delete'] },
     ],
   },
   {
@@ -121,6 +157,16 @@ export const PERMISSION_GROUPS: PermissionGroup[] = [
       { feature: 'atendimento', label: 'Ver inbox', actions: ['can_view'] },
       { feature: 'atendimento', label: 'Responder conversas', actions: ['can_create', 'can_edit'] },
       { feature: 'atendimento', label: 'Configurar canais e fluxos', actions: ['can_edit', 'can_delete'] },
+    ],
+  },
+  {
+    id: 'gr_integracoes',
+    label: 'Integrações',
+    children: [
+      { feature: 'integracoes', label: 'Ver conexões e logs', actions: ['can_view'] },
+      { feature: 'integracoes', label: 'Criar conexão / token', actions: ['can_create'] },
+      { feature: 'integracoes', label: 'Editar conexão e fluxos', actions: ['can_edit'] },
+      { feature: 'integracoes', label: 'Remover conexão / revogar token', actions: ['can_delete'] },
     ],
   },
   {
@@ -201,16 +247,26 @@ export function getDefaultPermissionsForRole(role: SystemRole): PermissionRow[] 
   }));
 
   if (role === 'receptionist') {
-    return base.map((p) =>
-      ['agenda', 'pacientes', 'atendimento', 'dashboard', 'configuracoes'].includes(p.feature)
-        ? { ...p, can_view: true, can_create: true, can_edit: true, can_delete: false }
-        : p
-    );
+    return base.map((p) => {
+      if (p.feature === 'estoque_liberar') {
+        return { ...p, can_view: true, can_create: false, can_edit: true, can_delete: false };
+      }
+      if (['agenda', 'pacientes', 'atendimento', 'dashboard', 'configuracoes', 'financeiro', 'crm'].includes(p.feature)) {
+        return { ...p, can_view: true, can_create: true, can_edit: true, can_delete: false };
+      }
+      return p;
+    });
   }
   if (role === 'seller') {
     return base.map((p) =>
-      ['comissoes', 'dashboard', 'configuracoes', 'pacientes'].includes(p.feature)
-        ? { ...p, can_view: true, can_create: p.feature === 'comissoes', can_edit: true, can_delete: false }
+      ['comissoes', 'dashboard', 'configuracoes', 'pacientes', 'crm'].includes(p.feature)
+        ? {
+            ...p,
+            can_view: true,
+            can_create: p.feature === 'comissoes' || p.feature === 'crm',
+            can_edit: true,
+            can_delete: false,
+          }
         : p
     );
   }

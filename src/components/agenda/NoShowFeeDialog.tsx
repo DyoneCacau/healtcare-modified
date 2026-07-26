@@ -56,9 +56,10 @@ export function NoShowFeeDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-sm">
         <DialogHeader>
-          <DialogTitle>Taxa de agendamento</DialogTitle>
+          <DialogTitle>Sinal de agendamento</DialogTitle>
           <DialogDescription>
-            Como o paciente pagou os R$ {fee.toFixed(2)} da taxa de agendamento?
+            Este agendamento tem sinal de R$ {fee.toFixed(2)} sem lançamento no caixa.
+            Informe a forma de pagamento para registrar e reter o valor (paciente faltou).
           </DialogDescription>
         </DialogHeader>
         <div className="grid gap-2 py-4">

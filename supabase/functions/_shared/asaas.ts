@@ -207,3 +207,107 @@ export function assertUuid(value: unknown, field: string): asserts value is stri
     throw new HttpError(400, `${field} inválido`)
   }
 }
+
+/**
+ * Notifica o dono da clínica (user_notifications) sobre o desfecho de um
+ * evento de pagamento Asaas já aplicado por `asaas_apply_payment_event`.
+ * Idempotente: usa o id do registro em payment_history como reference_id
+ * para não duplicar notificação em reprocessamentos/retentativas do webhook.
+ * Nunca lança erro — falha de notificação não pode derrubar o webhook.
+ */
+export async function notifyClinicOwnerOfPaymentEvent(
+  supabase: SupabaseClient,
+  subscriptionId: string,
+  asaasPaymentId: string,
+): Promise<void> {
+  try {
+    const { data: paymentRow } = await supabase
+      .from('payment_history')
+      .select('id, status')
+      .eq('asaas_payment_id', asaasPaymentId)
+      .maybeSingle()
+    if (!paymentRow) return
+
+    const { data: subscription } = await supabase
+      .from('subscriptions')
+      .select('billing_status, clinics(id, name, owner_user_id)')
+      .eq('id', subscriptionId)
+      .maybeSingle()
+    const clinic = subscription?.clinics as
+      | { id: string; name: string; owner_user_id: string | null }
+      | null
+      | undefined
+    if (!clinic?.owner_user_id) return
+
+    let type: 'payment_confirmed' | 'payment_overdue' | null = null
+    let title = ''
+    let message = ''
+    if (paymentRow.status === 'confirmed') {
+      type = 'payment_confirmed'
+      title = 'Pagamento confirmado'
+      message = `Recebemos a confirmação do pagamento da clínica "${clinic.name}". A assinatura está ativa.`
+    } else if (subscription?.billing_status === 'overdue') {
+      type = 'payment_overdue'
+      title = 'Pagamento pendente'
+      message = `Identificamos uma pendência de pagamento na clínica "${clinic.name}". Acesse Minha Cobrança para regularizar.`
+    }
+    if (!type) return
+
+    const { data: existing } = await supabase
+      .from('user_notifications')
+      .select('id')
+      .eq('user_id', clinic.owner_user_id)
+      .eq('type', type)
+      .eq('reference_id', paymentRow.id)
+      .maybeSingle()
+    if (existing) return
+
+    const { error: insertError } = await supabase.from('user_notifications').insert({
+      user_id: clinic.owner_user_id,
+      clinic_id: clinic.id,
+      type,
+      title,
+      message,
+      reference_id: paymentRow.id,
+    })
+    if (insertError) {
+      console.error('Failed to notify clinic owner about payment event', insertError.code)
+    }
+  } catch (error) {
+    console.error(
+      'Unexpected error notifying clinic owner about payment event',
+      error instanceof Error ? error.message : 'unknown',
+    )
+  }
+}
+
+/**
+ * Notifica o dono da clínica que uma nova unidade foi cadastrada para ele,
+ * incluindo o status atual do pagamento (pendente, no momento da criação).
+ * Nunca lança erro — falha de notificação não pode derrubar a criação da clínica.
+ */
+export async function notifyOwnerOfNewClinic(
+  supabase: SupabaseClient,
+  params: { ownerUserId: string; clinicId: string; clinicName: string; planName: string; subscriptionId: string },
+): Promise<void> {
+  try {
+    const { error } = await supabase.from('user_notifications').insert({
+      user_id: params.ownerUserId,
+      clinic_id: params.clinicId,
+      type: 'clinic_created',
+      title: `Clínica "${params.clinicName}" criada`,
+      message:
+        `Sua unidade foi cadastrada na plataforma com o plano ${params.planName}. `
+        + 'O pagamento está pendente — acesse Minha Cobrança para concluir e ativar o acesso.',
+      reference_id: params.subscriptionId,
+    })
+    if (error) {
+      console.error('Failed to notify owner about new clinic', error.code)
+    }
+  } catch (error) {
+    console.error(
+      'Unexpected error notifying owner about new clinic',
+      error instanceof Error ? error.message : 'unknown',
+    )
+  }
+}

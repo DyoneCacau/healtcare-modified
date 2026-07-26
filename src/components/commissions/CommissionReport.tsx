@@ -37,6 +37,7 @@ import {
 } from 'recharts';
 import { CommissionSummary, CommissionCalculation, beneficiaryTypeLabels, BeneficiaryType } from '@/types/commission';
 import { leadSourceLabels, LeadSource } from '@/types/agenda';
+import { LeadSourceIcon } from '@/components/crm/LeadSourceBadge';
 import { generateCommissionSummary } from '@/hooks/useCommissions';
 import { toast } from 'sonner';
 import { CommissionReportFilters, type PeriodType } from './CommissionReportFilters';
@@ -61,10 +62,13 @@ const COLORS = ['hsl(var(--success))', 'hsl(var(--info))', 'hsl(var(--warning))'
 const leadSourceIcons: Record<LeadSource, typeof Instagram> = {
   instagram: Instagram,
   whatsapp: MessageCircle,
+  facebook: Share2,
   referral: Share2,
   paid_traffic: Megaphone,
   other: HelpCircle,
 };
+
+const SOCIAL_SOURCES: LeadSource[] = ['instagram', 'whatsapp', 'facebook'];
 
 const beneficiaryIcons: Record<BeneficiaryType, typeof Stethoscope> = {
   professional: Stethoscope,
@@ -445,7 +449,7 @@ export function CommissionReport({ calculations, professionals = [] }: Commissio
 
       {/* Tabs for different views */}
       <Tabs defaultValue="by-type" className="space-y-4">
-        <TabsList>
+        <TabsList className="h-auto w-full flex flex-wrap justify-start gap-1">
           <TabsTrigger value="by-type">Por Tipo de Beneficiário</TabsTrigger>
           <TabsTrigger value="charts">Gráficos</TabsTrigger>
           <TabsTrigger value="lead-source">Por Origem do Lead</TabsTrigger>
@@ -584,11 +588,16 @@ export function CommissionReport({ calculations, professionals = [] }: Commissio
                   <TableBody>
                     {leadSourceStats.map((stat) => {
                       const Icon = leadSourceIcons[stat.source] || HelpCircle;
+                      const isSocial = SOCIAL_SOURCES.includes(stat.source);
                       return (
                         <TableRow key={stat.key}>
                           <TableCell className="font-medium">
                             <div className="flex items-center gap-2">
-                              <Icon className="h-4 w-4 text-muted-foreground" />
+                              {isSocial ? (
+                                <LeadSourceIcon source={stat.source} className="h-4 w-4" />
+                              ) : (
+                                <Icon className="h-4 w-4 text-muted-foreground" />
+                              )}
                               {stat.name}
                             </div>
                           </TableCell>

@@ -1357,6 +1357,143 @@ export type Database = {
           },
         ]
       }
+      patient_evolutions: {
+        Row: {
+          clinic_id: string
+          content: string
+          created_at: string
+          created_by: string | null
+          evolution_date: string
+          id: string
+          patient_id: string
+          professional_id: string | null
+          professional_name: string
+          updated_at: string
+        }
+        Insert: {
+          clinic_id: string
+          content?: string
+          created_at?: string
+          created_by?: string | null
+          evolution_date?: string
+          id?: string
+          patient_id: string
+          professional_id?: string | null
+          professional_name?: string
+          updated_at?: string
+        }
+        Update: {
+          clinic_id?: string
+          content?: string
+          created_at?: string
+          created_by?: string | null
+          evolution_date?: string
+          id?: string
+          patient_id?: string
+          professional_id?: string | null
+          professional_name?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "patient_evolutions_clinic_id_fkey"
+            columns: ["clinic_id"]
+            isOneToOne: false
+            referencedRelation: "clinics"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "patient_evolutions_patient_id_fkey"
+            columns: ["patient_id"]
+            isOneToOne: false
+            referencedRelation: "patients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "patient_evolutions_professional_id_fkey"
+            columns: ["professional_id"]
+            isOneToOne: false
+            referencedRelation: "professionals"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      patient_files: {
+        Row: {
+          category: string
+          clinic_id: string
+          created_at: string
+          created_by: string | null
+          evolution_id: string | null
+          file_path: string
+          file_size: number
+          id: string
+          mime_type: string
+          name: string
+          notes: string
+          patient_id: string
+          rotation: number
+          tooth_number: number | null
+          updated_at: string
+        }
+        Insert: {
+          category?: string
+          clinic_id: string
+          created_at?: string
+          created_by?: string | null
+          evolution_id?: string | null
+          file_path: string
+          file_size?: number
+          id?: string
+          mime_type?: string
+          name: string
+          notes?: string
+          patient_id: string
+          rotation?: number
+          tooth_number?: number | null
+          updated_at?: string
+        }
+        Update: {
+          category?: string
+          clinic_id?: string
+          created_at?: string
+          created_by?: string | null
+          evolution_id?: string | null
+          file_path?: string
+          file_size?: number
+          id?: string
+          mime_type?: string
+          name?: string
+          notes?: string
+          patient_id?: string
+          rotation?: number
+          tooth_number?: number | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "patient_files_clinic_id_fkey"
+            columns: ["clinic_id"]
+            isOneToOne: false
+            referencedRelation: "clinics"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "patient_files_evolution_id_fkey"
+            columns: ["evolution_id"]
+            isOneToOne: false
+            referencedRelation: "patient_evolutions"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "patient_files_patient_id_fkey"
+            columns: ["patient_id"]
+            isOneToOne: false
+            referencedRelation: "patients"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       patients: {
         Row: {
           address: string | null
@@ -1368,8 +1505,10 @@ export type Database = {
           created_at: string
           email: string | null
           id: string
+          lead_source: string | null
           name: string
           phone: string | null
+          referral_name: string | null
           status: string
           updated_at: string
         }
@@ -1383,8 +1522,10 @@ export type Database = {
           created_at?: string
           email?: string | null
           id?: string
+          lead_source?: string | null
           name: string
           phone?: string | null
+          referral_name?: string | null
           status?: string
           updated_at?: string
         }
@@ -1398,8 +1539,10 @@ export type Database = {
           created_at?: string
           email?: string | null
           id?: string
+          lead_source?: string | null
           name?: string
           phone?: string | null
+          referral_name?: string | null
           status?: string
           updated_at?: string
         }
@@ -1844,6 +1987,8 @@ export type Database = {
           status: string
           trial_ends_at: string | null
           updated_at: string
+          features_override: Json
+          feature_grants: Json
         }
         Insert: {
           admin_notes?: string | null
@@ -1853,6 +1998,8 @@ export type Database = {
           billing_day?: number
           billing_defer_days?: number
           billing_first_due_date?: string | null
+          features_override?: Json
+          feature_grants?: Json
           billing_mode?: string
           billing_status?: string | null
           clinic_id: string
@@ -1891,6 +2038,8 @@ export type Database = {
           created_at?: string
           current_period_end?: string | null
           current_period_start?: string | null
+          features_override?: Json
+          feature_grants?: Json
           id?: string
           last_payment_at?: string | null
           monthly_fee?: number | null

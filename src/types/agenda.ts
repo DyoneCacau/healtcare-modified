@@ -7,11 +7,12 @@ export interface Professional {
   cro: string; // Only CRO for dentistry
 }
 
-export type LeadSource = 'instagram' | 'whatsapp' | 'referral' | 'paid_traffic' | 'other';
+export type LeadSource = 'instagram' | 'whatsapp' | 'facebook' | 'referral' | 'paid_traffic' | 'other';
 
 export const leadSourceLabels: Record<LeadSource, string> = {
   instagram: 'Instagram',
   whatsapp: 'WhatsApp',
+  facebook: 'Facebook',
   referral: 'Indicação',
   paid_traffic: 'Tráfego Pago',
   other: 'Outros',
@@ -27,6 +28,10 @@ export interface AgendaAppointment {
   patientPhone?: string;
   professional: Professional;
   procedure: string;
+  /** Catálogo atual; ausente em agendamentos antigos/personalizados. */
+  procedureId?: string | null;
+  /** Preço sugerido no momento do agendamento (snapshot editável no fechamento). */
+  procedurePrice?: number | null;
   status: 'confirmed' | 'pending' | 'return' | 'completed' | 'cancelled' | 'no_show';
   paymentStatus: 'paid' | 'pending' | 'partial' | 'refunded';
   notes?: string;
@@ -37,7 +42,7 @@ export interface AgendaAppointment {
   leadSource?: LeadSource;
   /** Nome de quem indicou (quando leadSource = Indicação). Usado em bonificações. */
   referralName?: string | null;
-  /** Taxa de agendamento (ex: R$50). Se faltar/desistir, entra no caixa. */
+  /** Sinal/taxa de agendamento (ex: R$50). Entra no caixa ao agendar; abate no procedimento se comparecer; retido se faltar/cancelar. */
   bookingFee?: number | null;
   /** Forma de pagamento da taxa (dinheiro, PIX, cartão). */
   bookingFeePaymentMethod?: 'cash' | 'pix' | 'credit' | 'debit' | null;

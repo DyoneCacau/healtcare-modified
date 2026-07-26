@@ -7,6 +7,7 @@ import { useEffect, useState } from "react";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { CurrencyInput } from "@/components/ui/currency-input";
 import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -29,34 +30,19 @@ import {
   CommercialChecklist,
   buildCommercialChecklistState,
 } from "@/components/superadmin/CommercialChecklist";
-
-function parseMoneyInput(value: string): number {
-  const trimmed = value.trim();
-  if (!trimmed) return 0;
-  const normalized = trimmed.includes(",")
-    ? trimmed.replace(/\./g, "").replace(",", ".")
-    : trimmed;
-  const n = Number(normalized);
-  return Number.isFinite(n) && n >= 0 ? n : 0;
-}
+import {
+  PLAN_MODULES,
+  ALWAYS_INCLUDED_MODULES,
+  expandFeatureAliases,
+} from "@/lib/planModules";
 
 // Lista completa de módulos disponíveis (chaves alinhadas com PlansManagement)
-const AVAILABLE_MODULES = [
-  { id: 'dashboard', name: 'Dashboard', description: 'Visão geral da clínica', always: true },
-  { id: 'agenda', name: 'Agenda', description: 'Agendamento de consultas' },
-  { id: 'pacientes', name: 'Pacientes', description: 'Cadastro e prontuários' },
-  { id: 'pacientes_basico', name: 'Pacientes (Básico)', description: 'Cadastro simplificado de pacientes' },
-  { id: 'profissionais', name: 'Profissionais', description: 'Gestão de profissionais' },
-  { id: 'financeiro', name: 'Financeiro', description: 'Controle financeiro completo' },
-  { id: 'financeiro_basico', name: 'Financeiro (Básico)', description: 'Controle financeiro simplificado' },
-  { id: 'comissoes', name: 'Comissões', description: 'Cálculo de comissões' },
-  { id: 'estoque', name: 'Estoque', description: 'Controle de materiais' },
-  { id: 'relatorios', name: 'Relatórios', description: 'Relatórios gerenciais' },
-  { id: 'ponto', name: 'Ponto', description: 'Controle de ponto eletrônico' },
-  { id: 'administracao', name: 'Administração', description: 'Gestão de usuários' },
-  { id: 'termos', name: 'Termos', description: 'Criação de termos e contratos' },
-  { id: 'multi_clinica', name: 'Multi-Clínica', description: 'Gestão de múltiplas unidades' },
-];
+const AVAILABLE_MODULES = PLAN_MODULES.map((m) => ({
+  id: m.id,
+  name: m.name,
+  description: m.description,
+  always: 'always' in m && m.always === true,
+}));
 
 interface ClinicData {
   name: string;
@@ -86,7 +72,7 @@ interface CreateClientData {
   planId: string;
   modules: string[];
   monthlyFee: number;
-  setupFee: string;
+  setupFee: number;
   billingDay: number;
   scheduleFirstCharge: boolean;
   firstDueDate: string;
@@ -111,12 +97,14 @@ function planMonthlyPrice(plan: PlanOption): number {
   );
 }
 
-/** Módulos do plano + dashboard sempre incluso */
+/** Módulos do plano + módulos sempre inclusos (dashboard, administração) */
 function modulesFromPlan(plan: PlanOption | undefined): string[] {
-  const fromPlan = plan ? parsePlanFeatures(plan.features) : [];
+  const fromPlan = plan ? expandFeatureAliases(parsePlanFeatures(plan.features)) : [];
   const knownIds = new Set(AVAILABLE_MODULES.map((m) => m.id));
-  const selected = fromPlan.filter((id) => knownIds.has(id));
-  if (!selected.includes("dashboard")) selected.unshift("dashboard");
+  const selected = fromPlan.filter((id) => knownIds.has(id as (typeof AVAILABLE_MODULES)[number]['id']));
+  ALWAYS_INCLUDED_MODULES.forEach((id) => {
+    if (!selected.includes(id)) selected.unshift(id);
+  });
   return Array.from(new Set(selected));
 }
 
@@ -165,9 +153,9 @@ export function CreateCompleteClient() {
       email: ""
     }],
     planId: "",
-    modules: ['dashboard'], // Dashboard sempre incluído
+    modules: [...ALWAYS_INCLUDED_MODULES], // Dashboard + Administração sempre
     monthlyFee: 0,
-    setupFee: "",
+    setupFee: 0,
     billingDay: DEFAULT_BILLING_DAY,
     scheduleFirstCharge: false,
     firstDueDate: defaultPromoFirstDueDate(),
@@ -257,14 +245,11 @@ export function CreateCompleteClient() {
     }));
   }
 
-  // Toggle módulo
   function toggleModule(moduleId: string) {
     setFormData(prev => {
+      if ((ALWAYS_INCLUDED_MODULES as readonly string[]).includes(moduleId)) return prev;
+
       const isIncluded = prev.modules.includes(moduleId);
-      
-      // Dashboard sempre incluído
-      if (moduleId === 'dashboard') return prev;
-      
       return {
         ...prev,
         modules: isIncluded
@@ -314,7 +299,7 @@ export function CreateCompleteClient() {
             planId: formData.planId,
             modules: formData.modules,
             monthlyFee: formData.monthlyFee,
-            setupFee: parseMoneyInput(formData.setupFee),
+            setupFee: formData.setupFee,
             billingDay: formData.billingDay,
             billingDeferDays: 0,
             billingFirstDueDate: formData.scheduleFirstCharge ? formData.firstDueDate : null,
@@ -337,7 +322,7 @@ export function CreateCompleteClient() {
           data.clinics.map(({ subscription_id }) =>
             asaasBillingService.createCheckout(
               subscription_id,
-              parseMoneyInput(formData.setupFee) > 0,
+              formData.setupFee > 0,
               {
                 billingDay: formData.billingDay,
                 scheduleFirstCharge: formData.scheduleFirstCharge,
@@ -377,9 +362,9 @@ export function CreateCompleteClient() {
           email: ""
         }],
         planId: "",
-        modules: ['dashboard'],
+        modules: [...ALWAYS_INCLUDED_MODULES],
         monthlyFee: 0,
-        setupFee: "",
+        setupFee: 0,
         billingDay: DEFAULT_BILLING_DAY,
         scheduleFirstCharge: false,
         firstDueDate: defaultPromoFirstDueDate(),
@@ -689,14 +674,17 @@ export function CreateCompleteClient() {
                 <div className="space-y-1">
                   <Label>Módulos Contratados</Label>
                   <p className="text-xs text-muted-foreground">
-                    Preenchidos automaticamente pelo plano. Você pode liberar módulos extras nesta tela.
+                    Preenchidos automaticamente pelo plano. Dashboard e Administração são fixos
+                    (Administração é onde o admin solicita upgrade).
                   </p>
                 </div>
                 <div className="grid grid-cols-2 gap-3">
                   {AVAILABLE_MODULES.map(module => (
                     <label
                       key={module.id}
-                      className="flex items-start gap-2 p-3 border rounded-lg cursor-pointer hover:bg-accent/50"
+                      className={`flex items-start gap-2 p-3 border rounded-lg ${
+                        module.always ? 'cursor-default bg-muted/40' : 'cursor-pointer hover:bg-accent/50'
+                      }`}
                     >
                       <Checkbox
                         checked={formData.modules.includes(module.id)}
@@ -704,7 +692,10 @@ export function CreateCompleteClient() {
                         disabled={module.always}
                       />
                       <div className="flex-1">
-                        <div className="font-medium">{module.name}</div>
+                        <div className="font-medium">
+                          {module.name}
+                          {module.always ? ' *' : ''}
+                        </div>
                         <div className="text-xs text-muted-foreground">{module.description}</div>
                       </div>
                     </label>
@@ -743,26 +734,19 @@ export function CreateCompleteClient() {
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
                   <Label htmlFor="setupFee">Taxa de Adesão (R$)</Label>
-                  <Input
+                  <CurrencyInput
                     id="setupFee"
-                    type="text"
-                    inputMode="decimal"
                     value={formData.setupFee}
-                    onChange={(e) => {
-                      const raw = e.target.value.replace(/[^\d.,]/g, "");
-                      setFormData((prev) => ({ ...prev, setupFee: raw }));
-                    }}
-                    placeholder="0,00"
+                    onValueChange={(v) => setFormData((prev) => ({ ...prev, setupFee: v }))}
                   />
                 </div>
 
                 <div className="space-y-2">
                   <Label htmlFor="monthlyFee">Mensalidade do plano (R$)</Label>
-                  <Input
+                  <CurrencyInput
                     id="monthlyFee"
-                    type="number"
-                    step="0.01"
                     value={formData.monthlyFee}
+                    onValueChange={() => {}}
                     readOnly
                     className="bg-muted"
                   />

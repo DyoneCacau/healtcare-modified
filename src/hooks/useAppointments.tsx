@@ -1,8 +1,10 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { format, parseISO } from 'date-fns';
 import { supabase } from '@/integrations/supabase/client';
 import { useClinic } from './useClinic';
 import { toast } from 'sonner';
 import { useAuth } from './useAuth';
+import { formatAppointmentNotificationMessage } from '@/lib/notificationMessage';
 
 export interface AppointmentData {
   id: string;
@@ -13,6 +15,8 @@ export interface AppointmentData {
   start_time: string;
   end_time: string;
   procedure: string;
+  procedure_id?: string | null;
+  procedure_price?: number | null;
   status: string;
   payment_status: string;
   notes: string | null;
@@ -84,7 +88,10 @@ export function useAppointments(dateFilter?: string, clinicIdsOverride?: string[
 }
 
 export function useTodayAppointments() {
-  const today = new Date().toISOString().split('T')[0];
+  // Usa a data local (mesmo cálculo usado ao salvar o agendamento), não UTC.
+  // `toISOString()` usaria o dia em UTC, o que faz "hoje" pular pro dia
+  // seguinte entre ~21h e 23h59 no horário do Brasil (UTC-3).
+  const today = format(new Date(), 'yyyy-MM-dd');
   return useAppointments(today);
 }
 
@@ -137,14 +144,14 @@ export function useAppointmentMutations() {
       }
       // Notificar membros da clínica destino sobre o novo agendamento
       if (user?.id) {
-        const dateStr = data.date || '';
-        const timeStr = data.start_time || '';
+        const dateLabel = data.date ? format(parseISO(data.date), 'dd/MM/yyyy') : '';
+        const timeLabel = (data.start_time || '').slice(0, 5);
         void (async () => {
           try {
             const { error: notificationError } = await supabase.rpc('notify_clinic_users_on_appointment', {
               p_clinic_id: targetClinicId,
               p_title: 'Novo agendamento',
-              p_message: `Novo agendamento em ${dateStr} às ${timeStr}`,
+              p_message: formatAppointmentNotificationMessage(dateLabel, timeLabel),
               p_reference_id: appointmentId,
               p_creator_id: user.id,
             });

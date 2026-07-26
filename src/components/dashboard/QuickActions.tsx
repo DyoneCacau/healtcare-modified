@@ -1,25 +1,120 @@
 import { useState } from "react";
-import { CalendarPlus, UserPlus, Receipt } from "lucide-react";
+import { CalendarPlus, UserPlus, Receipt, FileText } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { FeatureButton } from "@/components/subscription/FeatureButton";
+import { Label } from "@/components/ui/label";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { PatientFormDialog } from "@/components/patients/PatientFormDialog";
 import { AppointmentFormDialog } from "@/components/agenda/AppointmentFormDialog";
 import { PaymentForm } from "@/components/financial/PaymentForm";
-import { usePatientMutations } from "@/hooks/usePatients";
-import { useAppointmentMutations } from "@/hooks/useAppointments";
+import { DocumentPrintPreview, type DocumentPrintType } from "@/components/terms/DocumentPrintPreview";
+import { usePatients, usePatientMutations } from "@/hooks/usePatients";
+import { useAppointmentMutations, useAppointments } from "@/hooks/useAppointments";
 import { useTransactionMutations } from "@/hooks/useFinancial";
 import { useProfessionals } from "@/hooks/useProfessionals";
 import { useClinic } from "@/hooks/useClinic";
+import { useClinicBranding } from "@/hooks/useTerms";
+import { formatClinicAddress } from "@/lib/utils";
+import type { AgendaAppointment } from "@/types/agenda";
+import type { Patient } from "@/types/patient";
+
+const DOCUMENT_TYPES: { value: DocumentPrintType; label: string }[] = [
+  { value: 'atestado', label: 'Atestado' },
+  { value: 'declaracao', label: 'Declaração' },
+  { value: 'receituario', label: 'Receituário' },
+];
+
+function mapDbPatientToPatient(p: {
+  id: string;
+  name: string;
+  cpf: string | null;
+  phone: string | null;
+  email: string | null;
+  address: string | null;
+  birth_date: string | null;
+  clinical_notes: string | null;
+  allergies: string[] | null;
+  lead_source: string | null;
+  referral_name: string | null;
+  created_at: string;
+  status: string;
+}): Patient {
+  return {
+    id: p.id,
+    name: p.name,
+    cpf: p.cpf || '',
+    phone: p.phone || '',
+    email: p.email || '',
+    address: p.address || '',
+    birthDate: p.birth_date || '',
+    clinicalNotes: p.clinical_notes || '',
+    allergies: p.allergies || [],
+    leadSource: p.lead_source || null,
+    referralName: p.referral_name || null,
+    createdAt: p.created_at,
+    status: p.status as 'active' | 'inactive',
+  };
+}
 
 export function QuickActions() {
   const [patientDialogOpen, setPatientDialogOpen] = useState(false);
   const [appointmentDialogOpen, setAppointmentDialogOpen] = useState(false);
   const [paymentDialogOpen, setPaymentDialogOpen] = useState(false);
+  const [documentDialogOpen, setDocumentDialogOpen] = useState(false);
+  const [documentPrintOpen, setDocumentPrintOpen] = useState(false);
+  const [documentType, setDocumentType] = useState<DocumentPrintType>('atestado');
+  const [documentPatientId, setDocumentPatientId] = useState('');
+  const [documentPatient, setDocumentPatient] = useState<Patient | null>(null);
 
   const { createPatient } = usePatientMutations();
+  const { patients } = usePatients();
   const { createAppointment } = useAppointmentMutations();
-  const { createTransaction } = useTransactionMutations();
+  const { createTransaction, ensureBookingFeeIncome } = useTransactionMutations();
   const { activeProfessionals } = useProfessionals();
   const { clinic } = useClinic();
+  const { branding } = useClinicBranding();
+  // Mesma fonte de dados da Agenda: usada aqui só para detectar conflito de horário.
+  const { appointments: rawAppointments } = useAppointments();
+
+  const clinicForDialog = clinic
+    ? { id: clinic.id, name: clinic.name, phone: clinic.phone || '', address: clinic.address || '', cnpj: clinic.cnpj || '' }
+    : null;
+
+  const existingAppointments: AgendaAppointment[] = rawAppointments.map((apt: any) => ({
+    id: apt.id,
+    date: apt.date,
+    startTime: apt.start_time?.slice(0, 5) || '',
+    endTime: apt.end_time?.slice(0, 5) || '',
+    patientId: apt.patient_id,
+    patientName: apt.patient?.name || 'Paciente',
+    professional: {
+      id: apt.professional?.id || apt.professional_id,
+      name: apt.professional?.name || 'Profissional',
+      specialty: apt.professional?.specialty || '',
+      cro: apt.professional?.cro || '',
+    },
+    procedure: apt.procedure,
+    procedureId: apt.procedure_id ?? undefined,
+    procedurePrice: apt.procedure_price == null ? undefined : Number(apt.procedure_price),
+    status: apt.status,
+    paymentStatus: apt.payment_status,
+    notes: apt.notes,
+    clinic: clinicForDialog || { id: apt.clinic_id, name: '', address: '', phone: '', cnpj: '' },
+  }));
 
   const handleSavePatient = async (patientData: any) => {
     await createPatient.mutateAsync({
@@ -31,6 +126,8 @@ export function QuickActions() {
       birth_date: patientData.birthDate || null,
       clinical_notes: patientData.clinicalNotes,
       allergies: patientData.allergies,
+      lead_source: patientData.leadSource || null,
+      referral_name: patientData.referralName || null,
       status: patientData.status,
     });
     setPatientDialogOpen(false);
@@ -38,7 +135,7 @@ export function QuickActions() {
 
   const handleSaveAppointment = async (appointmentData: any) => {
     // Transform from dialog format to database format
-    await createAppointment.mutateAsync({
+    const created = await createAppointment.mutateAsync({
       clinic_id: appointmentData.clinic?.id,
       patient_id: appointmentData.patientId,
       professional_id: appointmentData.professional?.id || appointmentData.professionalId,
@@ -46,14 +143,46 @@ export function QuickActions() {
       start_time: appointmentData.startTime,
       end_time: appointmentData.endTime,
       procedure: appointmentData.procedure,
+      procedure_id: appointmentData.procedureId ?? null,
+      procedure_price: appointmentData.procedurePrice ?? null,
       status: appointmentData.status || 'pending',
       payment_status: appointmentData.paymentStatus || 'pending',
       notes: appointmentData.notes || null,
       seller_id: appointmentData.sellerId || null,
       lead_source: appointmentData.leadSource || null,
+      referral_name: appointmentData.referralName ?? null,
       booking_fee: appointmentData.bookingFee ?? null,
+      booking_fee_payment_method: appointmentData.bookingFeePaymentMethod ?? null,
     });
+
+    if (created?.id && (appointmentData.bookingFee ?? 0) > 0) {
+      try {
+        await ensureBookingFeeIncome.mutateAsync({
+          appointmentId: created.id,
+          amount: appointmentData.bookingFee,
+          paymentMethod: appointmentData.bookingFeePaymentMethod || 'pix',
+          patientName: appointmentData.patientName || 'Paciente',
+          patientId: appointmentData.patientId,
+        });
+      } catch (err) {
+        console.error('Erro ao lançar sinal de agendamento:', err);
+      }
+    }
+
     setAppointmentDialogOpen(false);
+  };
+
+  const openDocumentDialog = () => {
+    setDocumentType('atestado');
+    setDocumentPatientId(patients[0]?.id || '');
+    setDocumentDialogOpen(true);
+  };
+
+  const handleDocumentContinue = () => {
+    const dbPatient = patients.find((p) => p.id === documentPatientId);
+    setDocumentPatient(dbPatient ? mapDbPatientToPatient(dbPatient) : null);
+    setDocumentDialogOpen(false);
+    setDocumentPrintOpen(true);
   };
 
   const handleSaveTransaction = async (transaction: any) => {
@@ -89,6 +218,13 @@ export function QuickActions() {
       description: "Registrar movimento",
       onClick: () => setPaymentDialogOpen(true),
     },
+    {
+      icon: FileText,
+      label: "Emitir Documento",
+      description: "Atestado, declaração ou receituário",
+      onClick: openDocumentDialog,
+      feature: "termos",
+    },
   ];
 
   return (
@@ -99,28 +235,46 @@ export function QuickActions() {
           <p className="text-sm text-muted-foreground">Atalhos para tarefas comuns</p>
         </div>
         <div className="p-4">
-          <div className="grid grid-cols-1 gap-3">
+          <div className="grid grid-cols-2 gap-3">
             {actions.map((action) => {
               const Icon = action.icon;
+              const buttonClassName = "flex h-auto w-full flex-col items-center gap-2 p-4 hover:border-primary hover:bg-accent";
+              const content = (
+                <>
+                  <div className="rounded-lg bg-primary/10 p-2">
+                    <Icon className="h-5 w-5 text-primary" />
+                  </div>
+                  <div className="text-center w-full space-y-0.5">
+                    <p className="text-sm font-medium leading-tight">
+                      {action.label}
+                    </p>
+                    <p className="text-xs text-muted-foreground leading-tight">
+                      {action.description}
+                    </p>
+                  </div>
+                </>
+              );
               return (
                 <div key={action.label} className="min-w-0">
-                  <Button
-                    variant="outline"
-                    className="flex h-auto w-full flex-col items-center gap-2 p-4 hover:border-primary hover:bg-accent"
-                    onClick={action.onClick}
-                  >
-                    <div className="rounded-lg bg-primary/10 p-2">
-                      <Icon className="h-5 w-5 text-primary" />
-                    </div>
-                    <div className="text-center w-full space-y-0.5">
-                      <p className="text-sm font-medium leading-tight">
-                        {action.label}
-                      </p>
-                      <p className="text-xs text-muted-foreground leading-tight">
-                        {action.description}
-                      </p>
-                    </div>
-                  </Button>
+                  {action.feature ? (
+                    <FeatureButton
+                      feature={action.feature}
+                      variant="outline"
+                      className={buttonClassName}
+                      onClick={action.onClick}
+                      lockedMessage={`Emitir documentos não está disponível no seu plano atual`}
+                    >
+                      {content}
+                    </FeatureButton>
+                  ) : (
+                    <Button
+                      variant="outline"
+                      className={buttonClassName}
+                      onClick={action.onClick}
+                    >
+                      {content}
+                    </Button>
+                  )}
                 </div>
               );
             })}
@@ -147,14 +301,9 @@ export function QuickActions() {
           specialty: p.specialty,
           cro: p.cro,
         }))}
-        clinics={clinic ? [{
-          id: clinic.id,
-          name: clinic.name,
-          phone: clinic.phone || '',
-          address: clinic.address || '',
-          cnpj: clinic.cnpj || '',
-        }] : []}
-        existingAppointments={[]}
+        clinics={clinicForDialog ? [clinicForDialog] : []}
+        existingAppointments={existingAppointments}
+        defaultClinicId={clinic?.id}
       />
 
       {/* Payment Form Dialog */}
@@ -163,6 +312,86 @@ export function QuickActions() {
         onOpenChange={setPaymentDialogOpen}
         onSave={handleSaveTransaction}
         type="income"
+      />
+
+      {/* Emitir Documento: escolher tipo + paciente, depois abre o preview/impressão */}
+      <Dialog open={documentDialogOpen} onOpenChange={setDocumentDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Emitir Documento</DialogTitle>
+            <DialogDescription>
+              Escolha o tipo de documento e o paciente. Você poderá editar o conteúdo antes de gerar o PDF.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-2">
+            <div className="space-y-2">
+              <Label>Tipo de documento</Label>
+              <Select value={documentType} onValueChange={(v) => setDocumentType(v as DocumentPrintType)}>
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {DOCUMENT_TYPES.map((t) => (
+                    <SelectItem key={t.value} value={t.value}>
+                      {t.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2">
+              <Label>Paciente</Label>
+              <Select value={documentPatientId} onValueChange={setDocumentPatientId}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Selecione o paciente" />
+                </SelectTrigger>
+                <SelectContent>
+                  {patients.map((p) => (
+                    <SelectItem key={p.id} value={p.id}>
+                      {p.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              {patients.length === 0 && (
+                <p className="text-sm text-muted-foreground">
+                  Nenhum paciente cadastrado. Você ainda pode emitir o documento e preencher o nome manualmente.
+                </p>
+              )}
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setDocumentDialogOpen(false)}>
+              Cancelar
+            </Button>
+            <Button onClick={handleDocumentContinue}>Continuar</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <DocumentPrintPreview
+        open={documentPrintOpen}
+        onOpenChange={setDocumentPrintOpen}
+        type={documentType}
+        patient={documentPatient}
+        clinicId={clinic?.id}
+        clinicName={clinic?.name || ''}
+        clinicCnpj={clinic?.cnpj || ''}
+        clinicRazaoSocial={clinic?.razao_social || clinic?.name || ''}
+        clinicLogoUrl={branding?.logo}
+        clinicAddress={clinic ? formatClinicAddress(clinic) || undefined : undefined}
+        clinicPhone={clinic?.phone || undefined}
+        clinicEmail={clinic?.email || undefined}
+        clinicCity={clinic?.city || undefined}
+        clinicState={clinic?.state || undefined}
+        primaryColor={branding?.primaryColor || '#000000'}
+        useDefaultColor={!branding?.hasCustomColor}
+        professionals={activeProfessionals.map((p) => ({
+          id: p.id,
+          name: p.name,
+          specialty: p.specialty,
+          cro: p.cro,
+        }))}
       />
     </>
   );

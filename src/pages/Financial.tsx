@@ -372,7 +372,7 @@ export default function Financial() {
         <div className="space-y-6">
           <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
             <div>
-              <h1 className="text-2xl font-bold text-foreground">Financeiro / Caixa</h1>
+              <h1 className="text-2xl font-bold text-foreground">Caixa</h1>
               <p className="text-sm text-muted-foreground">Carregando...</p>
             </div>
           </div>
@@ -393,7 +393,7 @@ export default function Financial() {
       <div className="space-y-6">
         <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <div>
-            <h1 className="text-2xl font-bold text-foreground">Financeiro / Caixa</h1>
+            <h1 className="text-2xl font-bold text-foreground">Caixa</h1>
             <p className="text-sm text-muted-foreground">
               {format(new Date(), "EEEE, d 'de' MMMM 'de' yyyy", { locale: ptBR })}
             </p>

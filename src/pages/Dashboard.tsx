@@ -56,7 +56,7 @@ export default function Dashboard() {
           <StatCard
             title="Agendamentos Hoje"
             value={stats?.appointmentsToday || 0}
-            subtitle="vs ontem"
+            subtitle="exceto cancelados · vs ontem"
             icon={Calendar}
             trend={stats?.appointmentTrend ? { 
               value: Math.abs(stats.appointmentTrend), 

@@ -12,17 +12,22 @@ import { RequireFeature } from "@/components/subscription/RequireFeature";
 import { OnboardingScreen } from "@/components/onboarding/OnboardingScreen";
 import { useOnboarding } from "@/hooks/useOnboarding";
 const Index = React.lazy(() => import("./pages/Index"));
+const Landing = React.lazy(() => import("./pages/Landing"));
 const Login = React.lazy(() => import("./pages/Login"));
 const ForgotPassword = React.lazy(() => import("./pages/ForgotPassword"));
 const ResetPassword = React.lazy(() => import("./pages/ResetPassword"));
 const Patients = React.lazy(() => import("./pages/Patients"));
 const Agenda = React.lazy(() => import("./pages/Agenda"));
 const Financial = React.lazy(() => import("./pages/Financial"));
+const Receivables = React.lazy(() => import("./pages/Receivables"));
 const Terms = React.lazy(() => import("./pages/Terms"));
 const Reports = React.lazy(() => import("./pages/Reports"));
 const Commissions = React.lazy(() => import("./pages/Commissions"));
 const Inventory = React.lazy(() => import("./pages/Inventory"));
 const Professionals = React.lazy(() => import("./pages/Professionals"));
+const Procedures = React.lazy(() => import("./pages/Procedures"));
+const Crm = React.lazy(() => import("./pages/Crm"));
+const Integrations = React.lazy(() => import("./pages/Integrations"));
 const TimeClock = React.lazy(() => import("./pages/TimeClock"));
 const Administration = React.lazy(() => import("./pages/Administration"));
 const SuperAdmin = React.lazy(() => import("./pages/SuperAdmin"));
@@ -30,6 +35,7 @@ const Settings = React.lazy(() => import("./pages/Settings"));
 // TODO(go-live): reativar módulo Atendimento omnichannel (Meta WhatsApp)
 // import Atendimento from "./pages/Atendimento";
 const Privacy = React.lazy(() => import("./pages/Privacy"));
+const SignDocument = React.lazy(() => import("./pages/SignDocument"));
 const SelectClinic = React.lazy(() => import("./pages/SelectClinic"));
 const NotFound = React.lazy(() => import("./pages/NotFound"));
 const Billing = React.lazy(() => import("./pages/Billing"));
@@ -133,17 +139,33 @@ function AuthenticatedAppLayout() {
   );
 }
 
+function PublicHome() {
+  const { user, isLoading } = useAuth();
+
+  if (isLoading) {
+    return <LoadingScreen />;
+  }
+
+  if (user) {
+    return <Navigate to="/app" replace />;
+  }
+
+  return <Landing />;
+}
+
 function AppRoutes() {
   return (
     <React.Suspense fallback={<LoadingScreen />}>
       <Routes>
+      <Route path="/" element={<PublicHome />} />
       <Route path="/login" element={<Login />} />
       <Route path="/privacidade" element={<Privacy />} />
       <Route path="/forgot-password" element={<ForgotPassword />} />
       <Route path="/reset-password" element={<ResetPassword />} />
+      <Route path="/assinar/:token" element={<SignDocument />} />
 
       <Route element={<AuthenticatedAppLayout />}>
-        <Route path="/" element={<Index />} />
+        <Route path="/app" element={<Index />} />
 
         <Route
           path="/pacientes"
@@ -168,6 +190,15 @@ function AppRoutes() {
           element={
             <RequireFeature feature="financeiro">
               <Financial />
+            </RequireFeature>
+          }
+        />
+
+        <Route
+          path="/contas-a-receber"
+          element={
+            <RequireFeature feature="contas_receber">
+              <Receivables />
             </RequireFeature>
           }
         />
@@ -218,10 +249,37 @@ function AppRoutes() {
         />
 
         <Route
+          path="/procedimentos"
+          element={
+            <RequireFeature feature="procedimentos">
+              <Procedures />
+            </RequireFeature>
+          }
+        />
+
+        <Route
+          path="/crm"
+          element={
+            <RequireFeature feature="crm">
+              <Crm />
+            </RequireFeature>
+          }
+        />
+
+        <Route
           path="/ponto"
           element={
             <RequireFeature feature="ponto">
               <TimeClock />
+            </RequireFeature>
+          }
+        />
+
+        <Route
+          path="/integracoes"
+          element={
+            <RequireFeature feature="integracoes">
+              <Integrations />
             </RequireFeature>
           }
         />

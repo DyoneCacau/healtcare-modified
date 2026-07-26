@@ -144,7 +144,7 @@ export default function ResetPassword() {
       <Card className="w-full max-w-md shadow-xl">
         <CardHeader className="space-y-1 text-center">
           <img 
-            src="/logo.png" 
+            src="/logo-512.png" 
             alt="HealthCare" 
             className="h-12 w-12 rounded-full object-cover mx-auto mb-2"
           />

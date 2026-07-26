@@ -15,7 +15,7 @@ CREATE TABLE IF NOT EXISTS public.clinic_documents (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   clinic_id UUID NOT NULL REFERENCES public.clinics(id) ON DELETE CASCADE,
   name TEXT NOT NULL,
-  type TEXT NOT NULL CHECK (type IN ('atestado', 'declaracao', 'termo_ciencia', 'recibo', 'outro')),
+  type TEXT NOT NULL CHECK (type IN ('atestado', 'declaracao', 'termo_ciencia', 'recibo', 'receituario', 'outro')),
   file_url TEXT,
   content TEXT,
   is_upload BOOLEAN NOT NULL DEFAULT false,

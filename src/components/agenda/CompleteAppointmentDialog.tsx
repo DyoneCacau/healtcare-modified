@@ -1,11 +1,9 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo, useCallback } from 'react';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import {
   CheckCircle,
   DollarSign,
-  Percent,
-  AlertTriangle,
   User,
   Stethoscope,
   Calculator,
@@ -14,6 +12,7 @@ import {
   Users,
   TrendingUp,
   CalendarPlus,
+  Wallet,
 } from 'lucide-react';
 import {
   Dialog,
@@ -31,29 +30,44 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { Input } from '@/components/ui/input';
+import { CurrencyInput } from '@/components/ui/currency-input';
+import { DateInput } from '@/components/ui/date-input';
+import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
 import { Checkbox } from '@/components/ui/checkbox';
-import { AgendaAppointment, leadSourceLabels } from '@/types/agenda';
+import { AgendaAppointment } from '@/types/agenda';
+import { LeadSourceBadge } from '@/components/crm/LeadSourceBadge';
 import { PaymentMethod } from '@/types/financial';
 import { CommissionRule, beneficiaryTypeLabels, calculationUnitLabels } from '@/types/commission';
 import {
   findApplicableRules,
   calculateCommissionAmount,
-  getProcedurePrice,
   formatCommissionInfo,
   validateAppointmentCompletion,
   ValidationResult,
 } from '@/services/commissionService';
 import { cn } from '@/lib/utils';
+import { remainingAfterBookingFee } from '@/lib/bookingFee';
+import { AppointmentMaterialsEditor } from '@/components/agenda/AppointmentMaterialsEditor';
+import { useProcedureMaterials } from '@/hooks/useProcedureMaterials';
+import { useInventoryProducts } from '@/hooks/useInventory';
+import { useClinicProcedures } from '@/hooks/useClinicProcedures';
+import { usePermissions } from '@/hooks/usePermissions';
+import { useAuth } from '@/hooks/useAuth';
+import { parseQuantityInput } from '@/lib/quantityInput';
+import type { AppointmentMaterialUsageInput, ProcedureMaterialDraft } from '@/types/procedureMaterial';
+import { toast } from 'sonner';
 
 export interface CommissionBreakdownItem {
   rule: CommissionRule;
   amount: number;
 }
+
+export type BillingDestination = 'cash' | 'receivable';
 
 interface CompleteAppointmentDialogProps {
   open: boolean;
@@ -65,7 +79,11 @@ interface CompleteAppointmentDialogProps {
     paymentMethod: PaymentMethod,
     quantity: number,
     commissionBreakdown: CommissionBreakdownItem[],
-    scheduleReturn?: boolean
+    scheduleReturn?: boolean,
+    adjustmentReason?: string,
+    billingDestination?: BillingDestination,
+    dueDate?: string,
+    materialsUsage?: AppointmentMaterialUsageInput[],
   ) => void;
   commissionRules?: CommissionRule[];
 }
@@ -82,55 +100,171 @@ export function CompleteAppointmentDialog({
 }: CompleteAppointmentDialogProps) {
   const [serviceValue, setServiceValue] = useState(0);
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('pix');
+  const [billingDestination, setBillingDestination] = useState<BillingDestination>('cash');
+  const [dueDate, setDueDate] = useState(format(new Date(), 'yyyy-MM-dd'));
   const [quantity, setQuantity] = useState(1);
   const [applicableRules, setApplicableRules] = useState<CommissionRule[]>([]);
   const [commissionBreakdown, setCommissionBreakdown] = useState<{rule: CommissionRule; amount: number}[]>([]);
   const [validation, setValidation] = useState<ValidationResult>({ isValid: true });
   const [proceedWithoutRule, setProceedWithoutRule] = useState(false);
   const [scheduleReturn, setScheduleReturn] = useState(false);
+  const [adjustmentReason, setAdjustmentReason] = useState('');
+  const [materialDrafts, setMaterialDrafts] = useState<ProcedureMaterialDraft[]>([]);
+  const [overrideEnabled, setOverrideEnabled] = useState(false);
+  const [overrideReason, setOverrideReason] = useState('');
+  const [selectedProcedureId, setSelectedProcedureId] = useState<string>('');
+  const [materialsTouched, setMaterialsTouched] = useState(false);
+  const [materialsConfirmed, setMaterialsConfirmed] = useState(false);
 
+  const { isSuperAdmin } = useAuth();
+  const { can } = usePermissions();
+  const canOverrideStock = isSuperAdmin || can('estoque_liberar', 'can_edit');
+  const { activeProcedures } = useClinicProcedures();
+  const { materials: templateMaterials } = useProcedureMaterials(selectedProcedureId || null);
+  const { activeProducts } = useInventoryProducts();
+
+  const selectedProcedure = useMemo(
+    () => activeProcedures.find((p) => p.id === selectedProcedureId) || null,
+    [activeProcedures, selectedProcedureId],
+  );
+
+  // Reset do formulário ao abrir o diálogo (não depende de activeProcedures — isso apagava as linhas)
   useEffect(() => {
-    if (appointment) {
-      // Reset states
-      setProceedWithoutRule(false);
-      setScheduleReturn(false);
-      setQuantity(1);
-      
-      // Validate appointment completion
-      const validationResult = validateAppointmentCompletion(
-        appointment,
-        commissionRules,
-        [],
-        true
-      );
-      setValidation(validationResult);
+    if (!open || !appointment) return;
 
-      // Get suggested price from procedure table
-      const suggestedPrice = getProcedurePrice(
-        appointment.procedure,
-        appointment.clinic.id
-      );
-      setServiceValue(suggestedPrice);
+    setProceedWithoutRule(false);
+    setScheduleReturn(false);
+    setAdjustmentReason('');
+    setQuantity(1);
+    setBillingDestination('cash');
+    setDueDate(format(new Date(), 'yyyy-MM-dd'));
+    setPaymentMethod('pix');
+    setOverrideEnabled(false);
+    setOverrideReason('');
+    setMaterialDrafts([
+      {
+        key: `material-${appointment.id}-seed`,
+        productId: '',
+        productName: '',
+        productUnit: 'un',
+        quantity: '',
+        currentStock: 0,
+        fromTemplate: false,
+      },
+    ]);
+    setMaterialsTouched(false);
+    setMaterialsConfirmed(false);
+    setSelectedProcedureId(appointment.procedureId || '');
+    setServiceValue(appointment.procedurePrice ?? 150);
+  }, [open, appointment?.id]);
 
-      // Find ALL applicable commission rules (professional + seller + reception)
-      const rules = findApplicableRules(
-        commissionRules,
-        appointment.professional.id,
-        appointment.clinic.id,
-        appointment.procedure,
-        new Date(appointment.date),
-        appointment.sellerId
-      );
-      setApplicableRules(rules);
+  // Validação e regras de comissão (não reseta materiais)
+  useEffect(() => {
+    if (!appointment) return;
 
-      // Calculate breakdown
-      const breakdown = rules.map(rule => ({
-        rule,
-        amount: calculateCommissionAmount(rule, suggestedPrice, 1)
-      }));
-      setCommissionBreakdown(breakdown);
+    setValidation(
+      validateAppointmentCompletion(appointment, commissionRules, [], true),
+    );
+
+    const rules = findApplicableRules(
+      commissionRules,
+      appointment.professional.id,
+      appointment.clinic.id,
+      appointment.procedure,
+      new Date(appointment.date),
+      appointment.sellerId,
+    );
+    setApplicableRules(rules);
+  }, [
+    appointment?.id,
+    appointment?.professional.id,
+    appointment?.clinic.id,
+    appointment?.procedure,
+    appointment?.date,
+    appointment?.sellerId,
+    commissionRules,
+  ]);
+
+  // Resolve procedimento do catálogo quando a lista carregar (sem limpar materiais nem sobrescrever troca manual)
+  useEffect(() => {
+    if (!appointment || activeProcedures.length === 0) return;
+
+    setSelectedProcedureId((prev) => {
+      if (prev && activeProcedures.some((p) => p.id === prev)) return prev;
+
+      if (appointment.procedureId) {
+        const byId = activeProcedures.find((p) => p.id === appointment.procedureId);
+        if (byId) return byId.id;
+      }
+
+      const matchedByName = activeProcedures.find(
+        (p) => p.name.trim().toLowerCase() === (appointment.procedure || '').trim().toLowerCase(),
+      );
+      return matchedByName?.id || prev || '';
+    });
+  }, [appointment?.id, appointment?.procedureId, appointment?.procedure, activeProcedures]);
+
+  // Preço do catálogo só quando o agendamento não tem snapshot e ainda está no valor padrão
+  useEffect(() => {
+    if (!appointment || appointment.procedurePrice != null || !selectedProcedureId) return;
+    const proc = activeProcedures.find((p) => p.id === selectedProcedureId);
+    if (!proc) return;
+    setServiceValue((prev) => (prev === 150 ? proc.default_price : prev));
+  }, [appointment?.id, appointment?.procedurePrice, selectedProcedureId, activeProcedures]);
+
+  // Preenche materiais sugeridos do procedimento (só se o usuário ainda não editou)
+  useEffect(() => {
+    if (!appointment || materialsTouched) return;
+
+    if (templateMaterials.length > 0) {
+      setMaterialDrafts(
+        templateMaterials.map((m) => ({
+          key: m.id,
+          productId: m.product_id,
+          productName: m.product_name || '',
+          productUnit: m.product_unit || 'un',
+          quantity: String(m.default_quantity).replace('.', ','),
+          currentStock: Number(m.current_stock) || 0,
+          fromTemplate: true,
+        })),
+      );
+      return;
     }
-  }, [appointment, commissionRules]);
+
+    setMaterialDrafts((prev) => {
+      if (prev.length > 0) return prev;
+      return [
+        {
+          key: `material-${appointment.id}-empty`,
+          productId: '',
+          productName: '',
+          productUnit: 'un',
+          quantity: '',
+          currentStock: 0,
+          fromTemplate: false,
+        },
+      ];
+    });
+  }, [appointment?.id, selectedProcedureId, templateMaterials, materialsTouched]);
+
+  const handleMaterialsChange = useCallback((next: ProcedureMaterialDraft[]) => {
+    setMaterialsTouched(true);
+    setMaterialDrafts(
+      next.length > 0
+        ? next
+        : [
+            {
+              key: `material-${Date.now()}`,
+              productId: '',
+              productName: '',
+              productUnit: 'un',
+              quantity: '',
+              currentStock: 0,
+              fromTemplate: false,
+            },
+          ],
+    );
+  }, []);
 
   useEffect(() => {
     if (applicableRules.length > 0 && serviceValue > 0) {
@@ -153,21 +287,81 @@ export function CompleteAppointmentDialog({
     return validation.isValid;
   };
 
+  const buildMaterialsUsage = (): AppointmentMaterialUsageInput[] | null => {
+    const usage: AppointmentMaterialUsageInput[] = [];
+    for (const draft of materialDrafts) {
+      if (!draft.productId && !draft.quantity.trim()) continue;
+      if (!draft.productId) {
+        toast.error('Selecione o material em todas as linhas preenchidas');
+        return null;
+      }
+      const qty = parseQuantityInput(draft.quantity);
+      if (qty == null) {
+        toast.error(`Quantidade inválida em ${draft.productName || 'material'}. Digite um valor como 1 ou 0,2`);
+        return null;
+      }
+      const insufficient = qty > draft.currentStock;
+      if (insufficient && !(canOverrideStock && overrideEnabled)) {
+        toast.error('Há material sem estoque suficiente. Libere com permissão ou ajuste a quantidade.');
+        return null;
+      }
+      usage.push({
+        productId: draft.productId,
+        productName: draft.productName,
+        productUnit: draft.productUnit,
+        quantity: qty,
+        overridden: insufficient,
+        overrideReason: insufficient ? (overrideReason.trim() || 'Liberado sem saldo') : undefined,
+      });
+    }
+    return usage;
+  };
+
+  const handleProcedureChange = (procedureId: string) => {
+    setSelectedProcedureId(procedureId);
+    setMaterialsTouched(false);
+    setMaterialDrafts([]);
+    const proc = activeProcedures.find((p) => p.id === procedureId);
+    if (proc) {
+      setServiceValue(proc.default_price);
+    }
+  };
+
   const handleComplete = () => {
     if (!appointment || !canComplete()) return;
+    const materialsUsage = buildMaterialsUsage();
+    if (materialsUsage == null) return;
+    if (!materialsConfirmed) {
+      toast.error('Confirme que conferiu os materiais usados no procedimento antes de finalizar');
+      return;
+    }
+
+    const completedAppointment: AgendaAppointment = {
+      ...appointment,
+      procedureId: selectedProcedureId || appointment.procedureId,
+      procedure: selectedProcedure?.name || appointment.procedure,
+      procedurePrice: selectedProcedure?.default_price ?? appointment.procedurePrice,
+    };
+
     onComplete(
-      appointment,
+      completedAppointment,
       serviceValue,
       paymentMethod,
       quantity,
       commissionBreakdown,
-      scheduleReturn
+      scheduleReturn,
+      adjustmentReason.trim() || undefined,
+      billingDestination,
+      billingDestination === 'receivable' ? dueDate : undefined,
+      materialsUsage,
     );
     onOpenChange(false);
   };
 
   if (!appointment) return null;
 
+  const bookingFee = appointment.bookingFee ?? 0;
+  const remainingToCharge = remainingAfterBookingFee(serviceValue, bookingFee);
   const totalCommission = commissionBreakdown.reduce((sum, item) => sum + item.amount, 0);
   const netValue = serviceValue - totalCommission;
   const hasProfessionalRule = commissionBreakdown.some(b => b.rule.beneficiaryType === 'professional');
@@ -177,14 +371,20 @@ export function CompleteAppointmentDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
+      <DialogContent
+        className="max-w-lg max-h-[90vh] overflow-y-auto"
+        // Evita o Dialog “roubar” o foco/clique do seletor de materiais
+        onOpenAutoFocus={(e) => e.preventDefault()}
+      >
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <CheckCircle className="h-5 w-5 text-emerald-600" />
             Finalizar Atendimento
           </DialogTitle>
           <DialogDescription>
-            Registre o pagamento e calcule as comissões
+            {bookingFee > 0
+              ? 'O sinal já pago é abatido do procedimento. Escolha o destino do saldo restante.'
+              : 'Escolha receber agora no Caixa ou lançar em Contas a receber'}
           </DialogDescription>
         </DialogHeader>
 
@@ -217,7 +417,7 @@ export function CompleteAppointmentDialog({
                 <Stethoscope className="h-4 w-4 text-muted-foreground" />
                 <span>{appointment.professional.name}</span>
                 <Badge variant="outline" className="ml-auto">
-                  {appointment.procedure}
+                  {selectedProcedure?.name || appointment.procedure}
                 </Badge>
               </div>
               <div className="text-sm text-muted-foreground">
@@ -240,7 +440,7 @@ export function CompleteAppointmentDialog({
                     <div className="flex items-center gap-1">
                       <TrendingUp className="h-3 w-3 text-muted-foreground" />
                       <span className="text-muted-foreground">Origem:</span>
-                      <span className="font-medium">{leadSourceLabels[appointment.leadSource]}</span>
+                      <LeadSourceBadge source={appointment.leadSource} className="text-[11px]" />
                     </div>
                   )}
                 </div>
@@ -250,26 +450,63 @@ export function CompleteAppointmentDialog({
 
           <Separator />
 
+          <div className="space-y-2">
+            <Label>Procedimento realizado</Label>
+            <Select
+              value={selectedProcedureId || undefined}
+              onValueChange={handleProcedureChange}
+              disabled={validation.errorCode === 'DUPLICATE'}
+            >
+              <SelectTrigger>
+                <SelectValue placeholder="Selecione o procedimento" />
+              </SelectTrigger>
+              <SelectContent>
+                {activeProcedures.map((proc) => (
+                  <SelectItem key={proc.id} value={proc.id}>
+                    {proc.name}
+                    {proc.category ? ` · ${proc.category}` : ''}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <p className="text-xs text-muted-foreground">
+              Ao trocar o procedimento, os materiais sugeridos são recarregados e podem ser editados.
+            </p>
+          </div>
+
+          <AppointmentMaterialsEditor
+            drafts={materialDrafts}
+            products={activeProducts.map((p) => ({
+              id: p.id,
+              name: p.name,
+              unit: p.unit,
+              current_stock: Number(p.current_stock) || 0,
+            }))}
+            canOverride={canOverrideStock}
+            overrideEnabled={overrideEnabled}
+            overrideReason={overrideReason}
+            procedureLabel={selectedProcedure?.name || appointment.procedure}
+            onOverrideEnabledChange={setOverrideEnabled}
+            onOverrideReasonChange={setOverrideReason}
+            onChange={handleMaterialsChange}
+          />
+
+          <Separator />
+
           {/* Payment Info */}
           <div className="grid gap-4">
             <div className="grid grid-cols-2 gap-4">
               <div className="grid gap-2">
                 <Label htmlFor="serviceValue">Valor do Atendimento</Label>
-                <div className="relative">
-                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground">
-                    R$
-                  </span>
-                  <Input
-                    id="serviceValue"
-                    type="number"
-                    step="0.01"
-                    min="0"
-                    value={serviceValue}
-                    onChange={(e) => setServiceValue(parseFloat(e.target.value) || 0)}
-                    className="pl-10"
-                    disabled={validation.errorCode === 'DUPLICATE'}
-                  />
-                </div>
+                <CurrencyInput
+                  id="serviceValue"
+                  value={serviceValue}
+                  onValueChange={setServiceValue}
+                  disabled={validation.errorCode === 'DUPLICATE'}
+                />
+                <p className="text-xs text-muted-foreground">
+                  Valor sugerido pelo catálogo. Edite para aplicar desconto, indicação ou negociação.
+                </p>
               </div>
 
               {needsQuantity && (
@@ -287,26 +524,126 @@ export function CompleteAppointmentDialog({
                 </div>
               )}
             </div>
-
             <div className="grid gap-2">
-              <Label>Forma de Pagamento</Label>
-              <Select
-                value={paymentMethod}
-                onValueChange={(v) => setPaymentMethod(v as PaymentMethod)}
+              <Label htmlFor="adjustmentReason">Observação sobre preço (opcional)</Label>
+              <Textarea
+                id="adjustmentReason"
+                value={adjustmentReason}
+                onChange={(event) => setAdjustmentReason(event.target.value)}
+                placeholder="Ex.: desconto por indicação, condição especial..."
+                rows={2}
                 disabled={validation.errorCode === 'DUPLICATE'}
-              >
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="cash">Dinheiro</SelectItem>
-                  <SelectItem value="credit">Cartão Crédito</SelectItem>
-                  <SelectItem value="debit">Cartão Débito</SelectItem>
-                  <SelectItem value="pix">PIX</SelectItem>
-                  <SelectItem value="voucher">Voucher</SelectItem>
-                </SelectContent>
-              </Select>
+              />
+              {appointment.leadSource === 'referral' && (
+                <p className="text-xs text-muted-foreground">
+                  Atendimento por indicação{appointment.referralName ? `: ${appointment.referralName}` : ''}.
+                </p>
+              )}
             </div>
+
+            {bookingFee > 0 && (
+              <Card className="border-emerald-200 bg-emerald-50/60">
+                <CardContent className="p-3 space-y-1 text-sm">
+                  <div className="flex items-center justify-between">
+                    <span className="text-muted-foreground">Valor do procedimento</span>
+                    <span className="font-medium">{formatCurrency(serviceValue)}</span>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span className="text-muted-foreground">Sinal já pago no agendamento</span>
+                    <span className="font-medium text-emerald-700">− {formatCurrency(bookingFee)}</span>
+                  </div>
+                  <Separator className="my-1" />
+                  <div className="flex items-center justify-between">
+                    <span className="font-medium">
+                      {remainingToCharge > 0
+                        ? (billingDestination === 'receivable' ? 'Saldo a lançar a receber' : 'Saldo a receber agora')
+                        : 'Saldo restante'}
+                    </span>
+                    <span className="font-semibold text-emerald-800">{formatCurrency(remainingToCharge)}</span>
+                  </div>
+                  {remainingToCharge <= 0 && (
+                    <p className="text-xs text-muted-foreground pt-1">
+                      O procedimento fica quitado com o sinal já lançado no caixa. Nada será cobrado agora.
+                    </p>
+                  )}
+                </CardContent>
+              </Card>
+            )}
+
+            {remainingToCharge > 0 && (
+              <>
+                <div className="grid gap-2">
+                  <Label>{bookingFee > 0 ? 'Destino do saldo' : 'Destino do valor'}</Label>
+                  <div className="grid grid-cols-2 gap-2">
+                    <Button
+                      type="button"
+                      variant={billingDestination === 'cash' ? 'default' : 'outline'}
+                      className="justify-start h-auto py-3"
+                      disabled={validation.errorCode === 'DUPLICATE'}
+                      onClick={() => setBillingDestination('cash')}
+                    >
+                      <DollarSign className="mr-2 h-4 w-4 shrink-0" />
+                      <span className="text-left">
+                        <span className="block text-sm font-medium">Receber agora</span>
+                        <span className="block text-xs font-normal opacity-80">
+                          Lança {formatCurrency(remainingToCharge)} no Caixa
+                        </span>
+                      </span>
+                    </Button>
+                    <Button
+                      type="button"
+                      variant={billingDestination === 'receivable' ? 'default' : 'outline'}
+                      className="justify-start h-auto py-3"
+                      disabled={validation.errorCode === 'DUPLICATE'}
+                      onClick={() => setBillingDestination('receivable')}
+                    >
+                      <Wallet className="mr-2 h-4 w-4 shrink-0" />
+                      <span className="text-left">
+                        <span className="block text-sm font-medium">Contas a receber</span>
+                        <span className="block text-xs font-normal opacity-80">
+                          Cobrar {formatCurrency(remainingToCharge)} depois
+                        </span>
+                      </span>
+                    </Button>
+                  </div>
+                </div>
+
+                {billingDestination === 'cash' ? (
+                  <div className="grid gap-2">
+                    <Label>{bookingFee > 0 ? 'Forma de Pagamento do saldo' : 'Forma de Pagamento'}</Label>
+                    <Select
+                      value={paymentMethod}
+                      onValueChange={(v) => setPaymentMethod(v as PaymentMethod)}
+                      disabled={validation.errorCode === 'DUPLICATE'}
+                    >
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="cash">Dinheiro</SelectItem>
+                        <SelectItem value="credit">Cartão Crédito</SelectItem>
+                        <SelectItem value="debit">Cartão Débito</SelectItem>
+                        <SelectItem value="pix">PIX</SelectItem>
+                        <SelectItem value="voucher">Voucher</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                ) : (
+                  <div className="grid gap-2">
+                    <Label>Vencimento</Label>
+                    <DateInput
+                      value={dueDate}
+                      onChange={setDueDate}
+                      disabled={validation.errorCode === 'DUPLICATE'}
+                    />
+                    <p className="text-xs text-muted-foreground">
+                      O saldo fica em aberto até a baixa em Contas a receber (que gera o lançamento no Caixa).
+                      O sinal já pago permanece no caixa com origem no agendamento.
+                    </p>
+                  </div>
+                )}
+              </>
+            )}
           </div>
 
           <Separator />
@@ -444,6 +781,24 @@ export function CompleteAppointmentDialog({
               Agendar retorno após finalizar
             </label>
           </div>
+
+          <div className="flex items-start space-x-2 rounded-lg border border-emerald-200 bg-emerald-50/70 p-3">
+            <Checkbox
+              id="materialsConfirmed"
+              checked={materialsConfirmed}
+              onCheckedChange={(checked) => setMaterialsConfirmed(checked === true)}
+              disabled={validation.errorCode === 'DUPLICATE'}
+            />
+            <label
+              htmlFor="materialsConfirmed"
+              className="text-sm leading-snug cursor-pointer"
+            >
+              <span className="font-medium">Confirmei os materiais usados no procedimento</span>
+              <span className="block text-xs text-muted-foreground mt-0.5">
+                Revise marca e quantidade (ml/un). Depois da finalização ainda é possível editar na Agenda; tudo fica na auditoria.
+              </span>
+            </label>
+          </div>
         </div>
 
         <DialogFooter className="gap-2">
@@ -452,14 +807,18 @@ export function CompleteAppointmentDialog({
           </Button>
           <Button
             onClick={handleComplete}
-            disabled={!canComplete()}
+            disabled={!canComplete() || !materialsConfirmed}
             className={cn(
               "bg-emerald-600 hover:bg-emerald-700",
-              !canComplete() && "opacity-50 cursor-not-allowed"
+              (!canComplete() || !materialsConfirmed) && "opacity-50 cursor-not-allowed"
             )}
           >
             <CheckCircle className="mr-2 h-4 w-4" />
-            Finalizar e Registrar
+            {remainingToCharge <= 0
+              ? 'Finalizar (quitado com sinal)'
+              : billingDestination === 'receivable'
+                ? 'Finalizar e lançar a receber'
+                : 'Finalizar e Registrar'}
           </Button>
         </DialogFooter>
       </DialogContent>

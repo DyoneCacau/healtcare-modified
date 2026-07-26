@@ -20,7 +20,7 @@ export function SubscriptionBlockedScreen() {
       <header className="border-b bg-card/50 backdrop-blur-sm">
         <div className="container mx-auto px-4 py-4 flex items-center justify-between">
           <div className="flex items-center gap-2">
-            <img src="/logo.png" alt="HealthCare" className="h-8 w-8 rounded-lg object-cover" />
+            <img src="/logo-512.png" alt="HealthCare" className="h-8 w-8 rounded-md object-contain bg-white/95 p-0.5" />
             <span className="text-lg font-semibold">HealthCare</span>
           </div>
           <Button variant="outline" onClick={() => signOut()}>

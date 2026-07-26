@@ -1,4 +1,4 @@
-﻿import { useState } from 'react';
+﻿import { useMemo, useState } from 'react';
 import {
   User,
   Phone,
@@ -12,6 +12,7 @@ import {
   XCircle,
   Timer,
   Building2,
+  Package,
 } from 'lucide-react';
 import {
   Dialog,
@@ -25,9 +26,19 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Patient } from '@/types/patient';
 import { AppointmentWithClinic } from '@/types/clinic';
+import { LeadSourceBadge } from '@/components/crm/LeadSourceBadge';
+import type { LeadSource } from '@/types/agenda';
 import { DentalChart as DentalChartType } from '@/types/dental';
+import { PatientFile } from '@/types/patientFile';
 import { DentalChart } from './DentalChart';
+import { PatientEvolutionsTab } from './PatientEvolutionsTab';
+import { PatientFilesTab } from './PatientFilesTab';
+import { PatientFileViewer } from './PatientFileViewer';
 import { useDentalChart, useDentalChartMutations } from '@/hooks/useDentalCharts';
+import { usePatientEvolutions } from '@/hooks/usePatientEvolutions';
+import { usePatientFileMutations, usePatientFiles } from '@/hooks/usePatientFiles';
+import { useAppointmentMaterials } from '@/hooks/useProcedureMaterials';
+import { formatQuantity } from '@/lib/quantityInput';
 import { format, parseISO, differenceInYears } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 
@@ -60,8 +71,26 @@ export const PatientDetailsDialog = ({
   appointments,
 }: PatientDetailsDialogProps) => {
   const [activeTab, setActiveTab] = useState('info');
+  const [viewerFile, setViewerFile] = useState<PatientFile | null>(null);
   const { chart } = useDentalChart(patient?.id);
   const { updateChart } = useDentalChartMutations();
+  const { files } = usePatientFiles(patient?.id);
+  const { evolutions } = usePatientEvolutions(patient?.id);
+  const { updateFile } = usePatientFileMutations(patient?.id);
+  const appointmentIds = useMemo(
+    () => (patient ? appointments.map((a) => a.id) : []),
+    [patient, appointments],
+  );
+  const { materials: appointmentMaterials } = useAppointmentMaterials(appointmentIds);
+  const materialsByAppointment = useMemo(() => {
+    const map = new Map<string, typeof appointmentMaterials>();
+    for (const material of appointmentMaterials) {
+      const list = map.get(material.appointment_id) || [];
+      list.push(material);
+      map.set(material.appointment_id, list);
+    }
+    return map;
+  }, [appointmentMaterials]);
 
   if (!patient) return null;
 
@@ -95,51 +124,57 @@ export const PatientDetailsDialog = ({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-3xl max-h-[90vh] flex flex-col">
+      <DialogContent className="max-w-3xl max-h-[90vh] flex flex-col overflow-hidden">
         <DialogHeader>
-          <div className="flex items-center gap-4">
-            <div className="w-16 h-16 rounded-full bg-primary/10 flex items-center justify-center">
+          <div className="flex flex-wrap items-start gap-4 pr-6">
+            <div className="w-16 h-16 shrink-0 rounded-full bg-primary/10 flex items-center justify-center">
               <span className="text-2xl font-bold text-primary">
                 {patient.name.split(' ').map((n) => n[0]).slice(0, 2).join('')}
               </span>
             </div>
-            <div>
-              <DialogTitle className="text-xl">{patient.name}</DialogTitle>
+            <div className="min-w-0 flex-1">
+              <DialogTitle className="text-xl leading-normal break-words">{patient.name}</DialogTitle>
               <p className="text-muted-foreground">
                 {age} anos - CPF: {patient.cpf}
               </p>
             </div>
             <Badge
               variant={patient.status === 'active' ? 'default' : 'secondary'}
-              className={`ml-auto ${patient.status === 'active' ? 'bg-success hover:bg-success/90' : ''}`}
+              className={`shrink-0 ${patient.status === 'active' ? 'bg-success hover:bg-success/90' : ''}`}
             >
               {patient.status === 'active' ? 'Ativo' : 'Inativo'}
             </Badge>
           </div>
         </DialogHeader>
 
-        <div className="flex-1 overflow-y-auto px-1">
-          <Tabs value={activeTab} onValueChange={setActiveTab} className="mt-4 pb-6">
-            <TabsList className="w-full flex flex-wrap gap-2">
-            <TabsTrigger value="info" className="flex-1 min-w-[140px]">
-              Informações
-            </TabsTrigger>
-            <TabsTrigger value="dental" className="flex-1 min-w-[140px]">
-              Odontograma
-            </TabsTrigger>
-            <TabsTrigger value="clinical" className="flex-1 min-w-[140px]">
-              Dados Clínicos
-            </TabsTrigger>
-            <TabsTrigger value="history" className="flex-1 min-w-[140px]">
-              Histórico
-            </TabsTrigger>
+        <div className="min-h-0 flex-1 overflow-y-auto px-1">
+          <Tabs value={activeTab} onValueChange={setActiveTab} className="mt-2 space-y-4 pb-6">
+            <TabsList className="grid h-auto w-full grid-cols-2 gap-1 sm:grid-cols-3 lg:grid-cols-6">
+              <TabsTrigger value="info" className="w-full">
+                Informações
+              </TabsTrigger>
+              <TabsTrigger value="dental" className="w-full">
+                Odontograma
+              </TabsTrigger>
+              <TabsTrigger value="evolucoes" className="w-full">
+                Evoluções
+              </TabsTrigger>
+              <TabsTrigger value="arquivos" className="w-full">
+                Arquivos
+              </TabsTrigger>
+              <TabsTrigger value="clinical" className="w-full">
+                Dados Clínicos
+              </TabsTrigger>
+              <TabsTrigger value="history" className="w-full">
+                Histórico
+              </TabsTrigger>
             </TabsList>
 
-            <TabsContent value="info" className="mt-4">
+            <TabsContent value="info" className="mt-0 space-y-4">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <Card>
                 <CardHeader className="pb-2">
-                  <CardTitle className="text-sm font-medium text-muted-foreground">
+                  <CardTitle className="text-sm font-medium leading-normal text-muted-foreground">
                     Contato
                   </CardTitle>
                 </CardHeader>
@@ -161,7 +196,7 @@ export const PatientDetailsDialog = ({
 
               <Card>
                 <CardHeader className="pb-2">
-                  <CardTitle className="text-sm font-medium text-muted-foreground">
+                  <CardTitle className="text-sm font-medium leading-normal text-muted-foreground">
                     Dados Pessoais
                   </CardTitle>
                 </CardHeader>
@@ -186,12 +221,26 @@ export const PatientDetailsDialog = ({
                       {format(parseISO(patient.createdAt), "dd/MM/yyyy", { locale: ptBR })}
                     </span>
                   </div>
+                  {patient.leadSource && (
+                    <div className="flex items-center gap-3">
+                      <User className="h-4 w-4 text-muted-foreground" />
+                      <span className="flex items-center gap-2">
+                        Origem: <LeadSourceBadge source={patient.leadSource as LeadSource} />
+                      </span>
+                    </div>
+                  )}
+                  {patient.referralName && (
+                    <div className="flex items-center gap-3">
+                      <User className="h-4 w-4 text-muted-foreground" />
+                      <span>Indicado por: {patient.referralName}</span>
+                    </div>
+                  )}
                 </CardContent>
               </Card>
 
               <Card className="md:col-span-2">
                 <CardHeader className="pb-2">
-                  <CardTitle className="text-sm font-medium text-muted-foreground">
+                  <CardTitle className="text-sm font-medium leading-normal text-muted-foreground">
                     Resumo
                   </CardTitle>
                 </CardHeader>
@@ -219,23 +268,33 @@ export const PatientDetailsDialog = ({
             </div>
             </TabsContent>
 
-            <TabsContent value="dental" className="mt-4">
+            <TabsContent value="dental" className="mt-0">
               <div className="pr-2">
               {chart && (
                 <DentalChart
                   chart={chart}
                   onUpdateChart={handleUpdateChart}
+                  linkedFiles={files}
+                  onOpenLinkedFile={(file) => setViewerFile(file)}
                 />
               )}
               </div>
             </TabsContent>
 
-            <TabsContent value="clinical" className="mt-4">
+            <TabsContent value="evolucoes" className="mt-0">
+              <PatientEvolutionsTab patientId={patient.id} />
+            </TabsContent>
+
+            <TabsContent value="arquivos" className="mt-0">
+              <PatientFilesTab patientId={patient.id} />
+            </TabsContent>
+
+            <TabsContent value="clinical" className="mt-0 space-y-4">
             <div className="space-y-4">
               {patient.allergies.length > 0 && (
                 <Card className="border-destructive/50">
                   <CardHeader className="pb-2">
-                    <CardTitle className="text-sm font-medium flex items-center gap-2 text-destructive">
+                    <CardTitle className="text-sm font-medium leading-normal flex items-center gap-2 text-destructive">
                       <AlertCircle className="h-4 w-4" />
                       Alergias
                     </CardTitle>
@@ -254,7 +313,7 @@ export const PatientDetailsDialog = ({
 
               <Card>
                 <CardHeader className="pb-2">
-                  <CardTitle className="text-sm font-medium flex items-center gap-2 text-muted-foreground">
+                  <CardTitle className="text-sm font-medium leading-normal flex items-center gap-2 text-muted-foreground">
                     <FileText className="h-4 w-4" />
                     Observações Clínicas
                   </CardTitle>
@@ -268,7 +327,7 @@ export const PatientDetailsDialog = ({
             </div>
             </TabsContent>
 
-            <TabsContent value="history" className="mt-4">
+            <TabsContent value="history" className="mt-0">
               <ScrollArea className="h-[400px] pr-4">
                 {appointments.length === 0 && dentalProcedures.length === 0 ? (
                   <div className="text-center py-8 text-muted-foreground">
@@ -288,9 +347,9 @@ export const PatientDetailsDialog = ({
                             return (
                               <Card key={appointment.id} className="overflow-hidden">
                                 <CardContent className="p-4">
-                                  <div className="flex items-start justify-between">
-                                    <div className="space-y-1">
-                                      <div className="flex items-center gap-2">
+                                  <div className="flex items-start justify-between gap-3">
+                                    <div className="min-w-0 flex-1 space-y-1">
+                                      <div className="flex flex-wrap items-center gap-2">
                                         <span className="font-medium">{appointment.procedure}</span>
                                         <Badge className={statusConfig.className}>
                                           <StatusIcon className="h-3 w-3 mr-1" />
@@ -309,8 +368,22 @@ export const PatientDetailsDialog = ({
                                           {appointment.notes}
                                         </p>
                                       )}
+                                      {(materialsByAppointment.get(appointment.id) || []).length > 0 && (
+                                        <div className="mt-2 rounded-md border bg-muted/40 p-2 text-xs space-y-1">
+                                          <p className="font-medium flex items-center gap-1 text-muted-foreground">
+                                            <Package className="h-3.5 w-3.5" />
+                                            Materiais utilizados
+                                          </p>
+                                          {(materialsByAppointment.get(appointment.id) || []).map((m) => (
+                                            <p key={m.id}>
+                                              {m.product_name}: {formatQuantity(m.quantity)} {m.product_unit || 'un'}
+                                              {m.overridden ? ' (liberado sem saldo)' : ''}
+                                            </p>
+                                          ))}
+                                        </div>
+                                      )}
                                     </div>
-                                    <div className="text-right text-sm">
+                                    <div className="shrink-0 text-right text-sm">
                                       <p className="font-medium">
                                         {format(parseISO(appointment.date), "dd 'de' MMM", {
                                           locale: ptBR,
@@ -334,9 +407,9 @@ export const PatientDetailsDialog = ({
                         {dentalProcedures.map((proc) => (
                           <Card key={proc.id} className="overflow-hidden">
                             <CardContent className="p-4">
-                              <div className="flex items-start justify-between">
-                                <div className="space-y-1">
-                                  <div className="flex items-center gap-2">
+                              <div className="flex items-start justify-between gap-3">
+                                <div className="min-w-0 flex-1 space-y-1">
+                                  <div className="flex flex-wrap items-center gap-2">
                                     <span className="font-medium">{proc.procedure}</span>
                                     <Badge variant="outline" className="bg-emerald-100 text-emerald-700">
                                       Concluído
@@ -354,7 +427,7 @@ export const PatientDetailsDialog = ({
                                     </p>
                                   )}
                                 </div>
-                                <div className="text-right text-sm">
+                                <div className="shrink-0 text-right text-sm">
                                   <p className="font-medium">
                                     {format(parseISO(proc.date), "dd 'de' MMM", {
                                       locale: ptBR,
@@ -373,6 +446,19 @@ export const PatientDetailsDialog = ({
             </TabsContent>
           </Tabs>
         </div>
+
+        <PatientFileViewer
+          open={!!viewerFile}
+          onOpenChange={(isOpen) => !isOpen && setViewerFile(null)}
+          file={viewerFile}
+          evolutions={evolutions}
+          isSaving={updateFile.isPending}
+          onSave={(input) => {
+            updateFile.mutate(input, {
+              onSuccess: () => setViewerFile(null),
+            });
+          }}
+        />
       </DialogContent>
     </Dialog>
   );

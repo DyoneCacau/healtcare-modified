@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { Bell, Calendar, Check, CreditCard, Wallet, UserPlus } from "lucide-react";
+import { Bell, Calendar, Check, CreditCard, Wallet, UserPlus, Building2, AlertTriangle } from "lucide-react";
 import { format, formatDistanceToNow } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { Button } from "@/components/ui/button";
@@ -11,12 +11,14 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { cn } from "@/lib/utils";
+import { cn, getClinicDisplayName } from "@/lib/utils";
+import { formatNotificationMessageForDisplay } from "@/lib/notificationMessage";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { useSubscription } from "@/hooks/useSubscription";
 import { useUnclosedCashDays, useUnclosedCashDaysAllClinics } from "@/hooks/useFinancial";
 import { useSelectedClinicId } from "@/hooks/useSelectedClinicId";
+import { useClinics } from "@/hooks/useClinic";
 
 interface UserNotification {
   id: string;
@@ -59,6 +61,17 @@ export function NotificationBell({ collapsed }: NotificationBellProps) {
   const { subscription } = useSubscription();
   const { unclosedDates } = useUnclosedCashDays();
   const { clinicsWithUnclosed } = useUnclosedCashDaysAllClinics(isSuperAdmin);
+  const { clinics } = useClinics();
+
+  // Com mais de uma clínica vinculada, cada notificação mostra a clínica de origem
+  const hasMultipleClinics = clinics.length > 1;
+  const clinicNameById = useMemo(() => {
+    const map = new Map<string, string>();
+    clinics.forEach((clinic: { id: string; name?: string | null; unit_name?: string | null }) => {
+      map.set(clinic.id, getClinicDisplayName(clinic));
+    });
+    return map;
+  }, [clinics]);
 
   const [notifications, setNotifications] = useState<UserNotification[]>([]);
   const [adminNotifications, setAdminNotifications] = useState<AdminNotification[]>([]);
@@ -191,9 +204,32 @@ export function NotificationBell({ collapsed }: NotificationBellProps) {
     }
   };
 
-  const handleNotificationClick = (n: UserNotification) => {
+  const handleNotificationClick = async (n: UserNotification) => {
+    if (!n.is_read) {
+      setNotifications((prev) => prev.map((item) => (item.id === n.id ? { ...item, is_read: true } : item)));
+      const { error } = await supabase.from("user_notifications").update({ is_read: true }).eq("id", n.id);
+      if (error) {
+        logNotificationError("Marcação de notificação como lida", error);
+      }
+    }
     if (n.type === "appointment_created" && n.reference_id) navigate("/agenda");
+    if (n.type === "payment_confirmed" || n.type === "payment_overdue" || n.type === "clinic_created") {
+      navigate("/billing");
+    }
     setOpen(false);
+  };
+
+  const getNotificationIcon = (type: string) => {
+    switch (type) {
+      case "payment_confirmed":
+        return <CreditCard className="h-4 w-4" />;
+      case "payment_overdue":
+        return <AlertTriangle className="h-4 w-4" />;
+      case "clinic_created":
+        return <Building2 className="h-4 w-4" />;
+      default:
+        return <Calendar className="h-4 w-4" />;
+    }
   };
 
   if (!user) return null;
@@ -302,15 +338,29 @@ export function NotificationBell({ collapsed }: NotificationBellProps) {
                 onClick={() => handleNotificationClick(n)}
                 className={cn("flex w-full items-start gap-3 px-4 py-3 text-left hover:bg-muted/50", !n.is_read && "bg-primary/5")}
               >
-                <div className="mt-0.5 flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary">
-                  <Calendar className="h-4 w-4" />
+                <div
+                  className={cn(
+                    "mt-0.5 flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full",
+                    n.type === "payment_overdue" ? "bg-amber-500/10 text-amber-600" : "bg-primary/10 text-primary"
+                  )}
+                >
+                  {getNotificationIcon(n.type)}
                 </div>
                 <div className="flex-1 overflow-hidden">
                   <div className="flex items-center gap-2">
                     <span className={cn("text-sm", !n.is_read && "font-semibold")}>{n.title}</span>
                     {!n.is_read && <span className="h-2 w-2 flex-shrink-0 rounded-full bg-primary" />}
                   </div>
-                  {n.message && <p className="mt-0.5 truncate text-xs text-muted-foreground">{n.message}</p>}
+                  {hasMultipleClinics && n.clinic_id && clinicNameById.get(n.clinic_id) && (
+                    <p className="mt-0.5 truncate text-[11px] font-medium text-primary/80">
+                      {clinicNameById.get(n.clinic_id)}
+                    </p>
+                  )}
+                  {n.message && (
+                    <p className="mt-0.5 truncate text-xs text-muted-foreground">
+                      {formatNotificationMessageForDisplay(n.message)}
+                    </p>
+                  )}
                   <p className="mt-1 text-[11px] text-muted-foreground/70">
                     {formatDistanceToNow(new Date(n.created_at), { addSuffix: true, locale: ptBR })}
                   </p>

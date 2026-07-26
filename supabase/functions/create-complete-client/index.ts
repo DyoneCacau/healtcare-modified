@@ -1,4 +1,5 @@
 import { createClient, type SupabaseClient } from 'https://esm.sh/@supabase/supabase-js@2.49.1'
+import { notifyOwnerOfNewClinic } from '../_shared/asaas.ts'
 
 const MAX_BODY_BYTES = 64_000
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
@@ -7,10 +8,11 @@ const AVAILABLE_MODULES = new Set([
   'dashboard',
   'agenda',
   'pacientes',
-  'pacientes_basico',
   'profissionais',
+  'procedimentos',
+  'crm',
   'financeiro',
-  'financeiro_basico',
+  'contas_receber',
   'comissoes',
   'estoque',
   'relatorios',
@@ -489,6 +491,14 @@ Deno.serve(async (req) => {
         throw new Error(dbErrorMessage('Failed to create subscription', subscriptionError))
       }
       created.push({ clinic_id: clinicRow.id, subscription_id: subscription.id })
+
+      await notifyOwnerOfNewClinic(supabase, {
+        ownerUserId: createdUserId,
+        clinicId: clinicRow.id,
+        clinicName: clinic.name,
+        planName: plan.name,
+        subscriptionId: subscription.id,
+      })
     }
 
     return json(req, {

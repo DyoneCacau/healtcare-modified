@@ -3,7 +3,8 @@ import {
   Calendar,
   Users,
   DollarSign,
-  Stethoscope,
+  Wallet,
+  Shield,
   ArrowRight,
   Sparkles,
   CheckCircle2,
@@ -15,23 +16,33 @@ import { toast } from 'sonner';
 const steps = [
   {
     icon: Calendar,
-    title: 'Agenda completa',
-    description: 'Visualize dia, semana ou mês. Confirme consultas e envie lembretes por WhatsApp.',
+    title: 'Agenda do dia a dia',
+    description:
+      'Organize consultas por profissional. Ao finalizar, escolha receber agora no Caixa ou lançar em Contas a receber.',
   },
   {
     icon: Users,
     title: 'Pacientes e odontograma',
-    description: 'Prontuário completo com histórico de tratamentos e odontograma visual.',
+    description:
+      'Prontuário com histórico e odontograma. Marque o que é a realizar, já realizado ou pré-existente.',
   },
   {
     icon: DollarSign,
-    title: 'Financeiro e comissões',
-    description: 'Controle caixa, sangrias, receitas e despesas. Cálculo automático de comissões.',
+    title: 'Caixa (recepção)',
+    description:
+      'Recebimentos do dia, dinheiro, PIX e maquineta. Ideal para a recepção — sem misturar com relatórios.',
   },
   {
-    icon: Stethoscope,
-    title: 'Profissionais e relatórios',
-    description: 'Gerencie equipe, ponto eletrônico e acompanhe métricas em tempo real.',
+    icon: Wallet,
+    title: 'Contas a receber (admin)',
+    description:
+      'Parcelas e cobranças futuras. A baixa gera o lançamento no Caixa automaticamente.',
+  },
+  {
+    icon: Shield,
+    title: 'Papéis e permissões',
+    description:
+      'Recepcionista usa Agenda + Caixa. Administrador vê Contas a receber, Relatórios e Administração. Ajuste em Administração → Permissões.',
   },
 ];
 
@@ -80,7 +91,6 @@ export function OnboardingScreen() {
           {currentStep.description}
         </p>
 
-        {/* Progress dots */}
         <div className="mb-8 flex gap-2">
           {steps.map((_, i) => (
             <div

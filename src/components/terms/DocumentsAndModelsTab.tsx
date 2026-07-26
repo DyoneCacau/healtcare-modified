@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { CurrencyInput } from '@/components/ui/currency-input';
 import { Label } from '@/components/ui/label';
 import { FileText, Printer } from 'lucide-react';
 import { useClinicBranding } from '@/hooks/useTerms';
@@ -21,13 +22,92 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 
 const MODEL_TYPES: { value: DocumentPrintType; label: string }[] = [
   { value: 'atestado', label: 'Atestado' },
   { value: 'declaracao', label: 'Declaracao' },
   { value: 'termo_ciencia', label: 'Termo de Ciencia' },
   { value: 'recibo', label: 'Recibo de Pagamento' },
+  { value: 'receituario', label: 'Receituario' },
 ];
+
+const PATIENT_SELECT_TYPES: DocumentPrintType[] = [
+  'receituario',
+  'atestado',
+  'declaracao',
+  'termo_ciencia',
+];
+
+const PATIENT_DIALOG_COPY: Record<
+  Exclude<DocumentPrintType, 'recibo'>,
+  { title: string; description: string; emptyHint: string }
+> = {
+  atestado: {
+    title: 'Atestado',
+    description:
+      'Selecione o paciente para preencher o atestado. Você poderá editar o conteúdo antes de gerar o PDF.',
+    emptyHint:
+      'Nenhum paciente cadastrado. Você ainda pode emitir o atestado e preencher o nome manualmente.',
+  },
+  declaracao: {
+    title: 'Declaração',
+    description:
+      'Selecione o paciente para preencher a declaração. Você poderá editar o conteúdo antes de gerar o PDF.',
+    emptyHint:
+      'Nenhum paciente cadastrado. Você ainda pode emitir a declaração e preencher o nome manualmente.',
+  },
+  termo_ciencia: {
+    title: 'Termo de Ciência',
+    description:
+      'Selecione o paciente para preencher o termo. Você poderá editar o conteúdo antes de gerar o PDF.',
+    emptyHint:
+      'Nenhum paciente cadastrado. Você ainda pode emitir o termo e preencher o nome manualmente.',
+  },
+  receituario: {
+    title: 'Receituário',
+    description:
+      'Selecione o paciente para preencher o receituário. Você poderá editar os medicamentos antes de gerar o PDF.',
+    emptyHint:
+      'Nenhum paciente cadastrado. Você ainda pode emitir o receituário e preencher o nome manualmente.',
+  },
+};
+
+function mapDbPatient(p: {
+  id: string;
+  name: string;
+  cpf: string | null;
+  phone: string | null;
+  email: string | null;
+  address: string | null;
+  birth_date: string | null;
+  clinical_notes: string | null;
+  allergies: string[] | null;
+  created_at: string;
+  status: string;
+}): Patient {
+  return {
+    id: p.id,
+    name: p.name,
+    cpf: p.cpf || '',
+    phone: p.phone || '',
+    email: p.email || '',
+    address: p.address || '',
+    birthDate: p.birth_date || '',
+    clinicalNotes: p.clinical_notes || '',
+    allergies: p.allergies || [],
+    leadSource: null,
+    referralName: null,
+    createdAt: p.created_at,
+    status: p.status as 'active' | 'inactive',
+  };
+}
 
 export function DocumentsAndModelsTab() {
   const { clinic } = useClinic();
@@ -37,42 +117,55 @@ export function DocumentsAndModelsTab() {
   const [printOpen, setPrintOpen] = useState(false);
   const [printType, setPrintType] = useState<DocumentPrintType>('atestado');
   const [selectedPatient, setSelectedPatient] = useState<Patient | null>(null);
-  const [reciboValue, setReciboValue] = useState('');
+  const [reciboValue, setReciboValue] = useState(0);
   const [reciboDesc, setReciboDesc] = useState('Servicos odontologicos');
   const [reciboDialogOpen, setReciboDialogOpen] = useState(false);
+  const [patientDialogOpen, setPatientDialogOpen] = useState(false);
+  const [pendingType, setPendingType] = useState<DocumentPrintType | null>(null);
+  const [patientSelectId, setPatientSelectId] = useState('');
 
-  const samplePatient: Patient | null = patients[0]
-    ? {
-        id: patients[0].id,
-        name: patients[0].name,
-        cpf: patients[0].cpf || '',
-        phone: patients[0].phone || '',
-        email: patients[0].email || '',
-        address: patients[0].address || '',
-        birthDate: patients[0].birth_date || '',
-        clinicalNotes: patients[0].clinical_notes || '',
-        allergies: patients[0].allergies || [],
-        createdAt: patients[0].created_at,
-        status: patients[0].status as 'active' | 'inactive',
-      }
-    : null;
+  const samplePatient: Patient | null = patients[0] ? mapDbPatient(patients[0]) : null;
 
   const handlePrintModel = (type: DocumentPrintType) => {
     setPrintType(type);
-    setSelectedPatient(samplePatient);
     if (type === 'recibo') {
-      setReciboValue('');
+      setSelectedPatient(samplePatient);
+      setReciboValue(0);
       setReciboDesc('Servicos odontologicos');
       setReciboDialogOpen(true);
-    } else {
-      setPrintOpen(true);
+      return;
     }
+
+    if (PATIENT_SELECT_TYPES.includes(type)) {
+      setPendingType(type);
+      setPatientSelectId(patients[0]?.id || '');
+      setPatientDialogOpen(true);
+      return;
+    }
+
+    setSelectedPatient(samplePatient);
+    setPrintOpen(true);
   };
 
   const handleReciboConfirm = () => {
     setReciboDialogOpen(false);
     setPrintOpen(true);
   };
+
+  const handlePatientConfirm = () => {
+    const dbPatient = patients.find((p) => p.id === patientSelectId);
+    // Sem paciente selecionado: deixa null para o usuário preencher o nome manualmente no preview
+    setSelectedPatient(dbPatient ? mapDbPatient(dbPatient) : null);
+    setPrintType(pendingType || 'atestado');
+    setPatientDialogOpen(false);
+    setPendingType(null);
+    setPrintOpen(true);
+  };
+
+  const activePatientDialogCopy =
+    pendingType && pendingType !== 'recibo'
+      ? PATIENT_DIALOG_COPY[pendingType]
+      : PATIENT_DIALOG_COPY.atestado;
 
   const handleSaveBranding = (data: ClinicBranding) => {
     updateBranding.mutate(data);
@@ -91,11 +184,11 @@ export function DocumentsAndModelsTab() {
             Modelos para Impressão
           </CardTitle>
           <p className="text-sm text-muted-foreground">
-            Atestados, declarações, termos de ciência e recibo de pagamento. Dados da clínica (CNPJ, razão social) vêm de Configuração - Dados da Clínica.
+            Atestados, declarações, termos de ciência, recibo e receituário. Dados da clínica (CNPJ, razão social) vêm de Configuração - Dados da Clínica.
           </p>
         </CardHeader>
         <CardContent>
-          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
             {MODEL_TYPES.map((m) => (
               <Button
                 key={m.value}
@@ -126,13 +219,9 @@ export function DocumentsAndModelsTab() {
           <div className="space-y-4 py-4">
             <div className="space-y-2">
               <Label>Valor (R$)</Label>
-              <Input
-                type="number"
-                step="0.01"
-                min="0"
+              <CurrencyInput
                 value={reciboValue}
-                onChange={(e) => setReciboValue(e.target.value)}
-                placeholder="0,00"
+                onValueChange={setReciboValue}
               />
             </div>
             <div className="space-y-2">
@@ -151,11 +240,49 @@ export function DocumentsAndModelsTab() {
         </DialogContent>
       </Dialog>
 
+      <Dialog open={patientDialogOpen} onOpenChange={setPatientDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>{activePatientDialogCopy.title}</DialogTitle>
+            <DialogDescription>
+              {activePatientDialogCopy.description}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <Label>Paciente</Label>
+              <Select value={patientSelectId} onValueChange={setPatientSelectId}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Selecione o paciente" />
+                </SelectTrigger>
+                <SelectContent>
+                  {patients.map((p) => (
+                    <SelectItem key={p.id} value={p.id}>
+                      {p.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              {patients.length === 0 && (
+                <p className="text-sm text-muted-foreground">
+                  {activePatientDialogCopy.emptyHint}
+                </p>
+              )}
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setPatientDialogOpen(false)}>Cancelar</Button>
+            <Button onClick={handlePatientConfirm}>Continuar</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
       <DocumentPrintPreview
         open={printOpen}
         onOpenChange={setPrintOpen}
         type={printType}
         patient={selectedPatient}
+        clinicId={clinic?.id}
         clinicName={clinicName}
         clinicCnpj={clinicCnpj}
         clinicRazaoSocial={clinicRazaoSocial}
@@ -163,10 +290,12 @@ export function DocumentsAndModelsTab() {
         clinicAddress={clinic ? formatClinicAddress(clinic) || undefined : undefined}
         clinicPhone={clinic?.phone || undefined}
         clinicEmail={clinic?.email || undefined}
+        clinicCity={clinic?.city || undefined}
+        clinicState={clinic?.state || undefined}
         primaryColor={branding?.primaryColor || '#000000'}
         useDefaultColor={!branding?.hasCustomColor}
         professionals={activeProfessionals.map((p) => ({ id: p.id, name: p.name, specialty: p.specialty, cro: p.cro }))}
-        paymentValue={printType === 'recibo' ? parseFloat(reciboValue) || 0 : undefined}
+        paymentValue={printType === 'recibo' ? reciboValue : undefined}
         paymentDescription={printType === 'recibo' ? reciboDesc : undefined}
       />
     </div>

@@ -3,6 +3,10 @@ import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from './useAuth';
 import { useSelectedClinicId } from './useSelectedClinicId';
 import { parsePlanFeatures } from '@/lib/planFeatures';
+import {
+  expandFeatureAliases,
+  resolveClinicFeatures,
+} from '@/lib/planModules';
 import type { BillingMethod, BillingProvider } from '@/services/asaasBillingService';
 
 interface Plan {
@@ -32,6 +36,8 @@ interface Subscription {
   can_regularize: boolean;
   can_cancel: boolean;
   plan: Plan | null;
+  features_override: string[];
+  feature_grants: unknown;
 }
 
 interface SubscriptionContextType {
@@ -55,24 +61,23 @@ const ROUTE_FEATURE_MAP: Record<string, string> = {
   '/pacientes': 'pacientes',
   '/profissionais': 'profissionais',
   '/financeiro': 'financeiro',
+  '/contas-a-receber': 'contas_receber',
   '/comissoes': 'comissoes',
   '/estoque': 'estoque',
+  '/procedimentos': 'procedimentos',
+  '/crm': 'crm',
   '/relatorios': 'relatorios',
   '/ponto': 'ponto',
   '/atendimento': 'atendimento',
+  '/integracoes': 'integracoes',
   '/administracao': 'administracao',
   '/termos': 'termos',
   '/configuracoes': 'configuracoes',
 };
 
 // Features que sempre estão disponíveis (não dependem do plano)
-const ALWAYS_AVAILABLE = ['dashboard', 'configuracoes'];
-
-// Features que equivalem a outras (ex.: versoes basicas liberam o modulo principal)
-const FEATURE_ALIASES: Record<string, string[]> = {
-  pacientes_basico: ['pacientes'],
-  financeiro_basico: ['financeiro'],
-};
+// Administração fica sempre liberada para o admin solicitar upgrade de módulos.
+const ALWAYS_AVAILABLE = ['dashboard', 'configuracoes', 'administracao'];
 
 // Lista completa de features do sistema para referência
 export const ALL_FEATURES = [
@@ -81,11 +86,15 @@ export const ALL_FEATURES = [
   'pacientes',
   'profissionais',
   'financeiro',
+  'contas_receber',
   'comissoes',
   'estoque',
+  'procedimentos',
+  'crm',
   'relatorios',
   'ponto',
   'atendimento',
+  'integracoes',
   'administracao',
   'termos',
   'configuracoes',
@@ -173,6 +182,8 @@ export function SubscriptionProvider({ children }: { children: ReactNode }) {
           proration_amount,
           asaas_next_due_date,
           asaas_subscription_id,
+          features_override,
+          feature_grants,
           plans (
             id,
             name,
@@ -192,6 +203,8 @@ export function SubscriptionProvider({ children }: { children: ReactNode }) {
         const row = subData as typeof subData & {
           billing_mode?: string | null;
           asaas_subscription_id?: string | null;
+          features_override?: unknown;
+          feature_grants?: unknown;
         };
         const provider: BillingProvider =
           row.billing_mode === "asaas"
@@ -200,6 +213,9 @@ export function SubscriptionProvider({ children }: { children: ReactNode }) {
             ? "asaas"
             : "manual";
         const billingStatus = subData.billing_status ?? subData.payment_status ?? null;
+        const override = Array.isArray(row.features_override)
+          ? row.features_override.filter((f): f is string => typeof f === 'string')
+          : [];
         setSubscription({
           id: subData.id,
           status: subData.status,
@@ -218,6 +234,8 @@ export function SubscriptionProvider({ children }: { children: ReactNode }) {
           can_pay: provider === 'asaas' && billingStatus !== 'paid',
           can_regularize: provider === 'asaas' && billingStatus === 'overdue',
           can_cancel: provider === 'asaas' && isClinicOwner && subData.status !== 'cancelled',
+          features_override: override,
+          feature_grants: row.feature_grants ?? [],
           plan: plan ? {
             ...plan,
             features: parsePlanFeatures(plan.features),
@@ -288,21 +306,14 @@ export function SubscriptionProvider({ children }: { children: ReactNode }) {
      subscription.status === 'cancelled' ||
      (subscription.status === 'suspended' && !isWithinGracePeriod));
 
-  const expandFeatures = (features: string[]) => {
-    const expanded = new Set<string>(features);
-    features.forEach((feature) => {
-      FEATURE_ALIASES[feature]?.forEach((alias) => expanded.add(alias));
-    });
-    return Array.from(expanded);
-  };
-
-  // Features permitidas baseadas no plano
+  // Features permitidas: plano + override da clínica + brindes ativos
   const allowedFeatures = isSuperAdmin 
     ? Object.values(ROUTE_FEATURE_MAP) 
-    : [
-        ...ALWAYS_AVAILABLE,
-        ...expandFeatures(subscription?.plan?.features || []),
-      ];
+    : resolveClinicFeatures({
+        planFeatures: subscription?.plan?.features || [],
+        featuresOverride: subscription?.features_override,
+        featureGrants: subscription?.feature_grants,
+      });
 
   const hasFeature = (feature: string): boolean => {
     if (isSuperAdmin) return true;

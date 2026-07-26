@@ -147,7 +147,7 @@ export function FeatureBlockedScreen({ featureName, planName }: FeatureBlockedSc
               
               <Button 
                 variant="outline"
-                onClick={() => navigate('/')}
+                onClick={() => navigate('/app')}
                 size="lg"
                 className="w-full"
               >

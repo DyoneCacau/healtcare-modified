@@ -275,7 +275,7 @@ export default function Commissions() {
 
         {/* Tabs */}
         <Tabs value={activeTab} onValueChange={setActiveTab}>
-          <TabsList>
+          <TabsList className="h-auto flex flex-wrap justify-start gap-1">
             <TabsTrigger value="rules" className="gap-2">
               <Settings className="h-4 w-4" />
               Regras

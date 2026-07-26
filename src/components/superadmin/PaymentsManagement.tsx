@@ -3,6 +3,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
+import { CurrencyInput } from "@/components/ui/currency-input";
 import { DateInput } from "@/components/ui/date-input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
@@ -25,7 +26,7 @@ import {
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { toast } from "sonner";
-import { Receipt, Search, CheckCircle, XCircle, ExternalLink, Trash2, Copy, Plus } from "lucide-react";
+import { Receipt, Search, CheckCircle, XCircle, ExternalLink, Trash2, Copy, Plus, X } from "lucide-react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
@@ -73,6 +74,10 @@ export function PaymentsManagement() {
   const [payments, setPayments] = useState<Payment[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
+  const [statusFilter, setStatusFilter] = useState<string>("all");
+  const [originFilter, setOriginFilter] = useState<string>("all");
+  const [startDateFilter, setStartDateFilter] = useState<string>("");
+  const [endDateFilter, setEndDateFilter] = useState<string>("");
   const [selectedPayment, setSelectedPayment] = useState<Payment | null>(null);
   const [isConfirmDialogOpen, setIsConfirmDialogOpen] = useState(false);
   const [confirmNotes, setConfirmNotes] = useState("");
@@ -81,7 +86,7 @@ export function PaymentsManagement() {
   const [registerDialogOpen, setRegisterDialogOpen] = useState(false);
   const [subscriptionsList, setSubscriptionsList] = useState<{ id: string; clinic_name: string; plan_name: string }[]>([]);
   const [regSubscriptionId, setRegSubscriptionId] = useState("");
-  const [regAmount, setRegAmount] = useState("");
+  const [regAmount, setRegAmount] = useState(0);
   const [regDate, setRegDate] = useState(new Date().toISOString().split("T")[0]);
   const [regNextDueDate, setRegNextDueDate] = useState<string | "">("");
   const [regMethod, setRegMethod] = useState("pix");
@@ -181,10 +186,27 @@ export function PaymentsManagement() {
     }
   }
 
-  const filteredPayments = payments.filter(payment =>
-    payment.subscription?.clinic?.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    payment.subscription?.clinic?.email?.toLowerCase().includes(searchTerm.toLowerCase())
-  );
+  const filteredPayments = payments.filter(payment => {
+    const matchesSearch =
+      payment.subscription?.clinic?.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      payment.subscription?.clinic?.email?.toLowerCase().includes(searchTerm.toLowerCase());
+    const matchesStatus = statusFilter === "all" || payment.status === statusFilter;
+    const matchesOrigin = originFilter === "all" || payment.origin === originFilter;
+    const paymentDate = payment.created_at.slice(0, 10);
+    const matchesStartDate = !startDateFilter || paymentDate >= startDateFilter;
+    const matchesEndDate = !endDateFilter || paymentDate <= endDateFilter;
+    return matchesSearch && matchesStatus && matchesOrigin && matchesStartDate && matchesEndDate;
+  });
+
+  const hasActiveFilters =
+    statusFilter !== "all" || originFilter !== "all" || Boolean(startDateFilter) || Boolean(endDateFilter);
+
+  function clearFilters() {
+    setStatusFilter("all");
+    setOriginFilter("all");
+    setStartDateFilter("");
+    setEndDateFilter("");
+  }
 
   const rejectedCount = payments.filter(p => p.status === 'rejected').length;
 
@@ -236,7 +258,7 @@ DELETE FROM payment_history WHERE status = 'rejected';`;
       })
     );
     setRegSubscriptionId("");
-    setRegAmount("");
+    setRegAmount(0);
     setRegDate(new Date().toISOString().split("T")[0]);
     setRegNextDueDate("");
     setRegMethod("pix");
@@ -250,7 +272,7 @@ DELETE FROM payment_history WHERE status = 'rejected';`;
     try {
       const { error } = await supabase.rpc("register_payment", {
         p_subscription_id: regSubscriptionId,
-        p_amount: parseFloat(regAmount),
+        p_amount: regAmount,
         p_paid_at: regDate,
         p_payment_method: regMethod,
         p_description: regDescription || null,
@@ -259,7 +281,7 @@ DELETE FROM payment_history WHERE status = 'rejected';`;
       if (error) {
         const msg = error.message || "";
         if (msg.includes("Could not find the function") || msg.includes("schema cache")) {
-          await registerPaymentFallback(regSubscriptionId, parseFloat(regAmount), regDate, regMethod, regDescription, regNextDueDate || null);
+          await registerPaymentFallback(regSubscriptionId, regAmount, regDate, regMethod, regDescription, regNextDueDate || null);
           return;
         }
         throw error;
@@ -358,7 +380,7 @@ DELETE FROM payment_history WHERE status = 'rejected';`;
         </p>
       </CardHeader>
       <CardContent>
-        <div className="flex flex-wrap items-center gap-4 mb-6">
+        <div className="flex flex-wrap items-end gap-4 mb-6">
           <div className="relative flex-1 min-w-[200px]">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
             <Input
@@ -368,6 +390,47 @@ DELETE FROM payment_history WHERE status = 'rejected';`;
               className="pl-10"
             />
           </div>
+          <div className="space-y-1.5">
+            <Label className="text-xs text-muted-foreground">Status</Label>
+            <Select value={statusFilter} onValueChange={setStatusFilter}>
+              <SelectTrigger className="w-[150px]">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Todos</SelectItem>
+                <SelectItem value="pending">Aguardando</SelectItem>
+                <SelectItem value="confirmed">Confirmado</SelectItem>
+                <SelectItem value="rejected">Rejeitado</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="space-y-1.5">
+            <Label className="text-xs text-muted-foreground">Origem</Label>
+            <Select value={originFilter} onValueChange={setOriginFilter}>
+              <SelectTrigger className="w-[130px]">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Todas</SelectItem>
+                <SelectItem value="asaas">Asaas</SelectItem>
+                <SelectItem value="manual">Manual</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="space-y-1.5">
+            <Label className="text-xs text-muted-foreground">De</Label>
+            <DateInput value={startDateFilter} onChange={setStartDateFilter} />
+          </div>
+          <div className="space-y-1.5">
+            <Label className="text-xs text-muted-foreground">Até</Label>
+            <DateInput value={endDateFilter} onChange={setEndDateFilter} />
+          </div>
+          {hasActiveFilters && (
+            <Button variant="ghost" size="sm" onClick={clearFilters} className="gap-2">
+              <X className="h-4 w-4" />
+              Limpar filtros
+            </Button>
+          )}
           {rejectedCount > 0 && (
             <div className="flex gap-2">
               <Button variant="outline" size="sm" onClick={handleClearRejected} disabled={isClearingRejected} className="gap-2">
@@ -385,7 +448,7 @@ DELETE FROM payment_history WHERE status = 'rejected';`;
         {filteredPayments.length === 0 ? (
           <div className="text-center py-12 text-muted-foreground">
             <Receipt className="h-12 w-12 mx-auto mb-4 opacity-50" />
-            <p>Nenhum comprovante de pagamento encontrado</p>
+            <p>{payments.length === 0 ? "Nenhum comprovante de pagamento encontrado" : "Nenhum comprovante corresponde aos filtros aplicados"}</p>
           </div>
         ) : (
           <div className="rounded-md border">
@@ -540,12 +603,9 @@ DELETE FROM payment_history WHERE status = 'rejected';`;
             </div>
             <div className="space-y-2">
               <Label>Valor (R$) *</Label>
-              <Input
-                type="number"
-                step="0.01"
+              <CurrencyInput
                 value={regAmount}
-                onChange={(e) => setRegAmount(e.target.value)}
-                placeholder="0,00"
+                onValueChange={setRegAmount}
                 required
               />
             </div>
@@ -587,7 +647,7 @@ DELETE FROM payment_history WHERE status = 'rejected';`;
               <Button type="button" variant="outline" onClick={() => setRegisterDialogOpen(false)}>
                 Cancelar
               </Button>
-              <Button type="submit" disabled={regLoading || !regSubscriptionId || !regAmount}>
+              <Button type="submit" disabled={regLoading || !regSubscriptionId || regAmount <= 0}>
                 {regLoading ? "Salvando..." : "Registrar e ativar plano"}
               </Button>
             </DialogFooter>

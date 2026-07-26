@@ -57,7 +57,9 @@ import {
 import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
 import type { Database } from '@/integrations/supabase/types';
-import { useClinic } from '@/hooks/useClinic';
+import { useClinic, useClinics } from '@/hooks/useClinic';
+import { ClinicMultiSelect } from '@/components/common/ClinicMultiSelect';
+import { SPECIALTIES } from '@/lib/specialties';
 
 type UserRole = Database['public']['Enums']['app_role'];
 type AssignableSystemRole = Exclude<UserRole, 'superadmin'>;
@@ -88,6 +90,7 @@ interface UserManagementProps {
 
 export function UserManagement({ users, onRefresh, isSuperAdmin }: UserManagementProps) {
   const { clinicId } = useClinic();
+  const { clinics } = useClinics();
   const [searchTerm, setSearchTerm] = useState('');
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingUser, setEditingUser] = useState<SystemUser | null>(null);
@@ -98,6 +101,10 @@ export function UserManagement({ users, onRefresh, isSuperAdmin }: UserManagemen
     password: '',
     role: 'receptionist' as string,
   });
+  const [selectedClinicIds, setSelectedClinicIds] = useState<string[]>([]);
+  const [createProfessionalRecord, setCreateProfessionalRecord] = useState(false);
+  const [professionalSpecialty, setProfessionalSpecialty] = useState('');
+  const [professionalCro, setProfessionalCro] = useState('');
   const [customRoles, setCustomRoles] = useState<{ id: string; name: string }[]>([]);
   const [newRoleDialogOpen, setNewRoleDialogOpen] = useState(false);
   const [newRoleName, setNewRoleName] = useState('');
@@ -148,6 +155,10 @@ export function UserManagement({ users, onRefresh, isSuperAdmin }: UserManagemen
         password: '',
         role: 'receptionist',
       });
+      setSelectedClinicIds(clinicId ? [clinicId] : []);
+      setCreateProfessionalRecord(false);
+      setProfessionalSpecialty('');
+      setProfessionalCro('');
     }
     setDialogOpen(true);
   };
@@ -220,23 +231,61 @@ export function UserManagement({ users, onRefresh, isSuperAdmin }: UserManagemen
           setIsLoading(false);
           return;
         }
+        if (selectedClinicIds.length === 0) {
+          toast.error('Selecione ao menos uma clínica para dar acesso.');
+          setIsLoading(false);
+          return;
+        }
+        if (formData.role === 'professional' && createProfessionalRecord) {
+          if (!professionalSpecialty || !professionalCro.trim()) {
+            toast.error('Informe especialidade e CRO para o profissional aparecer em Profissionais.');
+            setIsLoading(false);
+            return;
+          }
+        }
 
         // Verificar se email já existe
-        const { data: existingUser, error: checkError } = await supabase
+        const { data: existingProfile, error: checkError } = await supabase
           .from('profiles')
-          .select('email')
+          .select('user_id, email')
           .ilike('email', formData.email)
           .maybeSingle();
 
         if (checkError && checkError.code !== 'PGRST116') throw checkError;
-        
-        if (existingUser) {
-          toast.error('Este e-mail já está cadastrado no sistema.');
+
+        if (existingProfile) {
+          // E-mail já tem conta: em vez de bloquear, concede acesso deste usuário
+          // existente às clínicas marcadas que ele ainda não tem (sem criar login duplicado).
+          const { data: existingLinks, error: linksError } = await supabase
+            .from('clinic_users')
+            .select('clinic_id')
+            .eq('user_id', existingProfile.user_id);
+          if (linksError) throw linksError;
+
+          const alreadyLinkedIds = new Set((existingLinks || []).map((l) => l.clinic_id));
+          const clinicIdsToLink = selectedClinicIds.filter((id) => !alreadyLinkedIds.has(id));
+
+          if (clinicIdsToLink.length === 0) {
+            toast.error('Este e-mail já está cadastrado e já tem acesso a todas as clínicas selecionadas.');
+            setIsLoading(false);
+            return;
+          }
+
+          const { error: linkError } = await supabase.from('clinic_users').insert(
+            clinicIdsToLink.map((id) => ({ clinic_id: id, user_id: existingProfile.user_id, is_owner: false }))
+          );
+          if (linkError) throw linkError;
+
+          toast.success(
+            `E-mail já cadastrado no sistema — concedi acesso do usuário existente a ${clinicIdsToLink.length} clínica(s) adicional(is), sem criar um novo login.`
+          );
+          setDialogOpen(false);
+          onRefresh();
           setIsLoading(false);
           return;
         }
 
-        // Create new user (skip_auto_clinic: trigger não criará clínica nova; usuário entra na clínica atual)
+        // Create new user (skip_auto_clinic: trigger não criará clínica nova; usuário entra na(s) clínica(s) marcada(s))
         const { data: { session: adminSession } } = await supabase.auth.getSession();
 
         const { data: authData, error: authError } = await supabase.auth.signUp({
@@ -251,15 +300,11 @@ export function UserManagement({ users, onRefresh, isSuperAdmin }: UserManagemen
         if (authError) throw authError;
 
         if (authData.user) {
-          // 1) Vincular à clínica PRIMEIRO (RLS em user_roles exige que o user_id já esteja na clínica)
-          if (clinicId) {
-            const { error: clinicError } = await supabase.from('clinic_users').insert({
-              clinic_id: clinicId,
-              user_id: authData.user.id,
-              is_owner: false,
-            });
-            if (clinicError) throw clinicError;
-          }
+          // 1) Vincular às clínicas marcadas PRIMEIRO (RLS em user_roles exige que o user_id já esteja na clínica)
+          const { error: clinicError } = await supabase.from('clinic_users').insert(
+            selectedClinicIds.map((id) => ({ clinic_id: id, user_id: authData.user!.id, is_owner: false }))
+          );
+          if (clinicError) throw clinicError;
 
           // 2) Role: sistema ou função personalizada
           const roleValue = formData.role;
@@ -271,6 +316,8 @@ export function UserManagement({ users, onRefresh, isSuperAdmin }: UserManagemen
             if (roleError) throw roleError;
           } else {
             await supabase.from('user_roles').insert({ user_id: authData.user.id, role: 'receptionist' });
+            // Função personalizada é específica da clínica atual; nas demais clínicas
+            // marcadas, o usuário usa a permissão padrão (fallback) até definir uma função lá.
             const { error: customErr } = await supabase.from('user_clinic_custom_roles').insert({
               user_id: authData.user.id,
               clinic_id: clinicId,
@@ -291,6 +338,29 @@ export function UserManagement({ users, onRefresh, isSuperAdmin }: UserManagemen
           if (profileUpdateError) {
             console.error('Erro ao atualizar perfil:', profileUpdateError);
           }
+
+          // 3) Se marcado, também cria o registro em Profissionais (aparece na Agenda),
+          // vinculado a este login via user_id.
+          if (formData.role === 'professional' && createProfessionalRecord) {
+            const { error: professionalError } = await supabase.from('professionals').insert(
+              selectedClinicIds.map((id) => ({
+                clinic_id: id,
+                user_id: authData.user!.id,
+                name: nameTrimmed,
+                specialty: professionalSpecialty,
+                cro: professionalCro.trim(),
+                email: formData.email || null,
+                phone: formData.phone?.trim() || null,
+                is_active: true,
+              }))
+            );
+            if (professionalError) {
+              console.error('Erro ao criar registro em Profissionais:', professionalError);
+              toast.error(
+                'Usuário criado, mas houve erro ao criar o registro em Profissionais. Cadastre manualmente na aba Profissionais.'
+              );
+            }
+          }
         }
 
         // signUp pode trocar a sessão para o usuário criado — restaurar admin
@@ -304,7 +374,11 @@ export function UserManagement({ users, onRefresh, isSuperAdmin }: UserManagemen
           }
         }
 
-        toast.success('Usuário criado com sucesso!');
+        toast.success(
+          selectedClinicIds.length > 1
+            ? `Usuário criado com acesso a ${selectedClinicIds.length} clínicas!`
+            : 'Usuário criado com sucesso!'
+        );
       }
 
       setDialogOpen(false);
@@ -620,6 +694,11 @@ export function UserManagement({ users, onRefresh, isSuperAdmin }: UserManagemen
                     {clinicId && <SelectItem value="__new__">Criar nova função</SelectItem>}
                   </SelectContent>
                 </Select>
+                {!editingUser && formData.role === 'professional' && (
+                  <p className="text-xs text-muted-foreground">
+                    Isso só cria o acesso/login com as permissões de profissional. Pra ele aparecer disponível na Agenda, marque "Aparecer em Profissionais" abaixo.
+                  </p>
+                )}
               </div>
             </div>
 
@@ -637,6 +716,64 @@ export function UserManagement({ users, onRefresh, isSuperAdmin }: UserManagemen
                   minLength={6}
                   required
                 />
+              </div>
+            )}
+
+            {!editingUser && clinics.length > 1 && (
+              <ClinicMultiSelect
+                label="Acesso às clínicas"
+                clinics={clinics}
+                selectedIds={selectedClinicIds}
+                onChange={setSelectedClinicIds}
+                lockedIds={clinicId ? [clinicId] : []}
+                helperText="Marque em quais clínicas este usuário vai ter acesso (a atual já vem marcada). Se o e-mail já existir, o usuário existente só é vinculado às clínicas marcadas, sem criar login duplicado."
+              />
+            )}
+
+            {!editingUser && formData.role === 'professional' && (
+              <div className="space-y-3 rounded-md border p-3">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <Label htmlFor="create-professional-record">Aparecer em Profissionais</Label>
+                    <p className="text-xs text-muted-foreground">
+                      Cria também o registro deste profissional na aba Profissionais, pra ele aparecer disponível na Agenda.
+                    </p>
+                  </div>
+                  <Switch
+                    id="create-professional-record"
+                    checked={createProfessionalRecord}
+                    onCheckedChange={setCreateProfessionalRecord}
+                  />
+                </div>
+
+                {createProfessionalRecord && (
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <Label htmlFor="professional-specialty">Especialidade *</Label>
+                      <Select value={professionalSpecialty} onValueChange={setProfessionalSpecialty}>
+                        <SelectTrigger id="professional-specialty">
+                          <SelectValue placeholder="Selecione" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {SPECIALTIES.map((spec) => (
+                            <SelectItem key={spec} value={spec}>
+                              {spec}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="professional-cro">CRO *</Label>
+                      <Input
+                        id="professional-cro"
+                        value={professionalCro}
+                        onChange={(e) => setProfessionalCro(e.target.value)}
+                        placeholder="SP-12345"
+                      />
+                    </div>
+                  </div>
+                )}
               </div>
             )}
 

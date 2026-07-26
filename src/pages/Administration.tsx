@@ -41,6 +41,8 @@ import { PermissionsManagement } from '@/components/admin/PermissionsManagement'
 import { ErrorBoundary } from '@/components/ErrorBoundary';
 import { MyClinicsContent } from '@/components/admin/MyClinicsContent';
 import { supabase } from '@/integrations/supabase/client';
+import { createClient } from '@supabase/supabase-js';
+import type { Database } from '@/integrations/supabase/types';
 import { useAuth } from '@/hooks/useAuth';
 import { useClinic } from '@/hooks/useClinic';
 import { useAuditEvents } from '@/hooks/useFinancial';
@@ -82,6 +84,21 @@ interface PendingCorrection {
 
 const ADMIN_TAB_VALUES = ['clinics', 'corrections', 'users', 'permissions', 'timesheet', 'settings', 'audit'] as const;
 
+// Cliente isolado apenas para confirmação de senha. Ele não compartilha
+// storage/session com o cliente principal, então um superadmin pode confirmar
+// a senha do admin da clínica sem trocar a sessão que está usando.
+const auditVerificationClient = createClient<Database>(
+  import.meta.env.VITE_SUPABASE_URL,
+  import.meta.env.VITE_SUPABASE_ANON_KEY || import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY,
+  {
+    auth: {
+      persistSession: false,
+      autoRefreshToken: false,
+      detectSessionInUrl: false,
+    },
+  },
+);
+
 export default function Administration() {
   const { isAdmin, isSuperAdmin, user, profile } = useAuth();
   const { clinicId } = useClinic();
@@ -96,12 +113,13 @@ export default function Administration() {
   const [auditUnlocked, setAuditUnlocked] = useState(false);
   const [auditPassword, setAuditPassword] = useState('');
   const [auditError, setAuditError] = useState('');
+  const [isUnlockingAudit, setIsUnlockingAudit] = useState(false);
   const [dateRange] = useState({
     from: subDays(new Date(), 30),
     to: new Date(),
   });
 
-  const { auditEvents, isLoading: isAuditLoading } = useAuditEvents(isAdmin);
+  const { auditEvents, isLoading: isAuditLoading } = useAuditEvents(isAdmin && auditUnlocked);
 
   useEffect(() => {
     fetchData();
@@ -310,8 +328,9 @@ export default function Administration() {
   };
 
   const handleAuditUnlock = async () => {
-    if (!user?.email) {
-      setAuditError('Usuário sem e-mail.');
+    const email = user?.email?.trim();
+    if (!email) {
+      setAuditError('Não foi possível identificar o e-mail da sessão atual.');
       return;
     }
     if (!auditPassword.trim()) {
@@ -319,19 +338,26 @@ export default function Administration() {
       return;
     }
 
-    const { error } = await supabase.auth.signInWithPassword({
-      email: user.email,
-      password: auditPassword,
-    });
-
-    if (error) {
-      setAuditError('Senha inválida.');
-      return;
-    }
-
-    setAuditUnlocked(true);
-    setAuditPassword('');
+    setIsUnlockingAudit(true);
     setAuditError('');
+    try {
+      const { error } = await auditVerificationClient.auth.signInWithPassword({
+        email,
+        password: auditPassword,
+      });
+
+      if (error) {
+        setAuditError('Senha inválida.');
+        return;
+      }
+
+      setAuditUnlocked(true);
+      setAuditPassword('');
+    } finally {
+      // A sessão temporária é descartada: não altera a sessão do usuário atual.
+      await auditVerificationClient.auth.signOut();
+      setIsUnlockingAudit(false);
+    }
   };
 
   const formatAudit = (entry: AuditEvent) => {
@@ -356,6 +382,25 @@ export default function Administration() {
     }
 
     if (entry.entity_type === 'appointment') {
+      const formatMaterials = (payload: any) => {
+        if (!payload || payload.kind !== 'appointment_materials') return null;
+        const list = Array.isArray(payload.materials) ? payload.materials : [];
+        const items = list
+          .map((m: any) => `${m.product_name || '-'} ${m.quantity ?? ''}${m.unit || m.product_unit ? ` ${m.unit || m.product_unit}` : ''}`.trim())
+          .join('; ');
+        return `Materiais${payload.procedure ? ` (${payload.procedure})` : ''}: ${items || 'nenhum'}`;
+      };
+
+      const materialsBefore = formatMaterials(before);
+      const materialsAfter = formatMaterials(after);
+      if (materialsBefore || materialsAfter) {
+        return {
+          label: 'Agendamento · Materiais',
+          beforeText: materialsBefore || '-',
+          afterText: materialsAfter || '-',
+        };
+      }
+
       const beforeText = before
         ? `${before.procedure || '-'} | ${before.date || '-'} ${before.start_time || ''}`.trim()
         : '-';
@@ -439,7 +484,7 @@ export default function Administration() {
   };
 
   if (!isAdmin) {
-    return <Navigate to="/" replace />;
+    return <Navigate to="/app" replace />;
   }
 
   return (
@@ -463,7 +508,7 @@ export default function Administration() {
         </div>
 
         <Tabs value={activeTab} onValueChange={(v) => setSearchParams({ tab: v })} className="space-y-4">
-          <TabsList>
+          <TabsList className="h-auto w-full flex flex-wrap justify-start gap-1">
             <TabsTrigger value="clinics" className="flex items-center gap-2">
               <Building2 className="h-4 w-4" />
               Minhas Clínicas
@@ -728,19 +773,23 @@ export default function Administration() {
                 </CardHeader>
                 <CardContent className="space-y-3">
                   <p className="text-sm text-muted-foreground">
-                    Para acessar a auditoria, confirme sua senha.
+                    Para acessar a auditoria, confirme sua senha de acesso.
                   </p>
                   <Input
                     type="password"
                     value={auditPassword}
                     onChange={(e) => setAuditPassword(e.target.value)}
                     placeholder="Digite sua senha"
+                    autoComplete="current-password"
+                    onKeyDown={(event) => {
+                      if (event.key === 'Enter') void handleAuditUnlock();
+                    }}
                   />
                   {auditError && (
                     <p className="text-sm text-destructive">{auditError}</p>
                   )}
-                  <Button onClick={handleAuditUnlock}>
-                    Confirmar
+                  <Button onClick={handleAuditUnlock} disabled={isUnlockingAudit}>
+                    {isUnlockingAudit ? 'Confirmando...' : 'Confirmar'}
                   </Button>
                 </CardContent>
               </Card>
@@ -770,23 +819,43 @@ export default function Administration() {
                           const entryAny = entry as any;
                           const createdAt = entryAny.created_at || entryAny.createdAt;
                           const userFromList = users.find((u) => u.id === entry.user_id);
-                          const entryUserId = entry.user_id ?? entryAny.userId ?? '';
-                          const isCurrentUser = !!user?.id && String(entryUserId) === String(user.id);
-                          const currentUserLabel = isCurrentUser
-                            ? (profile?.name || user?.email || (isSuperAdmin ? 'Superadmin' : 'Você'))
-                            : null;
-                          let userLabel =
-                            currentUserLabel ||
-                            entryAny.user_name ||
-                            entryAny.userName ||
-                            userFromList?.name ||
-                            entryAny.user_email ||
-                            entryAny.userEmail ||
-                            entryAny.user_id ||
-                            entryAny.userId;
-                          if (typeof userLabel === 'string' && user?.id && String(userLabel) === String(user.id)) {
-                            userLabel = profile?.name || user?.email || (isSuperAdmin ? 'Superadmin' : 'Você');
+                          const entryUserId = String(entry.user_id ?? entryAny.userId ?? '');
+                          const isCurrentUser = !!user?.id && entryUserId === String(user.id);
+                          const looksLikeUuid =
+                            /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
+                              entryUserId,
+                            );
+
+                          let userLabel: string | null = null;
+                          if (isCurrentUser && isSuperAdmin) {
+                            userLabel = 'Superadmin';
+                          } else if (isCurrentUser) {
+                            userLabel = profile?.name || user?.email || 'Você';
+                          } else if (
+                            entryAny.user_name &&
+                            !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
+                              String(entryAny.user_name),
+                            )
+                          ) {
+                            userLabel = entryAny.user_name;
+                          } else if (
+                            entryAny.userName &&
+                            !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
+                              String(entryAny.userName),
+                            )
+                          ) {
+                            userLabel = entryAny.userName;
+                          } else if (userFromList?.name) {
+                            userLabel = userFromList.name;
+                          } else if (entryAny.user_email || entryAny.userEmail) {
+                            userLabel = entryAny.user_email || entryAny.userEmail;
+                          } else if (looksLikeUuid) {
+                            // UUID sem perfil na clínica: quase sempre ação do superadmin
+                            userLabel = 'Superadmin';
+                          } else {
+                            userLabel = entryUserId || null;
                           }
+
                           const { label, beforeText, afterText } = formatAudit(entry);
                           return (
                             <TableRow key={entry.id}>

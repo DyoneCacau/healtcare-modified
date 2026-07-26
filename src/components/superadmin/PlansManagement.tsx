@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { CurrencyInput } from "@/components/ui/currency-input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
@@ -40,20 +41,36 @@ interface Plan {
 const AVAILABLE_MODULES = [
   { key: 'agenda', label: 'Agenda' },
   { key: 'pacientes', label: 'Pacientes' },
-  { key: 'pacientes_basico', label: 'Pacientes (Básico)' },
-  { key: 'financeiro', label: 'Financeiro' },
-  { key: 'financeiro_basico', label: 'Financeiro (Básico)' },
-  { key: 'relatorios', label: 'Relatórios' },
   { key: 'profissionais', label: 'Profissionais' },
+  { key: 'procedimentos', label: 'Procedimentos' },
+  { key: 'crm', label: 'CRM de Vendas' },
+  { key: 'financeiro', label: 'Caixa' },
+  { key: 'contas_receber', label: 'Contas a receber' },
   { key: 'comissoes', label: 'Comissões' },
   { key: 'estoque', label: 'Estoque' },
-  { key: 'termos', label: 'Termos e Contratos' },
-  { key: 'administracao', label: 'Administracao' },
+  { key: 'relatorios', label: 'Relatórios' },
   { key: 'ponto', label: 'Ponto Eletrônico' },
-  // TODO(go-live): Atendimento omnichannel
-  // { key: 'atendimento', label: 'Atendimento Omnichannel' },
+  { key: 'termos', label: 'Termos e Contratos' },
+  {
+    key: 'administracao',
+    label: 'Administração',
+    fixed: true,
+    hint: 'Sempre incluída — local do upgrade de módulos',
+  },
   { key: 'multi_clinica', label: 'Multi-Clínica' },
-];
+] as const;
+
+type PlanModuleKey = (typeof AVAILABLE_MODULES)[number]['key'];
+
+const FIXED_PLAN_FEATURES: PlanModuleKey[] = AVAILABLE_MODULES
+  .filter((m): m is (typeof AVAILABLE_MODULES)[number] & { fixed: true } => 'fixed' in m && m.fixed === true)
+  .map((m) => m.key);
+
+function ensureFixedFeatures(features: string[]): string[] {
+  const next = new Set(features.filter((f) => f !== 'dashboard' && f !== 'pacientes_basico' && f !== 'financeiro_basico'));
+  FIXED_PLAN_FEATURES.forEach((key) => next.add(key));
+  return Array.from(next);
+}
 
 export function PlansManagement() {
   const [plans, setPlans] = useState<Plan[]>([]);
@@ -111,7 +128,7 @@ export function PlansManagement() {
       price_yearly: plan.price_yearly ? String(plan.price_yearly) : "",
       max_users: plan.max_users ? String(plan.max_users) : "",
       max_patients: plan.max_patients ? String(plan.max_patients) : "",
-      features: plan.features,
+      features: ensureFixedFeatures(plan.features),
       is_active: plan.is_active,
       discount_pix_percent: plan.discount_pix_percent ? String(plan.discount_pix_percent) : "",
       promo_price_monthly: plan.promo_price_monthly ? String(plan.promo_price_monthly) : "",
@@ -131,7 +148,7 @@ export function PlansManagement() {
       price_yearly: "",
       max_users: "",
       max_patients: "",
-      features: [],
+      features: ensureFixedFeatures([]),
       is_active: true,
       discount_pix_percent: "",
       promo_price_monthly: "",
@@ -151,7 +168,7 @@ export function PlansManagement() {
         price_yearly: formData.price_yearly ? parseFloat(formData.price_yearly) : null,
         max_users: formData.max_users ? parseInt(formData.max_users) : null,
         max_patients: formData.max_patients ? parseInt(formData.max_patients) : null,
-        features: formData.features,
+        features: ensureFixedFeatures(formData.features),
         is_active: formData.is_active,
         discount_pix_percent: formData.discount_pix_percent ? parseFloat(formData.discount_pix_percent) : 0,
         promo_price_monthly: formData.promo_price_monthly ? parseFloat(formData.promo_price_monthly) : null,
@@ -200,6 +217,7 @@ export function PlansManagement() {
   }
 
   function toggleFeature(feature: string) {
+    if (FIXED_PLAN_FEATURES.includes(feature as PlanModuleKey)) return;
     setFormData(prev => ({
       ...prev,
       features: prev.features.includes(feature)
@@ -350,24 +368,18 @@ export function PlansManagement() {
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
                 <Label htmlFor="price_monthly">Preço Mensal (R$) *</Label>
-                <Input
+                <CurrencyInput
                   id="price_monthly"
-                  type="number"
-                  step="0.01"
-                  value={formData.price_monthly}
-                  onChange={(e) => setFormData({ ...formData, price_monthly: e.target.value })}
-                  placeholder="99.90"
+                  value={Number(formData.price_monthly) || 0}
+                  onValueChange={(v) => setFormData({ ...formData, price_monthly: String(v) })}
                 />
               </div>
               <div className="space-y-2">
                 <Label htmlFor="price_yearly">Preço Anual (R$)</Label>
-                <Input
+                <CurrencyInput
                   id="price_yearly"
-                  type="number"
-                  step="0.01"
-                  value={formData.price_yearly}
-                  onChange={(e) => setFormData({ ...formData, price_yearly: e.target.value })}
-                  placeholder="999.00"
+                  value={Number(formData.price_yearly) || 0}
+                  onValueChange={(v) => setFormData({ ...formData, price_yearly: v ? String(v) : "" })}
                 />
               </div>
             </div>
@@ -397,27 +409,39 @@ export function PlansManagement() {
 
             <div className="space-y-2">
               <Label>Módulos Incluídos</Label>
+              <p className="text-xs text-muted-foreground">
+                Administração vem sempre marcada: é onde o admin da clínica solicita upgrade.
+              </p>
               <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
-                {AVAILABLE_MODULES.map((module) => (
-                  <div
-                    key={module.key}
-                    className={`flex items-center gap-2 p-2 rounded-lg border cursor-pointer transition-colors ${
-                      formData.features.includes(module.key)
-                        ? 'bg-primary/10 border-primary'
-                        : 'hover:bg-muted'
-                    }`}
-                    onClick={() => toggleFeature(module.key)}
-                  >
-                    <input
-                      type="checkbox"
-                      checked={formData.features.includes(module.key)}
-                      onClick={(event) => event.stopPropagation()}
-                      onChange={() => toggleFeature(module.key)}
-                      className="rounded"
-                    />
-                    <span className="text-sm">{module.label}</span>
-                  </div>
-                ))}
+                {AVAILABLE_MODULES.map((module) => {
+                  const isFixed = 'fixed' in module && module.fixed === true;
+                  const checked = formData.features.includes(module.key);
+                  return (
+                    <div
+                      key={module.key}
+                      className={`flex items-center gap-2 p-2 rounded-lg border transition-colors ${
+                        checked
+                          ? 'bg-primary/10 border-primary'
+                          : 'hover:bg-muted'
+                      } ${isFixed ? 'cursor-default opacity-95' : 'cursor-pointer'}`}
+                      onClick={() => !isFixed && toggleFeature(module.key)}
+                      title={isFixed && 'hint' in module ? module.hint : undefined}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={checked}
+                        disabled={isFixed}
+                        onClick={(event) => event.stopPropagation()}
+                        onChange={() => !isFixed && toggleFeature(module.key)}
+                        className="rounded"
+                      />
+                      <span className="text-sm">
+                        {module.label}
+                        {isFixed ? ' *' : ''}
+                      </span>
+                    </div>
+                  );
+                })}
               </div>
             </div>
 
@@ -435,13 +459,10 @@ export function PlansManagement() {
               </div>
               <div className="space-y-2">
                 <Label htmlFor="promo_price_monthly">Preço Promocional (R$)</Label>
-                <Input
+                <CurrencyInput
                   id="promo_price_monthly"
-                  type="number"
-                  step="0.01"
-                  value={formData.promo_price_monthly}
-                  onChange={(e) => setFormData({ ...formData, promo_price_monthly: e.target.value })}
-                  placeholder="Ex: 199.90"
+                  value={Number(formData.promo_price_monthly) || 0}
+                  onValueChange={(v) => setFormData({ ...formData, promo_price_monthly: v ? String(v) : "" })}
                 />
               </div>
             </div>

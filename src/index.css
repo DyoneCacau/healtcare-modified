@@ -1,9 +1,25 @@
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
 @import url("https://fonts.googleapis.com/css2?family=Inter&display=swap");
+@import url('https://fonts.googleapis.com/css2?family=Outfit:wght@500;600;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700&display=swap');
 
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+/* Remove setas de inputs number (Chrome/Safari/Firefox) */
+@layer base {
+  input[type='number']::-webkit-outer-spin-button,
+  input[type='number']::-webkit-inner-spin-button {
+    -webkit-appearance: none;
+    margin: 0;
+  }
+
+  input[type='number'] {
+    -moz-appearance: textfield;
+    appearance: textfield;
+  }
+}
 
 @layer base {
   :root {
@@ -171,6 +187,76 @@
 @keyframes fadeIn {
   from {
     opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+.landing-root .font-landing {
+  font-family: 'Outfit', 'Manrope', system-ui, sans-serif;
+}
+
+.landing-root {
+  font-family: 'Manrope', system-ui, sans-serif;
+}
+
+.landing-fade-up {
+  animation: landingFadeUp 0.8s ease-out both;
+}
+
+.landing-fade-up-delay {
+  animation: landingFadeUp 0.9s ease-out 0.15s both;
+}
+
+.landing-fade-up-delay-2 {
+  animation: landingFadeUp 1s ease-out 0.28s both;
+}
+
+.landing-float {
+  animation: landingFloat 6s ease-in-out infinite;
+}
+
+.landing-float-slow {
+  animation: landingFloat 7.5s ease-in-out infinite;
+}
+
+.landing-float-delayed {
+  animation: landingFloat 6.5s ease-in-out 0.8s infinite;
+}
+
+.landing-parallax-tilt {
+  transform: perspective(1200px) rotateY(-8deg) rotateX(4deg);
+}
+
+@keyframes landingFadeUp {
+  from {
+    opacity: 0;
+    transform: translateY(18px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes landingFloat {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-10px);
+  }
+}
+
+.landing-screen-fade {
+  animation: landingScreenFade 0.45s ease-out;
+}
+
+@keyframes landingScreenFade {
+  from {
+    opacity: 0.35;
   }
   to {
     opacity: 1;

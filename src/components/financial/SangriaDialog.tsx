@@ -8,9 +8,10 @@ import {
   DialogFooter,
 } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
+import { CurrencyInput } from '@/components/ui/currency-input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
+import { formatCurrencyBRL } from '@/lib/currency';
 
 const CATEGORY_SANGRIA = 'Sangria / Recolhimento para cofre';
 
@@ -27,30 +28,28 @@ export function SangriaDialog({
   onConfirm,
   maxCash = 0,
 }: SangriaDialogProps) {
-  const [amount, setAmount] = useState('');
+  const [amount, setAmount] = useState(0);
   const [notes, setNotes] = useState('');
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    const value = parseFloat(amount.replace(/,/g, '.').replace(/\s/g, ''));
-    if (isNaN(value) || value <= 0) return;
-    if (maxCash > 0 && value > maxCash) return;
-    onConfirm(value, notes.trim());
-    setAmount('');
+    if (amount <= 0) return;
+    if (maxCash > 0 && amount > maxCash) return;
+    onConfirm(amount, notes.trim());
+    setAmount(0);
     setNotes('');
     onOpenChange(false);
   };
 
-  const numAmount = parseFloat(amount.replace(/,/g, '.').replace(/\s/g, '')) || 0;
-  const isValid = numAmount > 0 && (maxCash <= 0 || numAmount <= maxCash);
+  const isValid = amount > 0 && (maxCash <= 0 || amount <= maxCash);
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
-            <Wallet className="h-5 w-5 text-amber-600" />
-            Sangria / Recolhimento para cofre
+            <Wallet className="h-5 w-5" />
+            Sangria / Recolhimento
           </DialogTitle>
         </DialogHeader>
         <p className="text-sm text-muted-foreground">
@@ -59,18 +58,14 @@ export function SangriaDialog({
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
             <Label htmlFor="sangria-amount">Valor (R$)</Label>
-            <Input
+            <CurrencyInput
               id="sangria-amount"
-              type="text"
-              inputMode="decimal"
-              placeholder="0,00"
               value={amount}
-              onChange={(e) => setAmount(e.target.value)}
-              className="font-mono"
+              onValueChange={setAmount}
             />
             {maxCash > 0 && (
               <p className="text-xs text-muted-foreground mt-1">
-                Disponível em caixa: R$ {maxCash.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                Disponível em caixa: R$ {formatCurrencyBRL(maxCash)}
               </p>
             )}
           </div>

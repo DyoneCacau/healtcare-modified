@@ -1,5 +1,7 @@
 import { useQuery } from '@tanstack/react-query';
+import { format, subDays, startOfMonth as startOfMonthFn } from 'date-fns';
 import { supabase } from '@/integrations/supabase/client';
+import { netBalance } from '@/lib/financialAggregation';
 import { useClinic } from './useClinic';
 
 export function useDashboardStats() {
@@ -10,25 +12,32 @@ export function useDashboardStats() {
     queryFn: async () => {
       if (!clinicId) return null;
 
-      const today = new Date().toISOString().split('T')[0];
-      const yesterday = new Date(Date.now() - 86400000).toISOString().split('T')[0];
-      const startOfMonth = new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString().split('T')[0];
+      // Datas locais (mesmo cálculo usado ao salvar agendamentos), não UTC.
+      // `toISOString()` usaria o dia em UTC, o que faz "hoje" pular pro dia
+      // seguinte entre ~21h e 23h59 no horário do Brasil (UTC-3), fazendo os
+      // agendamentos de hoje somem das estatísticas nesse intervalo.
+      const now = new Date();
+      const today = format(now, 'yyyy-MM-dd');
+      const yesterday = format(subDays(now, 1), 'yyyy-MM-dd');
+      const startOfMonth = format(startOfMonthFn(now), 'yyyy-MM-dd');
 
-      // Today's appointments
+      // Today's appointments (cancelados não contam no card nem no comparativo)
       const { data: todayAppointments, error: todayError } = await supabase
         .from('appointments')
         .select('id, status')
         .eq('clinic_id', clinicId)
-        .eq('date', today);
+        .eq('date', today)
+        .neq('status', 'cancelled');
 
       if (todayError) throw todayError;
 
       // Yesterday's appointments for comparison
       const { data: yesterdayAppointments, error: yesterdayError } = await supabase
         .from('appointments')
-        .select('id')
+        .select('id, status')
         .eq('clinic_id', clinicId)
-        .eq('date', yesterday);
+        .eq('date', yesterday)
+        .neq('status', 'cancelled');
 
       if (yesterdayError) throw yesterdayError;
 
@@ -59,30 +68,30 @@ export function useDashboardStats() {
 
       const { data: todayTransactions, error: transError } = await supabase
         .from('financial_transactions')
-        .select('type, amount')
+        .select('type, amount, category, refunded_at, deleted_at')
         .eq('clinic_id', clinicId)
+        .is('deleted_at', null)
         .gte('created_at', startOfDay)
         .lte('created_at', endOfDay);
 
       if (transError) throw transError;
 
-      const todayBalance = (todayTransactions || []).reduce((sum, t) => {
-        return sum + (t.type === 'income' ? Number(t.amount) : -Number(t.amount));
-      }, 0);
+      // Estornos (refunded_at) e despesas "Estorno" legadas saem do saldo do dia
+      const todayBalance = netBalance(todayTransactions || []);
 
       // Calculate trends
       const todayCount = (todayAppointments || []).length;
       const yesterdayCount = (yesterdayAppointments || []).length;
-      const appointmentTrend = yesterdayCount > 0 
-        ? Math.round(((todayCount - yesterdayCount) / yesterdayCount) * 100) 
-        : 0;
+      const appointmentTrend = yesterdayCount > 0
+        ? Math.round(((todayCount - yesterdayCount) / yesterdayCount) * 100)
+        : todayCount > 0 ? 100 : 0;
 
       return {
         appointmentsToday: todayCount,
         appointmentsByStatus: {
-          confirmed: (todayAppointments || []).filter(a => a.status === 'confirmed').length,
-          pending: (todayAppointments || []).filter(a => a.status === 'pending').length,
-          completed: (todayAppointments || []).filter(a => a.status === 'completed').length,
+          confirmed: (todayAppointments || []).filter((a) => a.status === 'confirmed').length,
+          pending: (todayAppointments || []).filter((a) => a.status === 'pending').length,
+          completed: (todayAppointments || []).filter((a) => a.status === 'completed').length,
         },
         appointmentTrend,
         totalPatients: (monthPatients || []).length,

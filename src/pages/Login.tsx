@@ -36,7 +36,7 @@ export default function Login() {
 
   useEffect(() => {
     if (!authLoading && user) {
-      navigate("/");
+      navigate("/app");
     }
   }, [user, authLoading, navigate]);
 
@@ -50,7 +50,7 @@ export default function Login() {
       setIsLoading(false);
     } else {
       toast.success("Login realizado com sucesso!");
-      navigate("/");
+      navigate("/app");
     }
   };
 
@@ -90,9 +90,9 @@ export default function Login() {
       <div className="hidden lg:flex lg:w-1/2 flex-col justify-between p-12" style={{background: 'linear-gradient(145deg, hsl(215 55% 18%) 0%, hsl(204 70% 28%) 50%, hsl(215 55% 14%) 100%)'}}>
         <div className="flex items-center gap-3">
           <img 
-            src="/logo.png" 
+            src="/logo-512.png" 
             alt="HealthCare" 
-            className="h-12 w-12 rounded-xl object-cover shadow-lg"
+            className="h-12 w-12 rounded-xl object-contain bg-white p-1 shadow-lg"
           />
           <span className="text-2xl font-bold text-white">
             HealthCare
@@ -135,7 +135,7 @@ export default function Login() {
           {/* Mobile Logo */}
           <div className="mb-8 flex items-center gap-2 lg:hidden">
             <img 
-              src="/logo.png" 
+              src="/logo-512.png" 
               alt="HealthCare" 
               className="h-10 w-10 rounded-xl object-cover"
             />

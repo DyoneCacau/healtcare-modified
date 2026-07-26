@@ -26,6 +26,7 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { Input } from '@/components/ui/input';
+import { CurrencyInput } from '@/components/ui/currency-input';
 import { Textarea } from '@/components/ui/textarea';
 import { Button } from '@/components/ui/button';
 import { Switch } from '@/components/ui/switch';
@@ -43,6 +44,7 @@ import {
 } from '@/types/commission';
 import { useProfessionals } from '@/hooks/useProfessionals';
 import { useClinics } from '@/hooks/useClinic';
+import { useClinicProcedures } from '@/hooks/useClinicProcedures';
 import { PROCEDURE_OPTIONS } from '@/lib/procedures';
 
 const formSchema = z.object({
@@ -79,6 +81,7 @@ export function CommissionRuleForm({
   const [selectedClinic, setSelectedClinic] = useState(selectedClinicId || '');
   const { professionals } = useProfessionals();
   const { clinics } = useClinics();
+  const { activeProcedures } = useClinicProcedures(selectedClinic);
 
   const form = useForm<FormValues>({
     resolver: zodResolver(formSchema),
@@ -213,7 +216,17 @@ export function CommissionRuleForm({
               render={({ field }) => (
                 <FormItem>
                   <FormLabel>Tipo de Beneficiário</FormLabel>
-                  <Select value={field.value} onValueChange={field.onChange}>
+                  <Select
+                    value={field.value}
+                    onValueChange={(value) => {
+                      field.onChange(value);
+                      const selected = activeProcedures.find((item) => item.name === value);
+                      if (!editingRule && selected?.default_commission != null) {
+                        form.setValue('calculationType', 'percentage');
+                        form.setValue('value', selected.default_commission);
+                      }
+                    }}
+                  >
                     <FormControl>
                       <SelectTrigger>
                         <SelectValue />
@@ -302,11 +315,19 @@ export function CommissionRuleForm({
                     </FormControl>
                     <SelectContent>
                       <SelectItem value="all">Todos os Procedimentos</SelectItem>
-                      {PROCEDURE_OPTIONS.map((proc) => (
+                      {(activeProcedures.length
+                        ? activeProcedures.map((item) => item.name)
+                        : PROCEDURE_OPTIONS
+                      ).filter((proc) => proc !== 'Outros').map((proc) => (
                         <SelectItem key={proc} value={proc}>
                           {proc}
                         </SelectItem>
                       ))}
+                      {field.value !== 'all'
+                        && !activeProcedures.some((item) => item.name === field.value)
+                        && !PROCEDURE_OPTIONS.includes(field.value as any) && (
+                          <SelectItem value={field.value}>{field.value} (atual)</SelectItem>
+                        )}
                     </SelectContent>
                   </Select>
                   <FormMessage />
@@ -405,26 +426,29 @@ export function CommissionRuleForm({
                     )}
                   </FormLabel>
                   <FormControl>
-                    <div className="relative">
-                      <Input
-                        type="number"
-                        step={watchCalculationType === 'percentage' ? '1' : '0.01'}
-                        min="0"
-                        max={watchCalculationType === 'percentage' ? '100' : undefined}
-                        {...field}
-                        onChange={(e) => field.onChange(parseFloat(e.target.value) || 0)}
-                        className={watchCalculationType === 'percentage' ? 'pr-8' : 'pl-9'}
-                      />
-                      {watchCalculationType === 'percentage' ? (
+                    {watchCalculationType === 'percentage' ? (
+                      <div className="relative">
+                        <Input
+                          type="text"
+                          inputMode="decimal"
+                          value={field.value === 0 ? '' : String(field.value)}
+                          onChange={(e) => {
+                            const raw = e.target.value.replace(',', '.').replace(/[^\d.]/g, '');
+                            field.onChange(raw === '' ? 0 : parseFloat(raw) || 0);
+                          }}
+                          className="pr-8 tabular-nums"
+                          placeholder="0"
+                        />
                         <span className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground">
                           %
                         </span>
-                      ) : (
-                        <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground">
-                          R$
-                        </span>
-                      )}
-                    </div>
+                      </div>
+                    ) : (
+                      <CurrencyInput
+                        value={Number(field.value) || 0}
+                        onValueChange={field.onChange}
+                      />
+                    )}
                   </FormControl>
                   <FormMessage />
                 </FormItem>

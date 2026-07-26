@@ -1,3 +1,4 @@
+import { useMemo } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useClinic } from './useClinic';
@@ -35,6 +36,8 @@ export interface InventoryMovementData {
   created_at: string;
 }
 
+const EMPTY_PRODUCTS: InventoryProductData[] = [];
+
 export function useInventoryProducts() {
   const { clinicId } = useClinic();
 
@@ -55,12 +58,19 @@ export function useInventoryProducts() {
     enabled: !!clinicId,
   });
 
-  return { 
-    products: products || [], 
-    activeProducts: (products || []).filter(p => p.is_active),
-    isLoading, 
+  const allProducts = products ?? EMPTY_PRODUCTS;
+  // null/undefined conta como ativo (produtos antigos podem não ter a flag)
+  const activeProducts = useMemo(
+    () => allProducts.filter((p) => p.is_active !== false),
+    [allProducts],
+  );
+
+  return {
+    products: allProducts,
+    activeProducts,
+    isLoading,
     error,
-    refetch 
+    refetch,
   };
 }
 

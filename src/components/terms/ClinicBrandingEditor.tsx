@@ -22,30 +22,13 @@ export function ClinicBrandingEditor({ branding, onSave, onUploadLogo }: ClinicB
     setLogo(branding.logo || '');
   }, [branding.logo]);
 
-  useEffect(() => {
-    setUseDefaultColor(!branding.hasCustomColor);
-    setPrimaryColor(branding.primaryColor || DEFAULT_COLOR);
-  }, [branding.hasCustomColor, branding.primaryColor]);
-  const DEFAULT_COLOR = '#000000';
-  const [primaryColor, setPrimaryColor] = useState(branding.primaryColor || DEFAULT_COLOR);
-  const [useDefaultColor, setUseDefaultColor] = useState(!branding.hasCustomColor);
-
+  // Edição de cor desativada por pedido do cliente (fica sempre no padrão
+  // preto). Se reativar, volte os campos de "Cor Principal" removidos abaixo.
   const handleSave = () => {
     onSave({
       ...branding,
       logo: logo.trim() || undefined,
-      primaryColor: useDefaultColor ? null : primaryColor,
-    });
-    toast.success('Identidade visual atualizada com sucesso!');
-  };
-
-  const handleToggleDefaultColor = (checked: boolean) => {
-    setUseDefaultColor(checked);
-    if (checked) setPrimaryColor(DEFAULT_COLOR);
-    onSave({
-      ...branding,
-      logo: logo.trim() || undefined,
-      primaryColor: checked ? null : primaryColor,
+      primaryColor: null,
     });
     toast.success('Identidade visual atualizada com sucesso!');
   };
@@ -108,38 +91,6 @@ export function ClinicBrandingEditor({ branding, onSave, onUploadLogo }: ClinicB
           <p className="text-xs text-muted-foreground">
             Envie uma imagem (PNG, JPG, GIF, WEBP ou SVG) ou cole a URL
           </p>
-        </div>
-
-        <div className="space-y-2">
-          <Label htmlFor="primaryColor">Cor Principal</Label>
-          <div className="flex items-center gap-2 flex-wrap">
-            <label className="flex items-center gap-2 cursor-pointer">
-              <input
-                type="checkbox"
-                checked={useDefaultColor}
-                onChange={(e) => handleToggleDefaultColor(e.target.checked)}
-                className="rounded"
-              />
-              <span className="text-sm">Usar cor padrao (preto)</span>
-            </label>
-          </div>
-          {!useDefaultColor && (
-            <div className="flex gap-2 mt-2">
-              <Input
-                id="primaryColor"
-                type="color"
-                value={primaryColor}
-                onChange={(e) => setPrimaryColor(e.target.value)}
-                className="w-16 h-10 p-1 cursor-pointer"
-              />
-              <Input
-                value={primaryColor}
-                onChange={(e) => setPrimaryColor(e.target.value)}
-                placeholder="#000000"
-                className="flex-1"
-              />
-            </div>
-          )}
         </div>
 
         <Button onClick={handleSave} className="w-full">
