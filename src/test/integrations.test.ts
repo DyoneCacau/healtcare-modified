@@ -60,7 +60,7 @@ describe('catálogo de provedores', () => {
   it('provedor meta é hub OAuth e não cria lead nesta etapa', () => {
     const meta = getProviderDefinition('meta');
     expect(meta?.requiresCredentials).toBe(true);
-    expect(meta?.createsLeads).toBe(false);
+    expect(meta?.createsLeads).toBe(true);
     expect(meta?.supportsInboundWebhook).toBe(true);
   });
 

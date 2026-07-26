@@ -85,6 +85,8 @@ export interface MetaAssetsResult {
     adAccounts: boolean;
     leadAds: boolean;
   };
+  lead_capture?: boolean;
+  lead_capture_subscribed_at?: string | null;
   selection: {
     page_id: string | null;
     instagram_account_id: string | null;
@@ -142,6 +144,28 @@ export const metaConnectionService = {
   async disconnect(clinicId: string, integrationId: string): Promise<{ ok: boolean }> {
     return invokeMeta('meta-connection', {
       action: 'disconnect',
+      clinic_id: clinicId,
+      integration_id: integrationId,
+    });
+  },
+
+  async enableLeadCapture(
+    clinicId: string,
+    integrationId: string,
+  ): Promise<{ ok: boolean; lead_capture: boolean; meta: MetaPublicConfig }> {
+    return invokeMeta('meta-connection', {
+      action: 'enable_lead_capture',
+      clinic_id: clinicId,
+      integration_id: integrationId,
+    });
+  },
+
+  async disableLeadCapture(
+    clinicId: string,
+    integrationId: string,
+  ): Promise<{ ok: boolean; lead_capture: boolean; meta: MetaPublicConfig }> {
+    return invokeMeta('meta-connection', {
+      action: 'disable_lead_capture',
       clinic_id: clinicId,
       integration_id: integrationId,
     });

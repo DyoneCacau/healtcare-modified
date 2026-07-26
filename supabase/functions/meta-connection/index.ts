@@ -3,6 +3,7 @@
  *
  * POST /meta-connection
  *   action: list_assets | save_assets | refresh_status | disconnect | reconnect_info
+ *         | enable_lead_capture | disable_lead_capture
  *
  * Tokens nunca saem desta function. O browser só recebe ids/nomes.
  * Deploy: supabase functions deploy meta-connection
@@ -23,6 +24,10 @@ import {
   readMetaPublicConfig,
   type MetaPublicConfig,
 } from '../_shared/metaConnection.ts'
+import {
+  disableLeadCaptureForIntegration,
+  enableLeadCaptureForIntegration,
+} from '../_shared/metaLeadAds.ts'
 import {
   META_ASSETS_UNAVAILABLE,
   listMetaPages,
@@ -172,6 +177,11 @@ Deno.serve(async (req) => {
         instagramAccounts: [],
         adAccounts: [],
         unavailable: META_ASSETS_UNAVAILABLE,
+        lead_capture: currentConfig.lead_capture === true,
+        lead_capture_subscribed_at:
+          typeof currentConfig.lead_capture_subscribed_at === 'string'
+            ? currentConfig.lead_capture_subscribed_at
+            : null,
         selection: {
           page_id: publicMeta.page_id,
           instagram_account_id: null,
@@ -308,15 +318,67 @@ Deno.serve(async (req) => {
       return json(req, { ok: true, meta: nextMeta })
     }
 
+    if (body.action === 'enable_lead_capture') {
+      const result = await enableLeadCaptureForIntegration(supabase, {
+        clinicId: body.clinic_id,
+        integrationId: body.integration_id,
+        userId: user.id,
+      })
+      return json(req, {
+        ok: true,
+        lead_capture: result.leadCapture,
+        meta: result.meta,
+      })
+    }
+
+    if (body.action === 'disable_lead_capture') {
+      const result = await disableLeadCaptureForIntegration(supabase, {
+        clinicId: body.clinic_id,
+        integrationId: body.integration_id,
+        userId: user.id,
+      })
+      return json(req, {
+        ok: true,
+        lead_capture: result.leadCapture,
+        meta: result.meta,
+      })
+    }
+
     if (body.action === 'disconnect') {
+      // Melhor esforço: desassina leadgen antes de apagar tokens
+      if (currentConfig.lead_capture === true) {
+        try {
+          await disableLeadCaptureForIntegration(supabase, {
+            clinicId: body.clinic_id,
+            integrationId: body.integration_id,
+            userId: user.id,
+          })
+        } catch (disableError) {
+          console.warn('[meta-connection] disable_lead_capture no disconnect',
+            disableError instanceof Error ? disableError.message : 'erro')
+        }
+      }
+
       await deleteMetaCredentials(supabase, body.clinic_id, body.integration_id)
       const nextMeta = emptyMetaPublicConfig('disconnected')
-      await applyMetaConfig(supabase, body.integration_id, body.clinic_id, currentConfig, nextMeta, {
-        status: 'disconnected',
-        lastError: null,
-        credentialsRef: null,
-        externalAccountId: null,
-      })
+      const clearedConfig = {
+        ...mergeIntegrationConfig(currentConfig, nextMeta),
+        lead_capture: false,
+        lead_capture_subscribed_at: null,
+      }
+      const { error: disconnectError } = await supabase
+        .from('integrations')
+        .update({
+          config: clearedConfig,
+          status: 'disconnected',
+          last_error: null,
+          credentials_ref: null,
+          external_account_id: null,
+        })
+        .eq('id', body.integration_id)
+        .eq('clinic_id', body.clinic_id)
+      if (disconnectError) throw new HttpError(500, 'Falha ao desconectar Meta')
+
       await logConnectionEvent(supabase, {
         clinicId: body.clinic_id,
         integrationId: body.integration_id,
@@ -325,7 +387,7 @@ Deno.serve(async (req) => {
         message: 'Conexão Meta desconectada',
         createdBy: user.id,
       })
-      return json(req, { ok: true, meta: nextMeta })
+      return json(req, { ok: true, meta: nextMeta, lead_capture: false })
     }
 
     if (body.action === 'reconnect_info') {
@@ -333,6 +395,7 @@ Deno.serve(async (req) => {
         provider: META_PROVIDER,
         integrationId: body.integration_id,
         meta: publicMeta,
+        lead_capture: currentConfig.lead_capture === true,
         needsOAuth: true,
         message: 'Use meta-oauth action=start com este integration_id para reconectar',
       })

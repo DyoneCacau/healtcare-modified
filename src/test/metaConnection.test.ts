@@ -56,24 +56,24 @@ describe('PRODUCAO_29 — credenciais isoladas', () => {
   });
 });
 
-describe('escopos OAuth desta etapa (só Página)', () => {
-  it('pede apenas permissões disponíveis no app Meta atual', () => {
+describe('escopos OAuth Página + Lead Ads', () => {
+  it('pede permissões mínimas de Página e leadgen', () => {
     const scopes = META_OAUTH_SCOPES.split(',');
     expect(scopes).toEqual([
       'public_profile',
       'pages_show_list',
       'pages_read_engagement',
+      'pages_manage_metadata',
+      'leads_retrieval',
       'business_management',
     ]);
   });
 
-  it('não pede Instagram, ads nem Lead Ads nesta etapa', () => {
+  it('não pede Instagram Insights nem ads_read', () => {
     const scopes = META_OAUTH_SCOPES.split(',');
-    expect(scopes).not.toContain('leads_retrieval');
     expect(scopes).not.toContain('ads_read');
     expect(scopes).not.toContain('instagram_basic');
     expect(scopes).not.toContain('instagram_manage_insights');
-    expect(scopes).not.toContain('pages_manage_metadata');
     expect(scopes).not.toContain('email');
   });
 

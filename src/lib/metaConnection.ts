@@ -90,3 +90,20 @@ export const META_PHASE_LABELS: Record<MetaConnectionPhase, string> = {
   error: 'Com erro',
   disconnected: 'Desconectada',
 };
+
+/** `lead_capture` fica no topo de `integrations.config`, não em `config.meta`. */
+export function readMetaLeadCapture(config: Record<string, unknown> | null | undefined): {
+  enabled: boolean;
+  subscribedAt: string | null;
+} {
+  if (!config || typeof config !== 'object') {
+    return { enabled: false, subscribedAt: null };
+  }
+  return {
+    enabled: config.lead_capture === true,
+    subscribedAt:
+      typeof config.lead_capture_subscribed_at === 'string'
+        ? config.lead_capture_subscribed_at
+        : null,
+  };
+}

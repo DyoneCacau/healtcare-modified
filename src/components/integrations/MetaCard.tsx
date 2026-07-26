@@ -4,7 +4,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { IntegrationStatusBadge } from './IntegrationStatusBadge';
 import { useMetaConnectionMutations } from '@/hooks/useMetaConnection';
-import { META_PHASE_LABELS, readMetaPublicConfig } from '@/lib/metaConnection';
+import { META_PHASE_LABELS, readMetaLeadCapture, readMetaPublicConfig } from '@/lib/metaConnection';
 import type { Integration } from '@/types/integration';
 
 interface MetaCardProps {
@@ -17,6 +17,9 @@ interface MetaCardProps {
 export function MetaCard({ connection, canCreate, canEdit, onManage }: MetaCardProps) {
   const { startOAuth } = useMetaConnectionMutations();
   const meta = connection ? readMetaPublicConfig(connection.config) : null;
+  const leadCapture = connection
+    ? readMetaLeadCapture(connection.config as Record<string, unknown>)
+    : { enabled: false, subscribedAt: null };
 
   return (
     <Card className="flex h-full flex-col border-primary/25 bg-gradient-to-br from-background to-[#1877F2]/5">
@@ -57,6 +60,9 @@ export function MetaCard({ connection, canCreate, canEdit, onManage }: MetaCardP
               {meta.page_name
                 ? `Página: ${meta.page_name}`
                 : 'Nenhuma página selecionada ainda'}
+            </p>
+            <p className="text-muted-foreground">
+              Lead Ads: {leadCapture.enabled ? 'captura ativa' : 'captura desligada'}
             </p>
           </div>
         ) : (

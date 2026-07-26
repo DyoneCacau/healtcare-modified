@@ -137,5 +137,41 @@ export function useMetaConnectionMutations() {
     },
   });
 
-  return { startOAuth, listAssets, saveAssets, refreshStatus, disconnect };
+  const enableLeadCapture = useMutation({
+    mutationFn: async (integrationId: string) => {
+      if (!clinicId) throw new Error('Selecione uma clínica');
+      return metaConnectionService.enableLeadCapture(clinicId, integrationId);
+    },
+    onSuccess: (_data, integrationId) => {
+      toast.success('Captura de Lead Ads ativada');
+      invalidate(integrationId);
+    },
+    onError: (error: Error) => {
+      toast.error(error.message || 'Não foi possível ativar a captura de leads');
+    },
+  });
+
+  const disableLeadCapture = useMutation({
+    mutationFn: async (integrationId: string) => {
+      if (!clinicId) throw new Error('Selecione uma clínica');
+      return metaConnectionService.disableLeadCapture(clinicId, integrationId);
+    },
+    onSuccess: (_data, integrationId) => {
+      toast.success('Captura de Lead Ads desativada');
+      invalidate(integrationId);
+    },
+    onError: (error: Error) => {
+      toast.error(error.message || 'Não foi possível desativar a captura');
+    },
+  });
+
+  return {
+    startOAuth,
+    listAssets,
+    saveAssets,
+    refreshStatus,
+    disconnect,
+    enableLeadCapture,
+    disableLeadCapture,
+  };
 }

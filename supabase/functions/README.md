@@ -17,7 +17,8 @@ Asaas opcional por clínica. Mercado Pago permanece removido.
 | `meta-send-message` | Enviar mensagem outbound via Cloud API | `SUPABASE_SERVICE_ROLE_KEY`, `SUPABASE_ANON_KEY` |
 | `meta-save-channel` | Salva credenciais Meta sem expô-las ao PostgREST | `SUPABASE_SERVICE_ROLE_KEY`, `APP_URL` |
 | `meta-oauth` | OAuth Facebook/Instagram (start + callback) — Central de Integrações | `META_APP_ID`, `META_APP_SECRET`, `APP_URL`, `SUPABASE_SERVICE_ROLE_KEY` |
-| `meta-connection` | Ativos Meta, status, reconectar/desconectar (sem Lead Ads) | `META_APP_ID`, `META_APP_SECRET`, `APP_URL`, `SUPABASE_SERVICE_ROLE_KEY` |
+| `meta-connection` | Página, status, Lead Ads on/off, reconectar/desconectar | `META_APP_ID`, `META_APP_SECRET`, `APP_URL`, `SUPABASE_SERVICE_ROLE_KEY` |
+| `meta-leadgen-webhook` | Webhook app-level Page `leadgen` → CRM | `META_APP_SECRET`, `META_WEBHOOK_VERIFY_TOKEN`, `SUPABASE_SERVICE_ROLE_KEY` |
 | `asaas-webhook` | Persistência e processamento idempotente de eventos | `ASAAS_WEBHOOK_TOKEN`, `SUPABASE_SERVICE_ROLE_KEY` |
 | `asaas-create-checkout` | Cria cliente/assinatura e taxa de adesão opcional | `ASAAS_API_KEY`, `ASAAS_API_BASE_URL`, `ASAAS_ENV` |
 | `asaas-list-payments` | Lista faturas da assinatura com isolamento por clínica | Secrets Asaas |
@@ -64,6 +65,7 @@ supabase functions deploy integrations-dispatch
 # Central Meta (OAuth callback é público; start/gestão usam JWT do usuário)
 supabase functions deploy meta-oauth --no-verify-jwt
 supabase functions deploy meta-connection
+supabase functions deploy meta-leadgen-webhook --no-verify-jwt
 ```
 
 `integrations-webhook`, `integrations-api` e o callback de `meta-oauth` sobem

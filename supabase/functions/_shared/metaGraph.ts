@@ -11,14 +11,15 @@ export const META_GRAPH_BASE = `https://graph.facebook.com/${META_GRAPH_VERSION}
 export const META_OAUTH_DIALOG = `https://www.facebook.com/${META_GRAPH_VERSION}/dialog/oauth`
 
 /**
- * Escopos do OAuth nesta etapa (app Meta com permissões limitadas).
- * Objetivo: concluir Login, listar/selecionar Página e salvar por clínica.
- * Lead Ads / Instagram / anúncios ficam para quando o app tiver as permissões.
+ * Escopos OAuth mínimos para Página + Lead Ads (sem Instagram Insights / ads_read).
+ * Requer permissões adicionadas no App Meta + reconexão OAuth após liberar.
  */
 export const META_OAUTH_SCOPES = [
   'public_profile',
   'pages_show_list',
   'pages_read_engagement',
+  'pages_manage_metadata',
+  'leads_retrieval',
   'business_management',
 ].join(',')
 
@@ -26,7 +27,7 @@ export const META_OAUTH_SCOPES = [
 export const META_ASSETS_UNAVAILABLE = {
   instagram: true,
   adAccounts: true,
-  leadAds: true,
+  leadAds: false,
 } as const
 
 export interface MetaTokenExchange {
@@ -227,6 +228,121 @@ export async function listAdAccounts(accessToken: string): Promise<MetaAdAccount
       accountId: typeof row.account_id === 'string' ? row.account_id : (row.id as string),
       name: typeof row.name === 'string' ? row.name : (row.id as string),
     }))
+}
+
+/** Obtém Page Access Token da Página selecionada via /me/accounts. */
+export async function resolvePageAccessToken(
+  userAccessToken: string,
+  pageId: string,
+): Promise<string> {
+  const data = await metaGraphGet<{
+    data?: Array<{ id?: string; access_token?: string }>
+  }>('/me/accounts', userAccessToken, {
+    fields: 'id,access_token',
+    limit: '100',
+  })
+
+  const page = (data.data || []).find((row) => row.id === pageId)
+  if (!page?.access_token) {
+    throw new HttpError(
+      400,
+      'Token da Página indisponível. Reconecte o OAuth e selecione a Página novamente.',
+    )
+  }
+  return page.access_token
+}
+
+/** Assina a Página no campo webhook leadgen. */
+export async function subscribePageToLeadgen(
+  pageId: string,
+  pageAccessToken: string,
+): Promise<void> {
+  const url = new URL(`${META_GRAPH_BASE}/${pageId}/subscribed_apps`)
+  url.searchParams.set('subscribed_fields', 'leadgen')
+  url.searchParams.set('access_token', pageAccessToken)
+
+  const response = await fetch(url.toString(), { method: 'POST' })
+  const body: unknown = await response.json().catch(() => null)
+  if (!response.ok) {
+    const graphError = isRecord(body) && isRecord(body.error) ? body.error : null
+    const message = graphError && typeof graphError.message === 'string'
+      ? graphError.message
+      : 'Falha ao assinar leadgen na Página'
+    const code = graphError && typeof graphError.code === 'number' ? graphError.code : null
+    console.error('[meta-graph] subscribe leadgen', JSON.stringify({
+      page_id: pageId,
+      httpStatus: response.status,
+      code,
+      message,
+    }))
+    throw new HttpError(code === 190 || response.status === 401 ? 401 : 502, message)
+  }
+}
+
+/** Remove a assinatura do app na Página (desativa leadgen). */
+export async function unsubscribePageFromLeadgen(
+  pageId: string,
+  pageAccessToken: string,
+): Promise<void> {
+  const url = new URL(`${META_GRAPH_BASE}/${pageId}/subscribed_apps`)
+  url.searchParams.set('access_token', pageAccessToken)
+
+  const response = await fetch(url.toString(), { method: 'DELETE' })
+  const body: unknown = await response.json().catch(() => null)
+  if (!response.ok) {
+    const message = isRecord(body) && isRecord(body.error) && typeof body.error.message === 'string'
+      ? body.error.message
+      : 'Falha ao desassinar leadgen na Página'
+    console.error('[meta-graph] unsubscribe leadgen', JSON.stringify({
+      page_id: pageId,
+      httpStatus: response.status,
+      message,
+    }))
+    throw new HttpError(response.status === 190 || response.status === 401 ? 401 : 502, message)
+  }
+}
+
+export interface MetaGraphLead {
+  id: string
+  createdTime: string | null
+  formId: string | null
+  adId: string | null
+  fieldData: Array<{ name: string; values: string[] }>
+}
+
+/** Busca o lead completo na Graph (requer leads_retrieval + page token). */
+export async function fetchMetaLeadById(
+  leadgenId: string,
+  pageAccessToken: string,
+): Promise<MetaGraphLead> {
+  const data = await metaGraphGet<{
+    id?: string
+    created_time?: string
+    form_id?: string
+    ad_id?: string
+    field_data?: Array<{ name?: string; values?: unknown }>
+  }>(`/${leadgenId}`, pageAccessToken, {
+    fields: 'id,created_time,ad_id,form_id,field_data',
+  })
+
+  if (!data.id) throw new HttpError(404, 'Lead Meta inexistente')
+
+  const fieldData = (data.field_data || [])
+    .filter((row) => typeof row.name === 'string')
+    .map((row) => ({
+      name: row.name as string,
+      values: Array.isArray(row.values)
+        ? row.values.filter((v): v is string => typeof v === 'string')
+        : [],
+    }))
+
+  return {
+    id: data.id,
+    createdTime: typeof data.created_time === 'string' ? data.created_time : null,
+    formId: typeof data.form_id === 'string' ? data.form_id : null,
+    adId: typeof data.ad_id === 'string' ? data.ad_id : null,
+    fieldData,
+  }
 }
 
 /** Health-check leve: confirma se o token ainda autentica. */

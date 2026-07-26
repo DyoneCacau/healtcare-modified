@@ -31,7 +31,7 @@ import {
 } from '@/components/ui/table';
 import { IntegrationStatusBadge } from './IntegrationStatusBadge';
 import { useMetaConnectionLogs, useMetaConnectionMutations } from '@/hooks/useMetaConnection';
-import { META_PHASE_LABELS, readMetaPublicConfig } from '@/lib/metaConnection';
+import { META_PHASE_LABELS, readMetaLeadCapture, readMetaPublicConfig } from '@/lib/metaConnection';
 import type { Integration, MetaPageOption } from '@/types/integration';
 
 interface MetaConnectionPanelProps {
@@ -60,7 +60,11 @@ export function MetaConnectionPanel({
   autoOpenAssets = false,
 }: MetaConnectionPanelProps) {
   const meta = useMemo(() => readMetaPublicConfig(integration.config), [integration.config]);
-  const { startOAuth, listAssets, saveAssets, refreshStatus, disconnect } =
+  const leadCapture = useMemo(
+    () => readMetaLeadCapture(integration.config as Record<string, unknown>),
+    [integration.config],
+  );
+  const { startOAuth, listAssets, saveAssets, refreshStatus, disconnect, enableLeadCapture, disableLeadCapture } =
     useMetaConnectionMutations();
   const { data: logs = [], isLoading: loadingLogs } = useMetaConnectionLogs(integration.id);
 
@@ -236,6 +240,57 @@ export function MetaConnectionPanel({
           <p className="mt-1 text-xs text-muted-foreground">
             Última verificação: {formatWhen(meta.last_status_check_at)}
           </p>
+        </div>
+        <div className="rounded-md border p-3 text-sm sm:col-span-2">
+          <div className="mb-1 flex flex-wrap items-center gap-2 font-medium">
+            Captura Lead Ads
+            <Badge
+              variant="outline"
+              className={leadCapture.enabled
+                ? 'bg-emerald-100 text-emerald-800 border-emerald-200'
+                : 'bg-muted text-muted-foreground'}
+            >
+              {leadCapture.enabled ? 'Ativa' : 'Desligada'}
+            </Badge>
+          </div>
+          <p className="text-muted-foreground">
+            {leadCapture.enabled
+              ? `Formulários instantâneos da Página entram no CRM. Ativada em ${formatWhen(leadCapture.subscribedAt)}.`
+              : 'Quando ativada, a Página assina o campo leadgen e os leads vão para o Kanban desta clínica.'}
+          </p>
+          {canEdit && meta.connection_phase === 'ready' && meta.page_id && (
+            <div className="mt-3 flex flex-wrap gap-2">
+              {leadCapture.enabled ? (
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  disabled={disableLeadCapture.isPending}
+                  onClick={() => {
+                    if (window.confirm('Desativar a captura de leads desta Página?')) {
+                      disableLeadCapture.mutate(integration.id);
+                    }
+                  }}
+                >
+                  {disableLeadCapture.isPending && <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" />}
+                  Desativar captura
+                </Button>
+              ) : (
+                <Button
+                  type="button"
+                  size="sm"
+                  disabled={enableLeadCapture.isPending}
+                  onClick={() => enableLeadCapture.mutate(integration.id)}
+                >
+                  {enableLeadCapture.isPending && <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" />}
+                  Ativar captura de leads
+                </Button>
+              )}
+            </div>
+          )}
+          {meta.connection_phase === 'ready' && !meta.page_id && (
+            <p className="mt-2 text-xs text-amber-800">Salve uma Página antes de ativar a captura.</p>
+          )}
         </div>
       </div>
 

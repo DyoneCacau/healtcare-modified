@@ -77,6 +77,7 @@ export interface NormalizeLeadOptions {
  * catálogo exibido no app derivam desta lista.
  */
 export const LEAD_CAPTURE_PROVIDERS = [
+  'meta',
   'facebook_lead_ads',
   'instagram_lead_ads',
   'landing_page',
@@ -94,6 +95,7 @@ export function providerCreatesLeads(provider: string): boolean {
 
 /** Origem padrão por provedor quando o payload não traz `source`. */
 export const PROVIDER_DEFAULT_LEAD_SOURCE: Record<string, LeadSourceValue> = {
+  meta: 'paid_traffic',
   facebook_lead_ads: 'facebook',
   instagram_lead_ads: 'instagram',
   whatsapp_business: 'whatsapp',

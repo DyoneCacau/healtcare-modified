@@ -38,12 +38,12 @@ export const INTEGRATION_PROVIDERS: IntegrationProviderDefinition[] = [
     name: 'Meta',
     category: 'ads',
     description:
-      'Conecta Facebook e Instagram da clínica (Página, Instagram e Conta de anúncios). Base para Lead Ads.',
+      'Conecta a Página do Facebook da clínica e captura Lead Ads no CRM.',
     direction: 'inbound',
     supportsInboundWebhook: true,
     requiresCredentials: true,
-    createsLeads: false,
-    docsUrl: 'https://developers.facebook.com/docs/facebook-login',
+    createsLeads: true,
+    docsUrl: 'https://developers.facebook.com/docs/marketing-api/guides/lead-ads',
   },
   {
     id: 'facebook_lead_ads',
