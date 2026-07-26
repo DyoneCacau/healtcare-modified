@@ -11,23 +11,23 @@ export const META_GRAPH_BASE = `https://graph.facebook.com/${META_GRAPH_VERSION}
 export const META_OAUTH_DIALOG = `https://www.facebook.com/${META_GRAPH_VERSION}/dialog/oauth`
 
 /**
- * Escopos pedidos na conexão. Inclui `leads_retrieval` para a próxima etapa
- * (Lead Ads) sem precisar reconectar só por escopo — esta etapa ainda não
- * importa leads.
+ * Escopos do OAuth nesta etapa (app Meta com permissões limitadas).
+ * Objetivo: concluir Login, listar/selecionar Página e salvar por clínica.
+ * Lead Ads / Instagram / anúncios ficam para quando o app tiver as permissões.
  */
 export const META_OAUTH_SCOPES = [
   'public_profile',
-  'email',
   'pages_show_list',
   'pages_read_engagement',
-  'pages_manage_metadata',
-  'pages_read_user_content',
-  'ads_read',
   'business_management',
-  'instagram_basic',
-  'instagram_manage_insights',
-  'leads_retrieval',
 ].join(',')
+
+/** Ativos ainda sem permissão no app Meta — não listar nem pedir no OAuth. */
+export const META_ASSETS_UNAVAILABLE = {
+  instagram: true,
+  adAccounts: true,
+  leadAds: true,
+} as const
 
 export interface MetaTokenExchange {
   accessToken: string
@@ -73,12 +73,22 @@ export async function metaGraphGet<T = unknown>(
   const body: unknown = await response.json().catch(() => null)
 
   if (!response.ok) {
-    const message = isRecord(body) && isRecord(body.error) && typeof body.error.message === 'string'
-      ? body.error.message
+    const graphError = isRecord(body) && isRecord(body.error) ? body.error : null
+    const message = graphError && typeof graphError.message === 'string'
+      ? graphError.message
       : 'Falha na Graph API da Meta'
-    const code = isRecord(body) && isRecord(body.error) && typeof body.error.code === 'number'
-      ? body.error.code
+    const code = graphError && typeof graphError.code === 'number' ? graphError.code : null
+    const subcode = graphError && typeof graphError.error_subcode === 'number'
+      ? graphError.error_subcode
       : null
+    // Log sem access_token / secrets
+    console.error('[meta-graph] erro', JSON.stringify({
+      path: path.replace(/\?.*/, ''),
+      httpStatus: response.status,
+      code,
+      subcode,
+      message,
+    }))
     // 190 = token inválido/expirado
     throw new HttpError(code === 190 ? 401 : 502, message)
   }
@@ -145,6 +155,12 @@ export async function fetchMetaUser(
   return { id: data.id, name: data.name ?? null }
 }
 
+/**
+ * Lista Páginas administradas (`pages_show_list`).
+ * Nesta etapa só precisamos de id/nome para seleção — não exigir
+ * `access_token` da Página (Login for Business às vezes omite o campo
+ * e filtrar por ele esvaziava a lista).
+ */
 export async function listMetaPages(accessToken: string): Promise<MetaPageAsset[]> {
   const data = await metaGraphGet<{
     data?: Array<{
@@ -154,17 +170,19 @@ export async function listMetaPages(accessToken: string): Promise<MetaPageAsset[
       tasks?: string[]
     }>
   }>('/me/accounts', accessToken, {
-    fields: 'id,name,access_token,tasks',
+    fields: 'id,name',
     limit: '100',
   })
 
   return (data.data || [])
-    .filter((page) => typeof page.id === 'string' && typeof page.access_token === 'string')
+    .filter((page) => typeof page.id === 'string')
     .map((page) => ({
       id: page.id as string,
       name: typeof page.name === 'string' ? page.name : page.id as string,
-      accessToken: page.access_token as string,
-      tasks: Array.isArray(page.tasks) ? page.tasks.filter((t): t is string => typeof t === 'string') : [],
+      accessToken: typeof page.access_token === 'string' ? page.access_token : '',
+      tasks: Array.isArray(page.tasks)
+        ? page.tasks.filter((t): t is string => typeof t === 'string')
+        : [],
     }))
 }
 

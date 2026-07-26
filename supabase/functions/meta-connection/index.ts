@@ -8,6 +8,7 @@
  * Deploy: supabase functions deploy meta-connection
  */
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.49.1'
+import { corsHeaders, handleOptions } from '../_shared/cors.ts'
 import { HttpError } from '../_shared/httpError.ts'
 import {
   authorizeClinicIntegrationsManager,
@@ -23,27 +24,12 @@ import {
   type MetaPublicConfig,
 } from '../_shared/metaConnection.ts'
 import {
-  listAdAccounts,
-  listInstagramForPages,
+  META_ASSETS_UNAVAILABLE,
   listMetaPages,
   probeMetaToken,
 } from '../_shared/metaGraph.ts'
 
 const JSON_HEADERS = { 'Content-Type': 'application/json' }
-
-function corsHeaders(req: Request): Record<string, string> {
-  const configuredOrigin = Deno.env.get('APP_URL')?.replace(/\/$/, '')
-  const requestOrigin = req.headers.get('origin')?.replace(/\/$/, '')
-  const allowedOrigin = configuredOrigin && requestOrigin === configuredOrigin
-    ? requestOrigin
-    : configuredOrigin || 'null'
-  return {
-    'Access-Control-Allow-Origin': allowedOrigin,
-    'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
-    'Access-Control-Allow-Methods': 'POST, OPTIONS',
-    Vary: 'Origin',
-  }
-}
 
 function json(req: Request, body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), {
@@ -105,9 +91,8 @@ async function applyMetaConfig(
 }
 
 Deno.serve(async (req) => {
-  if (req.method === 'OPTIONS') {
-    return new Response(null, { status: 204, headers: corsHeaders(req) })
-  }
+  const options = handleOptions(req)
+  if (options) return options
   if (req.method !== 'POST') return json(req, { error: 'Método não permitido' }, 405)
 
   try {
@@ -131,31 +116,66 @@ Deno.serve(async (req) => {
     const publicMeta = readMetaPublicConfig(currentConfig)
 
     if (body.action === 'list_assets') {
-      const creds = await readMetaAccessToken(supabase, body.clinic_id, body.integration_id)
-      if (!creds) throw new HttpError(409, 'Conexão Meta sem credenciais — reconecte')
+      console.log('[meta-connection] list_assets start', JSON.stringify({
+        clinic_id: body.clinic_id,
+        integration_id: body.integration_id,
+        user_id: user.id,
+        phase: publicMeta.connection_phase,
+      }))
 
-      const pages = await listMetaPages(creds.accessToken)
-      const [instagramAccounts, adAccounts] = await Promise.all([
-        listInstagramForPages(pages),
-        listAdAccounts(creds.accessToken),
-      ])
+      const creds = await readMetaAccessToken(supabase, body.clinic_id, body.integration_id)
+      if (!creds) {
+        console.error('[meta-connection] list_assets sem credenciais', JSON.stringify({
+          clinic_id: body.clinic_id,
+          integration_id: body.integration_id,
+        }))
+        throw new HttpError(409, 'Conexão Meta sem credenciais — reconecte')
+      }
+
+      // Nesta etapa só Páginas; Instagram/anúncios exigem permissões ainda ausentes no app.
+      let pages
+      try {
+        pages = await listMetaPages(creds.accessToken)
+      } catch (graphError) {
+        const message = graphError instanceof HttpError
+          ? graphError.message
+          : 'Falha ao listar Páginas na Graph API'
+        console.error('[meta-connection] list_assets graph_error', JSON.stringify({
+          clinic_id: body.clinic_id,
+          integration_id: body.integration_id,
+          message,
+        }))
+        await logConnectionEvent(supabase, {
+          clinicId: body.clinic_id,
+          integrationId: body.integration_id,
+          eventType: 'list_assets_failed',
+          status: 'error',
+          message,
+          metadata: { step: 'list_meta_pages' },
+          createdBy: user.id,
+        })
+        throw graphError instanceof HttpError
+          ? graphError
+          : new HttpError(502, message)
+      }
+
+      console.log('[meta-connection] list_assets ok', JSON.stringify({
+        clinic_id: body.clinic_id,
+        integration_id: body.integration_id,
+        page_count: pages.length,
+        has_meta_user: Boolean(creds.metaUserId),
+        token_expires_at: creds.expiresAt,
+      }))
 
       return json(req, {
         pages: pages.map((p) => ({ id: p.id, name: p.name, tasks: p.tasks })),
-        instagramAccounts: instagramAccounts.map((ig) => ({
-          id: ig.id,
-          username: ig.username,
-          pageId: ig.pageId,
-        })),
-        adAccounts: adAccounts.map((ad) => ({
-          id: ad.id,
-          accountId: ad.accountId,
-          name: ad.name,
-        })),
+        instagramAccounts: [],
+        adAccounts: [],
+        unavailable: META_ASSETS_UNAVAILABLE,
         selection: {
           page_id: publicMeta.page_id,
-          instagram_account_id: publicMeta.instagram_account_id,
-          ad_account_id: publicMeta.ad_account_id,
+          instagram_account_id: null,
+          ad_account_id: null,
         },
       })
     }
@@ -172,27 +192,18 @@ Deno.serve(async (req) => {
       const page = pages.find((p) => p.id === body.page_id)
       if (!page) throw new HttpError(400, 'Página não pertence a esta conta Meta')
 
-      const instagramAccounts = await listInstagramForPages([page])
-      let instagramId: string | null = null
-      let instagramUsername: string | null = null
+      // Instagram / anúncios: não aceitar nesta etapa (sem permissões no app Meta).
       if (typeof body.instagram_account_id === 'string' && body.instagram_account_id.trim()) {
-        const ig = instagramAccounts.find((item) => item.id === body.instagram_account_id)
-        if (!ig) throw new HttpError(400, 'Conta Instagram inválida para a Página escolhida')
-        instagramId = ig.id
-        instagramUsername = ig.username
-      } else if (instagramAccounts.length === 1) {
-        instagramId = instagramAccounts[0].id
-        instagramUsername = instagramAccounts[0].username
+        throw new HttpError(
+          400,
+          'Seleção de Instagram indisponível até o app Meta ter a permissão correspondente',
+        )
       }
-
-      const adAccounts = await listAdAccounts(creds.accessToken)
-      let adAccountId: string | null = null
-      let adAccountName: string | null = null
       if (typeof body.ad_account_id === 'string' && body.ad_account_id.trim()) {
-        const ad = adAccounts.find((item) => item.id === body.ad_account_id)
-        if (!ad) throw new HttpError(400, 'Conta de anúncios inválida para esta conta Meta')
-        adAccountId = ad.id
-        adAccountName = ad.name
+        throw new HttpError(
+          400,
+          'Seleção de conta de anúncios indisponível até o app Meta ter a permissão correspondente',
+        )
       }
 
       const nextMeta: MetaPublicConfig = {
@@ -200,10 +211,10 @@ Deno.serve(async (req) => {
         meta_user_id: creds.metaUserId,
         page_id: page.id,
         page_name: page.name,
-        instagram_account_id: instagramId,
-        instagram_username: instagramUsername,
-        ad_account_id: adAccountId,
-        ad_account_name: adAccountName,
+        instagram_account_id: null,
+        instagram_username: null,
+        ad_account_id: null,
+        ad_account_name: null,
         token_expires_at: creds.expiresAt,
         connected_at: publicMeta.connected_at || new Date().toISOString(),
         last_status_check_at: new Date().toISOString(),
@@ -221,11 +232,10 @@ Deno.serve(async (req) => {
         integrationId: body.integration_id,
         eventType: 'assets_selected',
         status: 'success',
-        message: 'Ativos Meta selecionados',
+        message: 'Página Meta salva na conexão da clínica',
         metadata: {
           page_id: page.id,
-          instagram_account_id: instagramId,
-          ad_account_id: adAccountId,
+          page_name: page.name,
         },
         createdBy: user.id,
       })

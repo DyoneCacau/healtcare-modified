@@ -9,6 +9,7 @@
  * futuras integrações vão preencher.
  */
 import { createClient, SupabaseClient } from 'https://esm.sh/@supabase/supabase-js@2.49.1'
+import { corsHeaders, handleOptions } from './cors.ts'
 import { HttpError } from './httpError.ts'
 import {
   META_SIGNATURE_HEADER,
@@ -19,37 +20,15 @@ import {
 
 export { sha256Hex }
 export { HttpError }
+export { corsHeaders, handleOptions }
 
 const JSON_HEADERS = { 'Content-Type': 'application/json' }
-
-export function corsHeaders(req: Request): Record<string, string> {
-  const configuredOrigin = Deno.env.get('APP_URL')?.replace(/\/$/, '')
-  const requestOrigin = req.headers.get('origin')?.replace(/\/$/, '')
-  const allowedOrigin = configuredOrigin && requestOrigin === configuredOrigin
-    ? requestOrigin
-    : configuredOrigin || 'null'
-
-  return {
-    'Access-Control-Allow-Origin': allowedOrigin,
-    'Access-Control-Allow-Headers':
-      `authorization, x-client-info, apikey, content-type, ${SHARED_SECRET_HEADER}, `
-      + `x-healthcare-event-id, ${META_SIGNATURE_HEADER}`,
-    'Access-Control-Allow-Methods': 'GET, POST, PATCH, DELETE, OPTIONS',
-    'Vary': 'Origin',
-  }
-}
 
 export function json(req: Request, body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), {
     status,
     headers: { ...corsHeaders(req), ...JSON_HEADERS },
   })
-}
-
-export function handleOptions(req: Request): Response | null {
-  return req.method === 'OPTIONS'
-    ? new Response(null, { status: 204, headers: corsHeaders(req) })
-    : null
 }
 
 export function errorResponse(req: Request, error: unknown): Response {

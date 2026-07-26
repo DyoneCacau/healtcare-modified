@@ -1,8 +1,4 @@
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
-@import url("https://fonts.googleapis.com/css2?family=Inter&display=swap");
-@import url('https://fonts.googleapis.com/css2?family=Outfit:wght@500;600;700&display=swap');
-@import url('https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700&display=swap');
-
+/* Fontes do sistema — evita CSP / Google Fonts em produção */
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
@@ -142,7 +138,7 @@
   }
 
   html {
-    font-family: 'Inter', system-ui, sans-serif;
+    font-family: system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
   }
 
   body {
@@ -194,11 +190,11 @@
 }
 
 .landing-root .font-landing {
-  font-family: 'Outfit', 'Manrope', system-ui, sans-serif;
+  font-family: system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
 }
 
 .landing-root {
-  font-family: 'Manrope', system-ui, sans-serif;
+  font-family: system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
 }
 
 .landing-fade-up {

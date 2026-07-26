@@ -77,26 +77,38 @@ export default function Integrations() {
   useEffect(() => {
     const metaResult = searchParams.get('meta');
     if (!metaResult) return;
+    // Evita limpar a query antes das integrações carregarem (perdiamos o dialog).
+    if (isLoading) return;
 
     const integrationId = searchParams.get('integration_id');
     const reason = searchParams.get('reason');
-
-    if (metaResult === 'error') {
-      toast.error(reason || 'Falha ao conectar com a Meta');
-    } else if (metaResult === 'assets') {
-      toast.success('Meta autorizada. Selecione Página, Instagram e Conta de anúncios.');
-      setMetaAutoAssets(true);
-    } else if (metaResult === 'connected') {
-      toast.success('Conexão Meta atualizada');
-      setMetaAutoAssets(false);
-    }
 
     const target =
       (integrationId
         ? integrations.find((item) => item.id === integrationId) ?? null
         : null) || metaConnection;
 
-    if (target) {
+    if (metaResult === 'error') {
+      toast.error(reason || 'Falha ao conectar com a Meta');
+    } else if (metaResult === 'assets') {
+      if (!target) {
+        toast.error(
+          'OAuth concluído, mas a conexão Meta não foi encontrada nesta clínica. Confira a clínica ativa e reconecte.',
+        );
+      } else {
+        toast.success('Meta autorizada. Selecione a Página do Facebook.');
+        setMetaAutoAssets(true);
+        setMetaIntegration(target);
+        setMetaDialogOpen(true);
+      }
+    } else if (metaResult === 'connected') {
+      toast.success('Conexão Meta atualizada');
+      setMetaAutoAssets(false);
+      if (target) {
+        setMetaIntegration(target);
+        setMetaDialogOpen(true);
+      }
+    } else if (target) {
       setMetaIntegration(target);
       setMetaDialogOpen(true);
     }
@@ -106,7 +118,7 @@ export default function Integrations() {
     next.delete('integration_id');
     next.delete('reason');
     setSearchParams(next, { replace: true });
-  }, [searchParams, setSearchParams, integrations, metaConnection]);
+  }, [searchParams, setSearchParams, integrations, metaConnection, isLoading]);
 
   const handleConnect = (definition: IntegrationProviderDefinition) => {
     setSelectedDefinition(definition);

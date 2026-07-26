@@ -333,6 +333,7 @@ export function mergeIntegrationConfig(
 export function integrationStatusFromPhase(phase: MetaConnectionPhase): string {
   if (phase === 'ready') return 'connected'
   if (phase === 'expired' || phase === 'error') return 'error'
-  if (phase === 'assets_pending' || phase === 'oauth_pending') return 'disconnected'
+  // OAuth ok, falta escolher Página — não confundir com "desconectada"
+  if (phase === 'assets_pending' || phase === 'oauth_pending') return 'paused'
   return 'disconnected'
 }

@@ -14,24 +14,59 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null;
 }
 
-async function functionErrorMessage(error: unknown): Promise<string> {
+async function functionErrorMessage(error: unknown): Promise<{ message: string; status: number | null }> {
   if (isRecord(error) && error.context instanceof Response) {
+    const status = error.context.status;
     const payload: unknown = await error.context.clone().json().catch(() => null);
-    if (isRecord(payload) && typeof payload.error === 'string') return payload.error;
+    if (isRecord(payload) && typeof payload.error === 'string') {
+      return { message: payload.error, status };
+    }
+    return {
+      message: error instanceof Error && error.message
+        ? error.message
+        : 'Falha na Edge Function Meta',
+      status,
+    };
   }
-  if (error instanceof Error && error.message) return error.message;
-  return 'Não foi possível concluir a operação Meta';
+  if (error instanceof Error && error.message) {
+    return { message: error.message, status: null };
+  }
+  return { message: 'Não foi possível concluir a operação Meta', status: null };
 }
 
 async function invokeMeta<T>(
   functionName: string,
   body: Record<string, unknown>,
 ): Promise<T> {
+  const { data: sessionData } = await supabase.auth.getSession();
+  const hasJwt = Boolean(sessionData.session?.access_token);
+
   const { data, error } = await supabase.functions.invoke<T | FunctionError>(functionName, {
     body,
   });
-  if (error) throw new Error(await functionErrorMessage(error));
-  if (isRecord(data) && typeof data.error === 'string') throw new Error(data.error);
+
+  if (error) {
+    const parsed = await functionErrorMessage(error);
+    console.warn('[meta] invoke falhou', {
+      functionName,
+      action: body.action,
+      clinic_id: body.clinic_id,
+      integration_id: body.integration_id,
+      httpStatus: parsed.status,
+      hasJwt,
+      message: parsed.message,
+    });
+    throw new Error(parsed.message);
+  }
+  if (isRecord(data) && typeof data.error === 'string') {
+    console.warn('[meta] invoke respondeu erro', {
+      functionName,
+      action: body.action,
+      message: data.error,
+      hasJwt,
+    });
+    throw new Error(data.error);
+  }
   return data as T;
 }
 
@@ -45,6 +80,11 @@ export interface MetaAssetsResult {
   pages: MetaPageOption[];
   instagramAccounts: MetaInstagramOption[];
   adAccounts: MetaAdAccountOption[];
+  unavailable?: {
+    instagram: boolean;
+    adAccounts: boolean;
+    leadAds: boolean;
+  };
   selection: {
     page_id: string | null;
     instagram_account_id: string | null;

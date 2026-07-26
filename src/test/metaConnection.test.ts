@@ -56,11 +56,25 @@ describe('PRODUCAO_29 — credenciais isoladas', () => {
   });
 });
 
-describe('prontidão para Lead Ads (escopos / webhook)', () => {
-  it('OAuth já pede leads_retrieval para a próxima etapa', () => {
-    expect(META_OAUTH_SCOPES.split(',')).toContain('leads_retrieval');
-    expect(META_OAUTH_SCOPES.split(',')).toContain('pages_show_list');
-    expect(META_OAUTH_SCOPES.split(',')).toContain('ads_read');
+describe('escopos OAuth desta etapa (só Página)', () => {
+  it('pede apenas permissões disponíveis no app Meta atual', () => {
+    const scopes = META_OAUTH_SCOPES.split(',');
+    expect(scopes).toEqual([
+      'public_profile',
+      'pages_show_list',
+      'pages_read_engagement',
+      'business_management',
+    ]);
+  });
+
+  it('não pede Instagram, ads nem Lead Ads nesta etapa', () => {
+    const scopes = META_OAUTH_SCOPES.split(',');
+    expect(scopes).not.toContain('leads_retrieval');
+    expect(scopes).not.toContain('ads_read');
+    expect(scopes).not.toContain('instagram_basic');
+    expect(scopes).not.toContain('instagram_manage_insights');
+    expect(scopes).not.toContain('pages_manage_metadata');
+    expect(scopes).not.toContain('email');
   });
 
   it('provedor meta usa HMAC no webhook genérico', () => {

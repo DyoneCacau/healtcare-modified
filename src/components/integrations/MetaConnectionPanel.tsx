@@ -32,7 +32,7 @@ import {
 import { IntegrationStatusBadge } from './IntegrationStatusBadge';
 import { useMetaConnectionLogs, useMetaConnectionMutations } from '@/hooks/useMetaConnection';
 import { META_PHASE_LABELS, readMetaPublicConfig } from '@/lib/metaConnection';
-import type { Integration, MetaAdAccountOption, MetaInstagramOption, MetaPageOption } from '@/types/integration';
+import type { Integration, MetaPageOption } from '@/types/integration';
 
 interface MetaConnectionPanelProps {
   integration: Integration;
@@ -65,11 +65,7 @@ export function MetaConnectionPanel({
   const { data: logs = [], isLoading: loadingLogs } = useMetaConnectionLogs(integration.id);
 
   const [pages, setPages] = useState<MetaPageOption[]>([]);
-  const [instagramAccounts, setInstagramAccounts] = useState<MetaInstagramOption[]>([]);
-  const [adAccounts, setAdAccounts] = useState<MetaAdAccountOption[]>([]);
   const [pageId, setPageId] = useState<string>(meta.page_id || '');
-  const [instagramId, setInstagramId] = useState<string>(meta.instagram_account_id || '');
-  const [adAccountId, setAdAccountId] = useState<string>(meta.ad_account_id || '');
   const [assetsLoaded, setAssetsLoaded] = useState(false);
 
   const hasOAuthSession =
@@ -85,16 +81,16 @@ export function MetaConnectionPanel({
 
   useEffect(() => {
     setPageId(meta.page_id || '');
-    setInstagramId(meta.instagram_account_id || '');
-    setAdAccountId(meta.ad_account_id || '');
-  }, [meta.page_id, meta.instagram_account_id, meta.ad_account_id]);
+  }, [meta.page_id]);
 
   useEffect(() => {
-    // Atualiza status ao abrir o painel (expiração / token inválido).
+    // Após OAuth (assets_pending) prioriza list_assets — refresh automático
+    // competia e podia marcar expired/error antes da listagem.
     if (meta.connection_phase === 'disconnected') return;
+    if (autoOpenAssets || meta.connection_phase === 'assets_pending') return;
     refreshStatus.mutate(integration.id);
     // eslint-disable-next-line react-hooks/exhaustive-deps -- uma vez por integração aberta
-  }, [integration.id]);
+  }, [integration.id, autoOpenAssets, meta.connection_phase]);
 
   useEffect(() => {
     if (!showAssetForm || !canEdit) return;
@@ -106,17 +102,20 @@ export function MetaConnectionPanel({
     }
 
     let cancelled = false;
+    setAssetsLoaded(false);
     listAssets.mutateAsync(integration.id).then((result) => {
       if (cancelled) return;
       setPages(result.pages);
-      setInstagramAccounts(result.instagramAccounts);
-      setAdAccounts(result.adAccounts);
       setPageId(result.selection.page_id || '');
-      setInstagramId(result.selection.instagram_account_id || '');
-      setAdAccountId(result.selection.ad_account_id || '');
       setAssetsLoaded(true);
-    }).catch(() => {
+    }).catch((error: unknown) => {
+      if (cancelled) return;
       setAssetsLoaded(true);
+      // Toast já vem do hook; log local sem secrets
+      console.warn('[meta] list_assets falhou', {
+        integrationId: integration.id,
+        message: error instanceof Error ? error.message : 'erro desconhecido',
+      });
     });
 
     return () => {
@@ -125,18 +124,13 @@ export function MetaConnectionPanel({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [integration.id, showAssetForm, canEdit, autoOpenAssets, meta.connection_phase]);
 
-  const igForPage = useMemo(
-    () => instagramAccounts.filter((ig) => !pageId || ig.pageId === pageId),
-    [instagramAccounts, pageId],
-  );
-
   const handleSave = () => {
     if (!pageId) return;
     saveAssets.mutate({
       integrationId: integration.id,
       pageId,
-      instagramAccountId: instagramId || null,
-      adAccountId: adAccountId || null,
+      instagramAccountId: null,
+      adAccountId: null,
     });
   };
 
@@ -214,23 +208,25 @@ export function MetaConnectionPanel({
           </div>
           <p className="text-muted-foreground">{meta.page_name || 'Não selecionada'}</p>
         </div>
-        <div className="rounded-md border p-3 text-sm">
+        <div className="rounded-md border border-dashed p-3 text-sm opacity-70">
           <div className="mb-1 flex items-center gap-1.5 font-medium">
             <Instagram className="h-4 w-4" />
             Instagram
+            <Badge variant="outline" className="text-[10px]">Indisponível</Badge>
           </div>
           <p className="text-muted-foreground">
-            {meta.instagram_username
-              ? `@${meta.instagram_username}`
-              : meta.instagram_account_id || 'Não selecionada'}
+            Aguardando permissão no app Meta (`instagram_basic`).
           </p>
         </div>
-        <div className="rounded-md border p-3 text-sm">
+        <div className="rounded-md border border-dashed p-3 text-sm opacity-70">
           <div className="mb-1 flex items-center gap-1.5 font-medium">
             <Megaphone className="h-4 w-4" />
             Conta de anúncios
+            <Badge variant="outline" className="text-[10px]">Indisponível</Badge>
           </div>
-          <p className="text-muted-foreground">{meta.ad_account_name || 'Não selecionada'}</p>
+          <p className="text-muted-foreground">
+            Aguardando permissão no app Meta (`ads_read`).
+          </p>
         </div>
         <div className="rounded-md border p-3 text-sm">
           <div className="mb-1 font-medium">Token</div>
@@ -250,76 +246,36 @@ export function MetaConnectionPanel({
         && meta.connection_phase !== 'error' && (
         <div className="space-y-3 rounded-md border p-4">
           <div>
-            <h4 className="font-medium">Selecionar ativos</h4>
+            <h4 className="font-medium">Selecionar Página</h4>
             <p className="text-sm text-muted-foreground">
-              Escolha a Página do Facebook, a conta Instagram vinculada e a conta de anúncios.
-              Lead Ads virá na próxima etapa — esta conexão só prepara as credenciais.
+              Escolha a Página do Facebook desta clínica. Instagram, anúncios e Lead Ads
+              ficam para quando as permissões forem habilitadas no app Meta.
             </p>
           </div>
 
           {!assetsLoaded || listAssets.isPending ? (
-            <Skeleton className="h-28" />
+            <Skeleton className="h-20" />
           ) : (
-            <div className="grid gap-3 sm:grid-cols-3">
-              <div className="space-y-1.5">
-                <Label>Página do Facebook</Label>
-                <Select value={pageId} onValueChange={(value) => {
-                  setPageId(value);
-                  setInstagramId('');
-                }}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Selecione a página" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {pages.map((page) => (
-                      <SelectItem key={page.id} value={page.id}>
-                        {page.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-
-              <div className="space-y-1.5">
-                <Label>Instagram vinculado</Label>
-                <Select
-                  value={instagramId || '__none__'}
-                  onValueChange={(value) => setInstagramId(value === '__none__' ? '' : value)}
-                  disabled={!pageId}
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder="Opcional" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="__none__">Nenhuma</SelectItem>
-                    {igForPage.map((ig) => (
-                      <SelectItem key={ig.id} value={ig.id}>
-                        {ig.username ? `@${ig.username}` : ig.id}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-
-              <div className="space-y-1.5">
-                <Label>Conta de anúncios</Label>
-                <Select
-                  value={adAccountId || '__none__'}
-                  onValueChange={(value) => setAdAccountId(value === '__none__' ? '' : value)}
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder="Opcional" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="__none__">Nenhuma</SelectItem>
-                    {adAccounts.map((ad) => (
-                      <SelectItem key={ad.id} value={ad.id}>
-                        {ad.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
+            <div className="max-w-md space-y-1.5">
+              <Label>Página do Facebook</Label>
+              <Select value={pageId} onValueChange={setPageId}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Selecione a página" />
+                </SelectTrigger>
+                <SelectContent>
+                  {pages.map((page) => (
+                    <SelectItem key={page.id} value={page.id}>
+                      {page.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              {pages.length === 0 && (
+                <p className="text-xs text-amber-800">
+                  Nenhuma Página encontrada nesta conta. Confira se o usuário Meta administra
+                  pelo menos uma Página.
+                </p>
+              )}
             </div>
           )}
 
@@ -329,7 +285,7 @@ export function MetaConnectionPanel({
             onClick={handleSave}
           >
             {saveAssets.isPending && <Loader2 className="mr-1 h-4 w-4 animate-spin" />}
-            Salvar seleção
+            Salvar conexão
           </Button>
         </div>
       )}

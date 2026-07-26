@@ -84,7 +84,7 @@ export function assertMetaConfigHasNoSecrets(config: Record<string, unknown>): s
 
 export const META_PHASE_LABELS: Record<MetaConnectionPhase, string> = {
   oauth_pending: 'Aguardando autorização',
-  assets_pending: 'Selecione Página / Instagram / Anúncios',
+  assets_pending: 'Selecione a Página do Facebook',
   ready: 'Conectada',
   expired: 'Token expirado',
   error: 'Com erro',

@@ -12,6 +12,7 @@
  *         (callback público: deploy com --no-verify-jwt)
  */
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.49.1'
+import { corsHeaders, handleOptions } from '../_shared/cors.ts'
 import { HttpError } from '../_shared/httpError.ts'
 import {
   authorizeClinicIntegrationsManager,
@@ -36,20 +37,6 @@ import {
 const JSON_HEADERS = { 'Content-Type': 'application/json' }
 const OAUTH_STATE_TTL_MS = 10 * 60 * 1000
 
-function corsHeaders(req: Request): Record<string, string> {
-  const configuredOrigin = Deno.env.get('APP_URL')?.replace(/\/$/, '')
-  const requestOrigin = req.headers.get('origin')?.replace(/\/$/, '')
-  const allowedOrigin = configuredOrigin && requestOrigin === configuredOrigin
-    ? requestOrigin
-    : configuredOrigin || 'null'
-  return {
-    'Access-Control-Allow-Origin': allowedOrigin,
-    'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
-    'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
-    Vary: 'Origin',
-  }
-}
-
 function json(req: Request, body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), {
     status,
@@ -72,12 +59,41 @@ function appBaseUrl(): string {
   return appUrl
 }
 
+/**
+ * redirect_uri canônica do OAuth Meta.
+ *
+ * Facebook exige match byte-a-byte com a URL cadastrada (sem barra final).
+ * - Normaliza trim + remove `/` final.
+ * - Canônico = `{SUPABASE_URL}/functions/v1/meta-oauth/callback`
+ * - Se `META_OAUTH_REDIRECT_URI` existir e diferir do canônico, usa o canônico
+ *   (evita "URL bloqueada" por secret com typo/barra extra) e registra o aviso.
+ * Start OAuth e troca do code devem chamar esta mesma função.
+ */
 function oauthRedirectUri(): string {
-  const explicit = Deno.env.get('META_OAUTH_REDIRECT_URI')?.trim()
-  if (explicit) return explicit
-  const supabaseUrl = Deno.env.get('SUPABASE_URL')?.replace(/\/$/, '')
+  const supabaseUrl = Deno.env.get('SUPABASE_URL')?.trim().replace(/\/+$/, '')
   if (!supabaseUrl) throw new HttpError(503, 'SUPABASE_URL não configurada')
-  return `${supabaseUrl}/functions/v1/meta-oauth/callback`
+
+  const canonical = `${supabaseUrl}/functions/v1/meta-oauth/callback`
+  const explicitRaw = Deno.env.get('META_OAUTH_REDIRECT_URI')
+  const explicit = explicitRaw?.trim().replace(/\/+$/, '') || null
+
+  if (explicit && explicit !== canonical) {
+    console.warn(
+      '[meta-oauth] META_OAUTH_REDIRECT_URI difere do canônico; usando canônico',
+      JSON.stringify({ explicit, canonical }),
+    )
+  } else if (explicitRaw != null && explicitRaw !== explicit) {
+    console.warn(
+      '[meta-oauth] META_OAUTH_REDIRECT_URI tinha espaços ou barra final; normalizado',
+      JSON.stringify({ canonical }),
+    )
+  }
+
+  // Sempre o canônico do projeto (igual ao cadastro no Meta Developers)
+  const redirectUri = canonical
+  // Log temporário de diagnóstico — só a URI, sem tokens/code/state
+  console.log('[meta-oauth] redirect_uri=', redirectUri)
+  return redirectUri
 }
 
 function metaAppCredentials(): { appId: string; appSecret: string } {
@@ -142,25 +158,29 @@ async function handleStart(req: Request): Promise<Response> {
   })
   if (stateError) throw new HttpError(500, 'Falha ao iniciar OAuth Meta')
 
+  const redirectUri = oauthRedirectUri()
+
   await logConnectionEvent(supabase, {
     clinicId: body.clinic_id,
     integrationId: shell.id,
     eventType: 'oauth_started',
     status: 'info',
     message: 'Fluxo OAuth Meta iniciado',
+    metadata: { redirect_uri: redirectUri },
     createdBy: user.id,
   })
 
   const { appId } = metaAppCredentials()
   const authorizationUrl = buildMetaOAuthUrl({
     appId,
-    redirectUri: oauthRedirectUri(),
+    redirectUri,
     state: nonce,
   })
 
   return json(req, {
     authorizationUrl,
     integrationId: shell.id,
+    redirectUri,
     scopes: META_OAUTH_SCOPES.split(','),
   })
 }
@@ -210,9 +230,11 @@ async function handleCallback(req: Request): Promise<Response> {
 
   try {
     const { appId, appSecret } = metaAppCredentials()
+    // Mesma redirect_uri do dialog OAuth (obrigatório na troca do code)
+    const redirectUri = oauthRedirectUri()
     const shortLived = await exchangeCodeForToken({
       code,
-      redirectUri: oauthRedirectUri(),
+      redirectUri,
       appId,
       appSecret,
     })
@@ -271,7 +293,7 @@ async function handleCallback(req: Request): Promise<Response> {
       integrationId: oauthState.integration_id,
       eventType: 'oauth_completed',
       status: 'success',
-      message: 'OAuth Meta concluído — selecione Página, Instagram e Conta de anúncios',
+      message: 'OAuth Meta concluído — selecione a Página do Facebook',
       metadata: { meta_user_id: metaUser.id },
       createdBy: oauthState.user_id,
     })
@@ -319,9 +341,8 @@ async function handleCallback(req: Request): Promise<Response> {
 }
 
 Deno.serve(async (req) => {
-  if (req.method === 'OPTIONS') {
-    return new Response(null, { status: 204, headers: corsHeaders(req) })
-  }
+  const options = handleOptions(req)
+  if (options) return options
 
   try {
     const path = new URL(req.url).pathname

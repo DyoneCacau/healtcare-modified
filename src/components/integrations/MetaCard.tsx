@@ -29,19 +29,25 @@ export function MetaCard({ connection, canCreate, canEdit, onManage }: MetaCardP
             </h3>
             <div className="mt-1 flex flex-wrap gap-1">
               <Badge variant="secondary" className="text-[11px]">
-                Facebook + Instagram
+                Página do Facebook
               </Badge>
               <Badge variant="outline" className="text-[11px]">
                 OAuth
               </Badge>
             </div>
           </div>
-          {connection && <IntegrationStatusBadge status={connection.status} />}
+          {connection && meta?.connection_phase === 'assets_pending' ? (
+            <Badge variant="outline" className="bg-amber-100 text-amber-900 border-amber-200">
+              Aguardando Página
+            </Badge>
+          ) : (
+            connection && <IntegrationStatusBadge status={connection.status} />
+          )}
         </div>
 
         <p className="text-sm text-muted-foreground">
-          Conecte a conta Meta da clínica, escolha Página, Instagram e Conta de anúncios.
-          A importação de Lead Ads fica para a próxima etapa.
+          Conecte a conta Meta da clínica e selecione a Página. Instagram, anúncios e Lead Ads
+          ficam indisponíveis até as permissões no app Meta.
         </p>
 
         {connection && meta ? (
@@ -52,9 +58,6 @@ export function MetaCard({ connection, canCreate, canEdit, onManage }: MetaCardP
                 ? `Página: ${meta.page_name}`
                 : 'Nenhuma página selecionada ainda'}
             </p>
-            {meta.instagram_username && (
-              <p className="text-muted-foreground">Instagram: @{meta.instagram_username}</p>
-            )}
           </div>
         ) : (
           <p className="text-sm text-muted-foreground">Nenhuma conta Meta conectada nesta clínica.</p>
@@ -70,7 +73,9 @@ export function MetaCard({ connection, canCreate, canEdit, onManage }: MetaCardP
               onClick={() => onManage(connection)}
             >
               <Settings2 className="mr-1 h-3.5 w-3.5" />
-              Gerenciar conexão
+              {meta?.connection_phase === 'assets_pending'
+                ? 'Selecionar Página'
+                : 'Gerenciar conexão'}
             </Button>
           )}
           {(canCreate || canEdit) && (
@@ -82,7 +87,7 @@ export function MetaCard({ connection, canCreate, canEdit, onManage }: MetaCardP
               onClick={() => startOAuth.mutate(connection?.id ?? null)}
             >
               {startOAuth.isPending ? (
-                <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" />
+                <Loader2 className="mr-1 h-3.5 w-3.5" />
               ) : (
                 <Facebook className="mr-1 h-3.5 w-3.5" />
               )}
