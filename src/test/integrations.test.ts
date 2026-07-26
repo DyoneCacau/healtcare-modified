@@ -24,6 +24,7 @@ describe('catálogo de provedores', () => {
         'instagram_lead_ads',
         'landing_page',
         'make',
+        'meta',
         'n8n',
         'webhook',
         'whatsapp_business',
@@ -54,6 +55,13 @@ describe('catálogo de provedores', () => {
       .map((p) => p.id)
       .sort();
     expect(noApp).toEqual([...LEAD_CAPTURE_PROVIDERS].sort());
+  });
+
+  it('provedor meta é hub OAuth e não cria lead nesta etapa', () => {
+    const meta = getProviderDefinition('meta');
+    expect(meta?.requiresCredentials).toBe(true);
+    expect(meta?.createsLeads).toBe(false);
+    expect(meta?.supportsInboundWebhook).toBe(true);
   });
 
   it('provedor que cria lead precisa receber webhook de entrada', () => {

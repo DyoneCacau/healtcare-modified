@@ -34,6 +34,18 @@ export interface IntegrationProviderDefinition {
  */
 export const INTEGRATION_PROVIDERS: IntegrationProviderDefinition[] = [
   {
+    id: 'meta',
+    name: 'Meta',
+    category: 'ads',
+    description:
+      'Conecta Facebook e Instagram da clínica (Página, Instagram e Conta de anúncios). Base para Lead Ads.',
+    direction: 'inbound',
+    supportsInboundWebhook: true,
+    requiresCredentials: true,
+    createsLeads: false,
+    docsUrl: 'https://developers.facebook.com/docs/facebook-login',
+  },
+  {
     id: 'facebook_lead_ads',
     name: 'Facebook Lead Ads',
     category: 'ads',
@@ -141,6 +153,7 @@ export const INTEGRATION_PROVIDERS: IntegrationProviderDefinition[] = [
  * `META_WEBHOOK_PROVIDERS` em `supabase/functions/_shared/webhookSignature.ts`.
  */
 export const META_WEBHOOK_PROVIDERS: IntegrationProvider[] = [
+  'meta',
   'facebook_lead_ads',
   'instagram_lead_ads',
   'whatsapp_business',
