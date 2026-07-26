@@ -9,15 +9,31 @@
  * Sem dependências de propósito: roda no Deno (Edge Functions) e no Vitest.
  */
 
-export type LeadSourceValue =
-  | 'instagram'
-  | 'whatsapp'
-  | 'facebook'
-  | 'referral'
-  | 'paid_traffic'
-  | 'other';
+export const LEAD_SOURCE_VALUES = [
+  'instagram',
+  'whatsapp',
+  'facebook',
+  'referral',
+  'paid_traffic',
+  'other',
+] as const;
+
+export type LeadSourceValue = (typeof LEAD_SOURCE_VALUES)[number];
 
 export type LeadStageValue = 'new' | 'contact' | 'scheduled' | 'won' | 'lost';
+
+/** Aceita só o enum do CHECK do banco — sem fuzzy match. */
+export function isLeadSourceValue(value: string): value is LeadSourceValue {
+  return (LEAD_SOURCE_VALUES as readonly string[]).includes(value);
+}
+
+export const LEAD_DEDUPE_MODES = ['auto', 'external_id', 'none'] as const;
+
+export type LeadDedupeMode = (typeof LEAD_DEDUPE_MODES)[number];
+
+export function isLeadDedupeMode(value: string): value is LeadDedupeMode {
+  return (LEAD_DEDUPE_MODES as readonly string[]).includes(value);
+}
 
 export interface NormalizedLead {
   name: string;

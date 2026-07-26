@@ -32,6 +32,47 @@ type CrmLeadRow = {
   updated_at: string;
 };
 
+/**
+ * Colunas lidas pelo Kanban. `source_payload` fica de fora de propósito:
+ * guarda o payload bruto da integração (pode ter centenas de KB por lead) e
+ * duplica dado pessoal que o app não exibe. A auditoria da origem fica em
+ * `webhook_logs` e na tela de Integrações.
+ */
+const LEAD_COLUMNS = [
+  'id',
+  'clinic_id',
+  'name',
+  'cpf',
+  'phone',
+  'email',
+  'stage',
+  'lead_source',
+  'referral_name',
+  'interest',
+  'estimated_value',
+  'next_follow_up',
+  'notes',
+  'allergies',
+  'owner_user_id',
+  'patient_id',
+  'appointment_id',
+  'lost_reason',
+  'integration_id',
+  'external_lead_id',
+  'created_at',
+  'updated_at',
+].join(', ');
+
+/** Sem as colunas de origem: usado quando o PRODUCAO_26 ainda não rodou. */
+const LEAD_COLUMNS_LEGACY = LEAD_COLUMNS.split(', ')
+  .filter((column) => column !== 'integration_id' && column !== 'external_lead_id')
+  .join(', ');
+
+/** 42703 = undefined_column → PRODUCAO_26 pendente no ambiente */
+function isMissingColumn(error: { code?: string } | null): boolean {
+  return error?.code === '42703';
+}
+
 function mapRow(row: CrmLeadRow, ownerName?: string | null): CrmLead {
   return {
     id: row.id,
@@ -82,11 +123,17 @@ export function useCrmLeads() {
     queryFn: async () => {
       if (!clinicId) return [] as CrmLead[];
 
-      const { data, error } = await supabase
-        .from('crm_leads' as any)
-        .select('*')
-        .eq('clinic_id', clinicId)
-        .order('updated_at', { ascending: false });
+      const load = (columns: string) =>
+        supabase
+          .from('crm_leads' as any)
+          .select(columns)
+          .eq('clinic_id', clinicId)
+          .order('updated_at', { ascending: false });
+
+      let { data, error } = await load(LEAD_COLUMNS);
+      if (error && isMissingColumn(error)) {
+        ({ data, error } = await load(LEAD_COLUMNS_LEGACY));
+      }
 
       if (error) {
         if (error.code === '42P01' || error.message?.includes('crm_leads')) {
@@ -157,7 +204,7 @@ export function useCrmLeadMutations() {
           lost_reason: input.lost_reason?.trim() || null,
           created_by: user.id,
         })
-        .select('*')
+        .select(LEAD_COLUMNS_LEGACY)
         .single();
 
       if (error) throw error;
@@ -198,7 +245,7 @@ export function useCrmLeadMutations() {
         .from('crm_leads' as any)
         .update(payload)
         .eq('id', id)
-        .select('*')
+        .select(LEAD_COLUMNS_LEGACY)
         .single();
 
       if (error) throw error;

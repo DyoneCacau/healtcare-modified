@@ -7,8 +7,15 @@
  * usando apenas um token da clínica com escopo `leads:write`.
  */
 import { HttpError, serviceClient } from '../../_shared/integrations.ts'
-import { ingestLead, type LeadDedupeMode } from '../../_shared/leads.ts'
-import type { LeadSourceValue } from '../../_shared/leadPayload.ts'
+import { ingestLead } from '../../_shared/leads.ts'
+import {
+  isLeadDedupeMode,
+  isLeadSourceValue,
+  LEAD_DEDUPE_MODES,
+  LEAD_SOURCE_VALUES,
+  type LeadDedupeMode,
+  type LeadSourceValue,
+} from '../../_shared/leadPayload.ts'
 import type { RouteHandlerResult } from '../router.ts'
 
 const PUBLIC_COLUMNS =
@@ -121,12 +128,31 @@ export async function createLeads(
   const integrationId = typeof envelope.integration_id === 'string'
     ? await assertIntegrationBelongsToClinic(clinicId, envelope.integration_id)
     : null
-  const defaultLeadSource = typeof envelope.default_lead_source === 'string'
-    ? (envelope.default_lead_source as LeadSourceValue)
-    : null
-  const dedupe = typeof envelope.dedupe === 'string'
-    ? (envelope.dedupe as LeadDedupeMode)
-    : 'auto'
+
+  let defaultLeadSource: LeadSourceValue | null = null
+  if (envelope.default_lead_source != null && envelope.default_lead_source !== '') {
+    if (
+      typeof envelope.default_lead_source !== 'string'
+      || !isLeadSourceValue(envelope.default_lead_source)
+    ) {
+      throw new HttpError(
+        400,
+        `default_lead_source inválido. Use: ${LEAD_SOURCE_VALUES.join(', ')}`,
+      )
+    }
+    defaultLeadSource = envelope.default_lead_source
+  }
+
+  let dedupe: LeadDedupeMode = 'auto'
+  if (envelope.dedupe != null && envelope.dedupe !== '') {
+    if (typeof envelope.dedupe !== 'string' || !isLeadDedupeMode(envelope.dedupe)) {
+      throw new HttpError(
+        400,
+        `dedupe inválido. Use: ${LEAD_DEDUPE_MODES.join(', ')}`,
+      )
+    }
+    dedupe = envelope.dedupe
+  }
 
   const results = []
   for (const item of batch) {

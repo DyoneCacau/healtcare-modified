@@ -10,6 +10,7 @@
 
 /** Provedores previstos. Novos provedores entram só nesta união. */
 export type IntegrationProvider =
+  | 'meta'
   | 'facebook_lead_ads'
   | 'instagram_lead_ads'
   | 'whatsapp_business'
@@ -19,6 +20,60 @@ export type IntegrationProvider =
   | 'n8n'
   | 'make'
   | 'zapier';
+
+/** Fase pública da conexão Meta (sem tokens). */
+export type MetaConnectionPhase =
+  | 'oauth_pending'
+  | 'assets_pending'
+  | 'ready'
+  | 'expired'
+  | 'error'
+  | 'disconnected';
+
+/** Metadados públicos em `integrations.config.meta`. */
+export interface MetaPublicConfig {
+  meta_user_id: string | null;
+  page_id: string | null;
+  page_name: string | null;
+  instagram_account_id: string | null;
+  instagram_username: string | null;
+  ad_account_id: string | null;
+  ad_account_name: string | null;
+  token_expires_at: string | null;
+  connected_at: string | null;
+  last_status_check_at: string | null;
+  connection_phase: MetaConnectionPhase;
+}
+
+export interface MetaPageOption {
+  id: string;
+  name: string;
+  tasks: string[];
+}
+
+export interface MetaInstagramOption {
+  id: string;
+  username: string | null;
+  pageId: string;
+}
+
+export interface MetaAdAccountOption {
+  id: string;
+  accountId: string;
+  name: string;
+}
+
+export interface IntegrationConnectionLog {
+  id: string;
+  clinic_id: string;
+  integration_id: string | null;
+  provider: string;
+  event_type: string;
+  status: 'info' | 'success' | 'warning' | 'error';
+  message: string | null;
+  metadata: Record<string, unknown>;
+  created_at: string;
+}
 
 export type IntegrationCategory = 'ads' | 'messaging' | 'forms' | 'automation' | 'api';
 
@@ -37,8 +92,6 @@ export interface Integration {
   direction: IntegrationDirection;
   /** Configuração não sensível (ids de formulário, mapeamento de campos…) */
   config: Record<string, unknown>;
-  /** Ponteiro para o secret guardado fora do banco. Nunca o segredo em si. */
-  credentials_ref: string | null;
   external_account_id: string | null;
   webhook_slug: string | null;
   last_event_at: string | null;

@@ -25,7 +25,13 @@ export function generateWebhookSlug(): string {
   return toBase36(randomBytes(24));
 }
 
-/** Segredo do webhook, enviado pelo provedor no header `x-healthcare-signature`. */
+/**
+ * Segredo do webhook da integração.
+ *
+ * Provedores fora da Meta enviam este valor no header `x-healthcare-secret`.
+ * Nos provedores da Meta ele é o `hub.verify_token` do cadastro do endpoint —
+ * os eventos em si são autenticados pelo HMAC em `X-Hub-Signature-256`.
+ */
 export function generateWebhookSecret(): string {
   return `whsec_${toBase36(randomBytes(40))}`;
 }
