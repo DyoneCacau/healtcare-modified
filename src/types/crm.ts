@@ -22,6 +22,10 @@ export interface CrmLead {
   patientId: string | null;
   appointmentId: string | null;
   lostReason: string | null;
+  /** Integração que trouxe o lead (null = criado no Kanban) */
+  integrationId: string | null;
+  /** Id do lead no provedor de origem */
+  externalLeadId: string | null;
   createdAt: string;
   updatedAt: string;
 }
