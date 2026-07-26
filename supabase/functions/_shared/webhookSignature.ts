@@ -13,6 +13,7 @@ export type WebhookAuthScheme = 'meta_hmac' | 'shared_secret';
  * o HMAC do corpo em `X-Hub-Signature-256`, com o app secret da plataforma.
  */
 export const META_WEBHOOK_PROVIDERS = [
+  'meta',
   'facebook_lead_ads',
   'instagram_lead_ads',
   'whatsapp_business',

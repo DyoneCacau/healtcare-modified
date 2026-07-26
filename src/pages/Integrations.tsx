@@ -1,6 +1,7 @@
-import { useMemo, useState } from 'react';
-import { Navigate } from 'react-router-dom';
+import { useEffect, useMemo, useState } from 'react';
+import { Navigate, useSearchParams } from 'react-router-dom';
 import { Plug, Info } from 'lucide-react';
+import { toast } from 'sonner';
 import { MainLayout } from '@/components/layout/MainLayout';
 import { Header } from '@/components/layout/Header';
 import { Card, CardContent } from '@/components/ui/card';
@@ -12,6 +13,8 @@ import { AutomationFlowsPanel } from '@/components/integrations/AutomationFlowsP
 import { IntegrationLogsPanel } from '@/components/integrations/IntegrationLogsPanel';
 import { ApiTokensPanel } from '@/components/integrations/ApiTokensPanel';
 import { LeadsApiPanel } from '@/components/integrations/LeadsApiPanel';
+import { MetaCard } from '@/components/integrations/MetaCard';
+import { MetaConnectionDialog } from '@/components/integrations/MetaConnectionDialog';
 import { useAuth } from '@/hooks/useAuth';
 import { usePermissions } from '@/hooks/usePermissions';
 import { useIntegrations } from '@/hooks/useIntegrations';
@@ -34,26 +37,76 @@ export default function Integrations() {
   const { isSuperAdmin } = useAuth();
   const { can, isLoading: permissionsLoading } = usePermissions();
   const { integrations, isLoading } = useIntegrations();
+  const [searchParams, setSearchParams] = useSearchParams();
 
   const [dialogOpen, setDialogOpen] = useState(false);
   const [selectedDefinition, setSelectedDefinition] =
     useState<IntegrationProviderDefinition | null>(null);
   const [selectedIntegration, setSelectedIntegration] = useState<Integration | null>(null);
 
+  const [metaDialogOpen, setMetaDialogOpen] = useState(false);
+  const [metaIntegration, setMetaIntegration] = useState<Integration | null>(null);
+  const [metaAutoAssets, setMetaAutoAssets] = useState(false);
+
   const canView = isSuperAdmin || can('integracoes', 'can_view');
   const canCreate = isSuperAdmin || can('integracoes', 'can_create');
   const canEdit = isSuperAdmin || can('integracoes', 'can_edit');
   const canDelete = isSuperAdmin || can('integracoes', 'can_delete');
 
+  const metaConnection = useMemo(
+    () => integrations.find((item) => item.provider === 'meta') ?? null,
+    [integrations],
+  );
+
   const byProvider = useMemo(() => {
     const map = new Map<string, Integration[]>();
     for (const integration of integrations) {
+      if (integration.provider === 'meta') continue;
       const list = map.get(integration.provider) || [];
       list.push(integration);
       map.set(integration.provider, list);
     }
     return map;
   }, [integrations]);
+
+  const catalogProviders = useMemo(
+    () => INTEGRATION_PROVIDERS.filter((provider) => provider.id !== 'meta'),
+    [],
+  );
+
+  useEffect(() => {
+    const metaResult = searchParams.get('meta');
+    if (!metaResult) return;
+
+    const integrationId = searchParams.get('integration_id');
+    const reason = searchParams.get('reason');
+
+    if (metaResult === 'error') {
+      toast.error(reason || 'Falha ao conectar com a Meta');
+    } else if (metaResult === 'assets') {
+      toast.success('Meta autorizada. Selecione Página, Instagram e Conta de anúncios.');
+      setMetaAutoAssets(true);
+    } else if (metaResult === 'connected') {
+      toast.success('Conexão Meta atualizada');
+      setMetaAutoAssets(false);
+    }
+
+    const target =
+      (integrationId
+        ? integrations.find((item) => item.id === integrationId) ?? null
+        : null) || metaConnection;
+
+    if (target) {
+      setMetaIntegration(target);
+      setMetaDialogOpen(true);
+    }
+
+    const next = new URLSearchParams(searchParams);
+    next.delete('meta');
+    next.delete('integration_id');
+    next.delete('reason');
+    setSearchParams(next, { replace: true });
+  }, [searchParams, setSearchParams, integrations, metaConnection]);
 
   const handleConnect = (definition: IntegrationProviderDefinition) => {
     setSelectedDefinition(definition);
@@ -62,6 +115,12 @@ export default function Integrations() {
   };
 
   const handleManage = (integration: Integration) => {
+    if (integration.provider === 'meta') {
+      setMetaIntegration(integration);
+      setMetaAutoAssets(false);
+      setMetaDialogOpen(true);
+      return;
+    }
     setSelectedDefinition(null);
     setSelectedIntegration(integration);
     setDialogOpen(true);
@@ -70,7 +129,7 @@ export default function Integrations() {
   if (permissionsLoading) {
     return (
       <MainLayout>
-        <Header title="Integrações" subtitle="Conexões desta clínica" />
+        <Header title="Central de Integrações" subtitle="Conexões desta clínica" />
         <Skeleton className="h-64" />
       </MainLayout>
     );
@@ -81,18 +140,17 @@ export default function Integrations() {
   return (
     <MainLayout>
       <Header
-        title="Integrações"
-        subtitle="Conexões, automações e credenciais desta clínica"
+        title="Central de Integrações"
+        subtitle="Conexões, automações e credenciais isoladas por clínica"
       />
 
       <Card className="mb-4 border-primary/20 bg-primary/5">
         <CardContent className="flex items-start gap-2 p-3 text-sm">
           <Info className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
           <p className="text-muted-foreground">
-            Cada conexão é isolada por clínica, com endpoint de entrada, logs e tokens
-            próprios. A captação de leads já funciona: provedores marcados com
-            <span className="font-medium"> Cria lead</span> transformam o que recebem em card
-            no CRM, e qualquer sistema pode usar a API de Leads.
+            Cada conexão é isolada por clínica. Tokens da Meta ficam só no servidor
+            (service role) — o navegador vê apenas status e ids públicos. A API Universal
+            de Leads e os webhooks existentes continuam disponíveis nas outras abas.
           </p>
         </CardContent>
       </Card>
@@ -110,32 +168,49 @@ export default function Integrations() {
           {isLoading ? (
             <Skeleton className="h-64" />
           ) : (
-            CATEGORY_ORDER.map((category) => {
-              const definitions = INTEGRATION_PROVIDERS.filter((p) => p.category === category);
-              if (definitions.length === 0) return null;
+            <>
+              <section className="space-y-3">
+                <h2 className="flex items-center gap-2 text-sm font-semibold text-muted-foreground">
+                  <Plug className="h-4 w-4" />
+                  Conta Meta
+                </h2>
+                <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                  <MetaCard
+                    connection={metaConnection}
+                    canCreate={canCreate}
+                    canEdit={canEdit}
+                    onManage={handleManage}
+                  />
+                </div>
+              </section>
 
-              return (
-                <section key={category} className="space-y-3">
-                  <h2 className="flex items-center gap-2 text-sm font-semibold text-muted-foreground">
-                    <Plug className="h-4 w-4" />
-                    {INTEGRATION_CATEGORY_LABELS[category]}
-                  </h2>
-                  <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-                    {definitions.map((definition) => (
-                      <IntegrationCard
-                        key={definition.id}
-                        definition={definition}
-                        connections={byProvider.get(definition.id) || []}
-                        canCreate={canCreate}
-                        canEdit={canEdit}
-                        onConnect={handleConnect}
-                        onManage={handleManage}
-                      />
-                    ))}
-                  </div>
-                </section>
-              );
-            })
+              {CATEGORY_ORDER.map((category) => {
+                const definitions = catalogProviders.filter((p) => p.category === category);
+                if (definitions.length === 0) return null;
+
+                return (
+                  <section key={category} className="space-y-3">
+                    <h2 className="flex items-center gap-2 text-sm font-semibold text-muted-foreground">
+                      <Plug className="h-4 w-4" />
+                      {INTEGRATION_CATEGORY_LABELS[category]}
+                    </h2>
+                    <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                      {definitions.map((definition) => (
+                        <IntegrationCard
+                          key={definition.id}
+                          definition={definition}
+                          connections={byProvider.get(definition.id) || []}
+                          canCreate={canCreate}
+                          canEdit={canEdit}
+                          onConnect={handleConnect}
+                          onManage={handleManage}
+                        />
+                      ))}
+                    </div>
+                  </section>
+                );
+              })}
+            </>
           )}
         </TabsContent>
 
@@ -168,6 +243,14 @@ export default function Integrations() {
         integration={selectedIntegration}
         canEdit={canEdit}
         canDelete={canDelete}
+      />
+
+      <MetaConnectionDialog
+        open={metaDialogOpen}
+        onOpenChange={setMetaDialogOpen}
+        integration={metaIntegration || metaConnection}
+        canEdit={canEdit}
+        autoOpenAssets={metaAutoAssets}
       />
     </MainLayout>
   );

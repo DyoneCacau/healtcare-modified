@@ -83,7 +83,7 @@ const menuEntries: MenuEntry[] = [
   { icon: Clock, label: "Ponto", path: "/ponto", feature: "ponto" },
   { icon: FileText, label: "Meus Termos", path: "/termos", feature: "termos" },
   { icon: Package, label: "Estoque", path: "/estoque", feature: "estoque" },
-  { icon: Plug, label: "Integrações", path: "/integracoes", feature: "integracoes" },
+  { icon: Plug, label: "Central Integrações", path: "/integracoes", feature: "integracoes" },
   // TODO(go-live): descomentar item Atendimento ao concluir integração Meta WhatsApp
   // { icon: MessageSquare, label: "Atendimento", path: "/atendimento", feature: "atendimento" },
   { icon: Shield, label: "Administração", path: "/administracao", feature: "administracao" },
