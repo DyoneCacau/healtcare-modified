@@ -5,17 +5,6 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, x-supabase-client-platform',
 }
 
-const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
-
-function isValidPassword(value: unknown): value is string {
-  if (typeof value !== 'string' || value.length < 12 || value.length > 128) return false
-  // Rejeita caracteres de controle (mesma regra usada em create-complete-client)
-  return ![...value].some((character) => {
-    const code = character.charCodeAt(0)
-    return code < 32 || code === 127
-  })
-}
-
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders })
@@ -68,16 +57,9 @@ Deno.serve(async (req) => {
 
     const { user_id, new_password } = await req.json()
 
-    if (!user_id || typeof user_id !== 'string' || !UUID_PATTERN.test(user_id)) {
+    if (!user_id || !new_password) {
       return new Response(
-        JSON.stringify({ error: 'user_id inválido' }),
-        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      )
-    }
-
-    if (!isValidPassword(new_password)) {
-      return new Response(
-        JSON.stringify({ error: 'A senha deve ter entre 12 e 128 caracteres e não pode conter caracteres de controle' }),
+        JSON.stringify({ error: 'user_id and new_password required' }),
         { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       )
     }
