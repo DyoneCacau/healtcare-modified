@@ -9,6 +9,14 @@
  * futuras integrações vão preencher.
  */
 import { createClient, SupabaseClient } from 'https://esm.sh/@supabase/supabase-js@2.49.1'
+import {
+  META_SIGNATURE_HEADER,
+  sha256Hex,
+  SHARED_SECRET_HEADER,
+  timingSafeEqualHex,
+} from './webhookSignature.ts'
+
+export { sha256Hex }
 
 const JSON_HEADERS = { 'Content-Type': 'application/json' }
 
@@ -28,8 +36,8 @@ export function corsHeaders(req: Request): Record<string, string> {
   return {
     'Access-Control-Allow-Origin': allowedOrigin,
     'Access-Control-Allow-Headers':
-      'authorization, x-client-info, apikey, content-type, x-healthcare-signature, '
-      + 'x-healthcare-event-id, x-hub-signature-256',
+      `authorization, x-client-info, apikey, content-type, ${SHARED_SECRET_HEADER}, `
+      + `x-healthcare-event-id, ${META_SIGNATURE_HEADER}`,
     'Access-Control-Allow-Methods': 'GET, POST, PATCH, DELETE, OPTIONS',
     'Vary': 'Origin',
   }
@@ -72,23 +80,6 @@ export function assertUuid(value: unknown, field: string): string {
   return value
 }
 
-export async function sha256Hex(value: string): Promise<string> {
-  const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(value))
-  return Array.from(new Uint8Array(digest))
-    .map((b) => b.toString(16).padStart(2, '0'))
-    .join('')
-}
-
-/** Comparação em tempo constante para segredos. */
-export function constantTimeEqual(left: string, right: string): boolean {
-  let diff = left.length ^ right.length
-  const length = Math.max(left.length, right.length)
-  for (let i = 0; i < length; i++) {
-    diff |= (left.charCodeAt(i) || 0) ^ (right.charCodeAt(i) || 0)
-  }
-  return diff === 0
-}
-
 export interface IntegrationRow {
   id: string
   clinic_id: string
@@ -129,23 +120,15 @@ export async function resolveIntegrationBySlug(
   return data as IntegrationRow
 }
 
-/** Valida o segredo do webhook enviado em `x-healthcare-signature`. */
-export async function verifyIntegrationSignature(
-  req: Request,
-  integration: IntegrationRow,
-): Promise<boolean> {
-  if (!integration.webhook_secret_hash) return true
-  const provided = req.headers.get('x-healthcare-signature')
-  if (!provided) return false
-  return constantTimeEqual(await sha256Hex(provided), integration.webhook_secret_hash)
-}
+// A verificação da entrada vive em webhookAuth.ts: ela depende do provedor
+// (HMAC da Meta ou segredo próprio) e falha fechada.
 
 const SENSITIVE_HEADERS = new Set([
   'authorization',
   'apikey',
   'cookie',
-  'x-healthcare-signature',
-  'x-hub-signature-256',
+  SHARED_SECRET_HEADER,
+  META_SIGNATURE_HEADER,
 ])
 
 /** Cabeçalhos sem credenciais, para gravar em webhook_logs. */
@@ -156,6 +139,9 @@ export function sanitizeHeaders(req: Request): Record<string, string> {
   }
   return out
 }
+
+/** Reexportado para os handlers compararem hashes sem reimplementar. */
+export { timingSafeEqualHex }
 
 export interface WebhookLogInput {
   clinicId: string

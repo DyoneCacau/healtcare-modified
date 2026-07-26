@@ -37,8 +37,6 @@ export interface Integration {
   direction: IntegrationDirection;
   /** Configuração não sensível (ids de formulário, mapeamento de campos…) */
   config: Record<string, unknown>;
-  /** Ponteiro para o secret guardado fora do banco. Nunca o segredo em si. */
-  credentials_ref: string | null;
   external_account_id: string | null;
   webhook_slug: string | null;
   last_event_at: string | null;

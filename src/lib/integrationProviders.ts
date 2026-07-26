@@ -134,6 +134,22 @@ export const INTEGRATION_PROVIDERS: IntegrationProviderDefinition[] = [
   },
 ];
 
+/**
+ * Provedores da Meta: não permitem header customizado, então os eventos são
+ * autenticados pelo HMAC em `X-Hub-Signature-256` e o endpoint é validado por
+ * um desafio GET (`hub.mode=subscribe`). Precisa espelhar
+ * `META_WEBHOOK_PROVIDERS` em `supabase/functions/_shared/webhookSignature.ts`.
+ */
+export const META_WEBHOOK_PROVIDERS: IntegrationProvider[] = [
+  'facebook_lead_ads',
+  'instagram_lead_ads',
+  'whatsapp_business',
+];
+
+export function isMetaWebhookProvider(provider: string): boolean {
+  return (META_WEBHOOK_PROVIDERS as string[]).includes(provider);
+}
+
 const PROVIDER_BY_ID = new Map(INTEGRATION_PROVIDERS.map((p) => [p.id, p]));
 
 export function getProviderDefinition(

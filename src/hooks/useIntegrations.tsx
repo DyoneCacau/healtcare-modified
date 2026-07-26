@@ -4,6 +4,7 @@ import { useClinic } from './useClinic';
 import { useAuth } from './useAuth';
 import { toast } from 'sonner';
 import { getProviderDefinition } from '@/lib/integrationProviders';
+import { INTEGRATION_SELECT } from '@/lib/integrationColumns';
 import {
   generateWebhookSecret,
   generateWebhookSlug,
@@ -35,7 +36,6 @@ function normalizeIntegration(row: Record<string, unknown>): Integration {
     status: (row.status as Integration['status']) || 'disconnected',
     direction: (row.direction as Integration['direction']) || 'inbound',
     config: asRecord(row.config),
-    credentials_ref: (row.credentials_ref as string) ?? null,
     external_account_id: (row.external_account_id as string) ?? null,
     webhook_slug: (row.webhook_slug as string) ?? null,
     last_event_at: (row.last_event_at as string) ?? null,
@@ -58,7 +58,7 @@ export function useIntegrations() {
       // regenerar o schema; o cast mantém o módulo utilizável antes disso.
       const { data, error } = await (supabase as any)
         .from('integrations')
-        .select('*')
+        .select(INTEGRATION_SELECT)
         .eq('clinic_id', clinicId)
         .order('created_at', { ascending: false });
 
@@ -124,7 +124,7 @@ export function useIntegrationMutations() {
       const { data, error } = await (supabase as any)
         .from('integrations')
         .insert(payload)
-        .select()
+        .select(INTEGRATION_SELECT)
         .single();
 
       if (error) throw error;
@@ -152,7 +152,7 @@ export function useIntegrationMutations() {
         .from('integrations')
         .update(input)
         .eq('id', id)
-        .select()
+        .select(INTEGRATION_SELECT)
         .single();
 
       if (error) throw error;

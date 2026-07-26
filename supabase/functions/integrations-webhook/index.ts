@@ -1,17 +1,21 @@
 /**
  * Webhook genérico de entrada do módulo de Integrações.
  *
- * URL: POST /functions/v1/integrations-webhook/<webhook_slug>
+ * URL: /functions/v1/integrations-webhook/<webhook_slug>
  * Deploy: `supabase functions deploy integrations-webhook --no-verify-jwt`
- * (o provedor externo não tem JWT do Supabase; a autenticação é o segredo
- * da integração no header `x-healthcare-signature`).
+ * (o provedor externo não tem JWT do Supabase).
+ *
+ * Métodos:
+ * - `GET` com `hub.mode=subscribe`: desafio de verificação da Meta.
+ * - `POST`: recebimento de evento.
+ *
+ * Autenticação por provedor, sempre falhando fechada (ver webhookAuth.ts):
+ * - Meta (Facebook / Instagram / WhatsApp): HMAC do corpo em
+ *   `X-Hub-Signature-256` com `META_APP_SECRET`.
+ * - Demais: segredo próprio da integração em `x-healthcare-secret`.
  *
  * O tenant NUNCA vem da requisição: o slug resolve a integração e o
  * clinic_id é lido do banco.
- *
- * Nenhum provedor está implementado. Sem handler registrado, o evento é
- * gravado em webhook_logs e a resposta é 202 — o payload fica auditável
- * para quando a integração for construída.
  */
 import {
   errorResponse,
@@ -23,8 +27,8 @@ import {
   resolveIntegrationBySlug,
   sanitizeHeaders,
   serviceClient,
-  verifyIntegrationSignature,
 } from '../_shared/integrations.ts'
+import { handleWebhookChallenge, verifyWebhookRequest } from '../_shared/webhookAuth.ts'
 import { resolveWebhookHandler } from '../_shared/providerRegistry.ts'
 
 const MAX_BODY_BYTES = 1_000_000
@@ -39,22 +43,56 @@ function slugFromUrl(url: string): string {
 Deno.serve(async (req) => {
   const options = handleOptions(req)
   if (options) return options
-  if (req.method !== 'POST') return json(req, { error: 'Método não permitido' }, 405)
+
+  if (req.method !== 'POST' && req.method !== 'GET') {
+    return json(req, { error: 'Método não permitido' }, 405)
+  }
 
   try {
     const slug = slugFromUrl(req.url)
     const supabase = serviceClient()
     const integration = await resolveIntegrationBySlug(supabase, slug)
+    const headers = sanitizeHeaders(req)
 
-    const rawBody = await req.text()
-    if (rawBody.length > MAX_BODY_BYTES) {
+    // ─── Verificação do endpoint (GET hub.mode=subscribe) ───────────────────
+    if (req.method === 'GET') {
+      const challenge = await handleWebhookChallenge(req, integration)
+      if (!challenge) return json(req, { error: 'Método não permitido' }, 405)
+
+      // Sem payload: é só a validação do endpoint no provedor
+      await logWebhook(supabase, {
+        clinicId: integration.clinic_id,
+        integrationId: integration.id,
+        provider: integration.provider,
+        eventType: 'webhook.verification',
+        httpMethod: req.method,
+        endpoint: slug,
+        status: challenge.accepted ? 'processed' : 'failed',
+        statusCode: challenge.response.status,
+        signatureValid: challenge.accepted,
+        headers,
+        errorMessage: challenge.reason,
+      })
+
+      return challenge.response
+    }
+
+    // ─── Recebimento de evento (POST) ───────────────────────────────────────
+    const contentLength = Number(req.headers.get('content-length') || 0)
+    if (Number.isFinite(contentLength) && contentLength > MAX_BODY_BYTES) {
       throw new HttpError(413, 'Payload muito grande')
     }
 
-    const signatureValid = await verifyIntegrationSignature(req, integration)
-    const headers = sanitizeHeaders(req)
+    const rawBody = await req.text()
+    if (new TextEncoder().encode(rawBody).byteLength > MAX_BODY_BYTES) {
+      throw new HttpError(413, 'Payload muito grande')
+    }
 
-    if (!signatureValid) {
+    const auth = await verifyWebhookRequest(req, integration, rawBody)
+
+    if (!auth.valid) {
+      // Requisição não autenticada não persiste payload: evita que alguém com
+      // o slug encha webhook_logs. Só o motivo é registrado.
       await logWebhook(supabase, {
         clinicId: integration.clinic_id,
         integrationId: integration.id,
@@ -62,12 +100,18 @@ Deno.serve(async (req) => {
         httpMethod: req.method,
         endpoint: slug,
         status: 'failed',
-        statusCode: 401,
+        statusCode: auth.status,
         signatureValid: false,
         headers,
-        errorMessage: 'Assinatura inválida',
+        errorMessage: `${auth.scheme}: ${auth.reason}`,
       })
-      throw new HttpError(401, 'Assinatura inválida')
+
+      const message = auth.status === 503
+        ? 'Verificação de webhook não configurada no servidor'
+        : auth.status === 409
+          ? 'Integração sem segredo configurado'
+          : 'Assinatura inválida'
+      throw new HttpError(auth.status, message)
     }
 
     let payload: unknown = null

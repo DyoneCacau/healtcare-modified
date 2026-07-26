@@ -25,6 +25,7 @@ import { SecretRevealField } from './SecretRevealField';
 import {
   INTEGRATION_DIRECTION_LABELS,
   getProviderDefinition,
+  isMetaWebhookProvider,
   type IntegrationProviderDefinition,
 } from '@/lib/integrationProviders';
 import { buildWebhookUrl } from '@/lib/integrationSecurity';
@@ -62,6 +63,7 @@ export function IntegrationFormDialog({
 
   const activeDefinition =
     definition ?? (integration ? getProviderDefinition(integration.provider) ?? null : null);
+  const isMetaProvider = activeDefinition ? isMetaWebhookProvider(activeDefinition.id) : false;
 
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
@@ -244,7 +246,15 @@ export function IntegrationFormDialog({
             </p>
           )}
 
-          {activeDefinition?.requiresCredentials && (
+          {isMetaProvider && (
+            <p className="flex items-start gap-2 rounded-md border border-amber-300 bg-amber-50 p-2.5 text-xs text-amber-900">
+              <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+              Este provedor exige o secret <span className="font-mono">META_APP_SECRET</span>{' '}
+              configurado no Supabase. Sem ele, os eventos são recusados.
+            </p>
+          )}
+
+          {activeDefinition?.requiresCredentials && !isMetaProvider && (
             <p className="flex items-start gap-2 rounded-md border border-amber-300 bg-amber-50 p-2.5 text-xs text-amber-900">
               <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
               Token e chave de API deste provedor ficam nos secrets do Supabase, nunca no
@@ -258,7 +268,11 @@ export function IntegrationFormDialog({
                 label="URL de entrada (webhook)"
                 value={buildWebhookUrl(webhookSlug)}
                 hiddenByDefault={false}
-                helpText="Cadastre esta URL no provedor."
+                helpText={
+                  isMetaProvider
+                    ? 'Cadastre esta URL como Callback URL na Meta, usando o segredo desta conexão como Verify token.'
+                    : 'Cadastre esta URL no provedor e envie o segredo no header x-healthcare-secret.'
+                }
               />
               {canEdit && (
                 <Button
@@ -281,8 +295,13 @@ export function IntegrationFormDialog({
                 Copie o segredo agora — ele não será exibido novamente.
               </p>
               <SecretRevealField
-                label="Segredo do webhook (header x-healthcare-signature)"
+                label="Segredo do webhook"
                 value={revealedSecret}
+                helpText={
+                  isMetaProvider
+                    ? 'Use como “Verify token” ao cadastrar o webhook na Meta. Os eventos são validados pela assinatura do app (X-Hub-Signature-256).'
+                    : 'Envie no header x-healthcare-secret em cada requisição.'
+                }
               />
             </div>
           )}

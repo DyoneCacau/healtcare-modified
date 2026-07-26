@@ -23,7 +23,7 @@ Asaas opcional por clínica. Mercado Pago permanece removido.
 | `asaas-set-card-recurring` | Atualiza assinatura para cartão e abre fatura para cadastro | Secrets Asaas |
 | `asaas-choose-payment-method` | Cliente escolhe Pix, boleto ou cartão na plataforma | Secrets Asaas |
 | `asaas-reconcile` | Reconciliação diária de eventos/cobranças | Secrets Asaas e `CRON_SECRET` |
-| `integrations-webhook` | Webhook genérico de entrada por integração; cria lead no CRM | `SUPABASE_SERVICE_ROLE_KEY`, `APP_URL` |
+| `integrations-webhook` | Webhook genérico de entrada por integração; cria lead no CRM | `SUPABASE_SERVICE_ROLE_KEY`, `APP_URL`, `META_APP_SECRET` (provedores Meta) |
 | `integrations-api` | API REST do tenant (leads, fluxos, logs) para n8n / Make / Zapier / ERPs | `SUPABASE_SERVICE_ROLE_KEY`, `APP_URL` |
 | `integrations-dispatch` | Ações do app: testar conexão, disparar fluxo, reprocessar webhook | `SUPABASE_SERVICE_ROLE_KEY`, `APP_URL` |
 
@@ -55,17 +55,40 @@ supabase functions deploy asaas-set-card-recurring
 supabase functions deploy asaas-choose-payment-method
 supabase functions deploy asaas-reconcile --no-verify-jwt
 
-# Integrações (execute antes: PRODUCAO_25_INTEGRACOES.sql e PRODUCAO_26_LEADS_API.sql)
+# Integrações (execute antes: PRODUCAO_25, PRODUCAO_26 e PRODUCAO_27)
 supabase functions deploy integrations-webhook --no-verify-jwt
 supabase functions deploy integrations-api --no-verify-jwt
 supabase functions deploy integrations-dispatch
 ```
 
 `integrations-webhook` e `integrations-api` sobem com `--no-verify-jwt`: o
-chamador é um sistema externo. A autenticação é o segredo da integração
-(header `x-healthcare-signature`) e o token do tenant (`api_tokens`),
-respectivamente. Em ambos os casos o `clinic_id` vem do banco, nunca da
-requisição.
+chamador é um sistema externo. Em ambos os casos o `clinic_id` vem do banco,
+nunca da requisição.
+
+### Autenticação da entrada de webhook
+
+A verificação **falha fechada**: integração sem credencial configurada não
+recebe evento.
+
+| Provedor | Esquema | Como autentica |
+|----------|---------|----------------|
+| Facebook Lead Ads, Instagram Lead Ads, WhatsApp Business | `meta_hmac` | HMAC-SHA256 do corpo em `X-Hub-Signature-256`, com o secret `META_APP_SECRET` |
+| Landing pages, webhook, n8n, Make, Zapier, API externa | `shared_secret` | Segredo da própria integração no header `x-healthcare-secret` |
+
+Cadastro do endpoint na Meta (Callback URL + Verify token):
+
+```
+GET /functions/v1/integrations-webhook/<slug>?hub.mode=subscribe&hub.verify_token=<segredo da integração>&hub.challenge=...
+```
+
+O `hub.verify_token` conferido é o segredo **daquela conexão**, não um token
+global: uma clínica não consegue validar o endpoint de outra. Sem
+`META_APP_SECRET` configurado, os eventos da Meta são recusados com 503 em vez
+de aceitos.
+
+Requisição que falha na autenticação **não persiste o payload** em
+`webhook_logs` — apenas o motivo — para que quem descobrir um slug não consiga
+encher a tabela.
 
 ## API universal de leads
 
