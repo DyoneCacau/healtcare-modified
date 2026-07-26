@@ -9,6 +9,7 @@
  * futuras integrações vão preencher.
  */
 import { createClient, SupabaseClient } from 'https://esm.sh/@supabase/supabase-js@2.49.1'
+import { HttpError } from './httpError.ts'
 import {
   META_SIGNATURE_HEADER,
   sha256Hex,
@@ -17,14 +18,9 @@ import {
 } from './webhookSignature.ts'
 
 export { sha256Hex }
+export { HttpError }
 
 const JSON_HEADERS = { 'Content-Type': 'application/json' }
-
-export class HttpError extends Error {
-  constructor(public status: number, message: string) {
-    super(message)
-  }
-}
 
 export function corsHeaders(req: Request): Record<string, string> {
   const configuredOrigin = Deno.env.get('APP_URL')?.replace(/\/$/, '')
@@ -317,6 +313,9 @@ export interface ApiTokenContext {
 /**
  * Autentica uma chamada REST externa pelo token do tenant
  * (`Authorization: Bearer hc_live_...`) e devolve o clinic_id do banco.
+ *
+ * Assinatura/plano ficam em `assertClinicApiAccess` (chamado pelo index da
+ * API): este helper só valida o token em si.
  */
 export async function authorizeApiToken(
   req: Request,

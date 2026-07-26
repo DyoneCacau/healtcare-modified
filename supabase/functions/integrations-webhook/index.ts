@@ -28,10 +28,17 @@ import {
   sanitizeHeaders,
   serviceClient,
 } from '../_shared/integrations.ts'
+import { assertRateLimit } from '../_shared/rateLimit.ts'
 import { handleWebhookChallenge, verifyWebhookRequest } from '../_shared/webhookAuth.ts'
 import { resolveWebhookHandler } from '../_shared/providerRegistry.ts'
 
 const MAX_BODY_BYTES = 1_000_000
+/** 120 req/min por integração — cobre rajadas legítimas e freia abuso do slug. */
+const WEBHOOK_RATE_LIMIT = 120
+const WEBHOOK_RATE_WINDOW_MS = 60_000
+/** Falhas de auth têm teto menor: evita encher logs com tentativas inválidas. */
+const WEBHOOK_AUTH_FAIL_LIMIT = 30
+const WEBHOOK_AUTH_FAIL_WINDOW_MS = 60_000
 
 function slugFromUrl(url: string): string {
   const segments = new URL(url).pathname.split('/').filter(Boolean)
@@ -52,6 +59,11 @@ Deno.serve(async (req) => {
     const slug = slugFromUrl(req.url)
     const supabase = serviceClient()
     const integration = await resolveIntegrationBySlug(supabase, slug)
+    assertRateLimit(
+      `wh:${integration.id}`,
+      WEBHOOK_RATE_LIMIT,
+      WEBHOOK_RATE_WINDOW_MS,
+    )
     const headers = sanitizeHeaders(req)
 
     // ─── Verificação do endpoint (GET hub.mode=subscribe) ───────────────────
@@ -91,6 +103,13 @@ Deno.serve(async (req) => {
     const auth = await verifyWebhookRequest(req, integration, rawBody)
 
     if (!auth.valid) {
+      // Teto extra para tentativas inválidas (ainda sem gravar o corpo).
+      assertRateLimit(
+        `wh-authfail:${integration.id}`,
+        WEBHOOK_AUTH_FAIL_LIMIT,
+        WEBHOOK_AUTH_FAIL_WINDOW_MS,
+      )
+
       // Requisição não autenticada não persiste payload: evita que alguém com
       // o slug encha webhook_logs. Só o motivo é registrado.
       await logWebhook(supabase, {

@@ -9,6 +9,7 @@
  * O clinic_id vem sempre do token resolvido no banco: o chamador não
  * consegue apontar para outra clínica.
  */
+import { assertClinicApiAccess } from '../_shared/clinicAccess.ts'
 import {
   authorizeApiToken,
   errorResponse,
@@ -17,7 +18,12 @@ import {
   json,
   serviceClient,
 } from '../_shared/integrations.ts'
+import { assertRateLimit } from '../_shared/rateLimit.ts'
 import { describeRoutes, resolveRoute, type Route } from './router.ts'
+
+/** 60 req/min por token — protege contra token vazado martelando a API. */
+const API_RATE_LIMIT = 60
+const API_RATE_WINDOW_MS = 60_000
 import { getIntegration, listIntegrations } from './controllers/integrations.ts'
 import { getFlow, listFlows, runFlow } from './controllers/automationFlows.ts'
 import { listAutomationLogs, listWebhookLogs } from './controllers/logs.ts'
@@ -129,6 +135,8 @@ Deno.serve(async (req) => {
     const route = resolveRoute(routes, req.method, segments)
     const supabase = serviceClient()
     const auth = await authorizeApiToken(req, supabase, route.scope)
+    await assertClinicApiAccess(supabase, auth.clinicId, route.scope)
+    assertRateLimit(`api:${auth.tokenId}`, API_RATE_LIMIT, API_RATE_WINDOW_MS)
 
     let payload: unknown = null
     if (req.method === 'POST' || req.method === 'PATCH') {
