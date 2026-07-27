@@ -480,19 +480,15 @@ export async function processMetaLeadgenWebhook(
   let failed = 0
 
   for (const change of changes) {
-    try {
-      const result = await processLeadgenChange(supabase, change, { source: 'webhook' })
-      results.push(result)
-      if (result.skipped) skipped += 1
-      else if (result.duplicate) {
-        duplicates += 1
-        processed += 1
-      } else if (result.handled && result.created) processed += 1
-      else if (result.reason) failed += 1
-    } catch (error) {
-      // Repropaga falha temporária da Graph após o primeiro lead (Meta reenvia)
-      throw error
-    }
+    // Falha temporária da Graph propaga (Meta reenvia o webhook)
+    const result = await processLeadgenChange(supabase, change, { source: 'webhook' })
+    results.push(result)
+    if (result.skipped) skipped += 1
+    else if (result.duplicate) {
+      duplicates += 1
+      processed += 1
+    } else if (result.handled && result.created) processed += 1
+    else if (result.reason) failed += 1
   }
 
   return { results, processed, duplicates, skipped, failed }
