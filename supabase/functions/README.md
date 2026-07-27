@@ -19,6 +19,7 @@ Asaas opcional por clínica. Mercado Pago permanece removido.
 | `meta-oauth` | OAuth Facebook/Instagram (start + callback) — Central de Integrações | `META_APP_ID`, `META_APP_SECRET`, `APP_URL`, `SUPABASE_SERVICE_ROLE_KEY` |
 | `meta-connection` | Página, status, Lead Ads on/off, reconectar/desconectar | `META_APP_ID`, `META_APP_SECRET`, `APP_URL`, `SUPABASE_SERVICE_ROLE_KEY` |
 | `meta-leadgen-webhook` | Webhook app-level Page `leadgen` → CRM | `META_APP_SECRET`, `META_WEBHOOK_VERIFY_TOKEN`, `SUPABASE_SERVICE_ROLE_KEY` |
+| `meta-leadgen-bulk-sync` | Cron Bulk Read Lead Ads (fallback 48h / App Review) | `CRON_SECRET`, `SUPABASE_SERVICE_ROLE_KEY` |
 | `asaas-webhook` | Persistência e processamento idempotente de eventos | `ASAAS_WEBHOOK_TOKEN`, `SUPABASE_SERVICE_ROLE_KEY` |
 | `asaas-create-checkout` | Cria cliente/assinatura e taxa de adesão opcional | `ASAAS_API_KEY`, `ASAAS_API_BASE_URL`, `ASAAS_ENV` |
 | `asaas-list-payments` | Lista faturas da assinatura com isolamento por clínica | Secrets Asaas |
@@ -66,7 +67,12 @@ supabase functions deploy integrations-dispatch
 supabase functions deploy meta-oauth --no-verify-jwt
 supabase functions deploy meta-connection
 supabase functions deploy meta-leadgen-webhook --no-verify-jwt
+supabase functions deploy meta-leadgen-bulk-sync --no-verify-jwt
 ```
+
+Após `PRODUCAO_31_META_LEADGEN_BULK_AND_VAULT.sql`, tokens Meta passam pelo Vault
+(`meta_vault_*` RPCs). O cron de Bulk Read (a cada 10 min) está em
+`.github/workflows/meta-leadgen-bulk-sync-cron.yml`.
 
 `integrations-webhook`, `integrations-api` e o callback de `meta-oauth` sobem
 com JWT desligado no gateway: o chamador é externo ou o redirect da Meta.

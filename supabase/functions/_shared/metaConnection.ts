@@ -1,12 +1,17 @@
 /**
  * Persistência e metadados públicos da conexão Meta.
  *
- * Tokens ficam só em `integration_credentials` (service_role).
+ * Tokens ficam em Vault (via RPCs) + `integration_credentials` (service_role).
  * `integrations.config.meta` guarda apenas ids/nomes e status — legível no app.
  */
 import type { SupabaseClient } from 'https://esm.sh/@supabase/supabase-js@2.49.1'
 import { HttpError } from './httpError.ts'
 import { generateWebhookSecret, hashSha256Hex } from './metaConnectionCrypto.ts'
+import {
+  vaultDeleteCredentialSecrets,
+  vaultReadMetaToken,
+  vaultStoreMetaToken,
+} from './metaCredentialVault.ts'
 
 export const META_PROVIDER = 'meta'
 
@@ -181,7 +186,6 @@ export async function upsertMetaCredentials(
     const { error } = await supabase
       .from('integration_credentials')
       .update({
-        access_token: input.accessToken,
         token_type: input.tokenType,
         expires_at: input.expiresAt,
         scopes: input.scopes,
@@ -191,6 +195,22 @@ export async function upsertMetaCredentials(
       .eq('id', existing.id)
       .eq('clinic_id', input.clinicId)
     if (error) throw new HttpError(500, 'Falha ao atualizar credenciais Meta')
+
+    const vaulted = await vaultStoreMetaToken(
+      supabase,
+      existing.id as string,
+      'access_token',
+      input.accessToken,
+    )
+    if (!vaulted) {
+      // PRODUCAO_31 ainda não aplicado — fallback plaintext
+      const { error: plainError } = await supabase
+        .from('integration_credentials')
+        .update({ access_token: input.accessToken })
+        .eq('id', existing.id)
+        .eq('clinic_id', input.clinicId)
+      if (plainError) throw new HttpError(500, 'Falha ao gravar token Meta')
+    }
     return existing.id as string
   }
 
@@ -200,7 +220,7 @@ export async function upsertMetaCredentials(
       clinic_id: input.clinicId,
       integration_id: input.integrationId,
       provider: META_PROVIDER,
-      access_token: input.accessToken,
+      access_token: null,
       token_type: input.tokenType,
       expires_at: input.expiresAt,
       scopes: input.scopes,
@@ -209,7 +229,49 @@ export async function upsertMetaCredentials(
     .select('id')
     .maybeSingle()
 
-  if (error || !data?.id) throw new HttpError(500, 'Falha ao gravar credenciais Meta')
+  if (error || !data?.id) {
+    // access_token ainda NOT NULL (pré-31): tenta insert com plaintext
+    const { data: legacy, error: legacyError } = await supabase
+      .from('integration_credentials')
+      .insert({
+        clinic_id: input.clinicId,
+        integration_id: input.integrationId,
+        provider: META_PROVIDER,
+        access_token: input.accessToken,
+        token_type: input.tokenType,
+        expires_at: input.expiresAt,
+        scopes: input.scopes,
+        meta_user_id: input.metaUserId,
+      })
+      .select('id')
+      .maybeSingle()
+    if (legacyError || !legacy?.id) throw new HttpError(500, 'Falha ao gravar credenciais Meta')
+    const vaulted = await vaultStoreMetaToken(
+      supabase,
+      legacy.id as string,
+      'access_token',
+      input.accessToken,
+    )
+    if (!vaulted) {
+      // já gravou plaintext no insert
+      return legacy.id as string
+    }
+    return legacy.id as string
+  }
+
+  const vaulted = await vaultStoreMetaToken(
+    supabase,
+    data.id as string,
+    'access_token',
+    input.accessToken,
+  )
+  if (!vaulted) {
+    const { error: plainError } = await supabase
+      .from('integration_credentials')
+      .update({ access_token: input.accessToken })
+      .eq('id', data.id)
+    if (plainError) throw new HttpError(500, 'Falha ao gravar token Meta')
+  }
   return data.id as string
 }
 
@@ -225,16 +287,43 @@ export async function readMetaAccessToken(
 } | null> {
   const { data, error } = await supabase
     .from('integration_credentials')
-    .select('id, access_token, expires_at, meta_user_id')
+    .select('id, access_token, expires_at, meta_user_id, access_token_vault_id')
     .eq('clinic_id', clinicId)
     .eq('integration_id', integrationId)
     .maybeSingle()
 
-  if (error) throw new HttpError(500, 'Falha ao ler credenciais Meta')
-  if (!data?.access_token) return null
+  if (error) {
+    // Coluna vault pode não existir antes do PRODUCAO_31
+    if (error.code === '42703') {
+      const { data: legacy, error: legacyError } = await supabase
+        .from('integration_credentials')
+        .select('id, access_token, expires_at, meta_user_id')
+        .eq('clinic_id', clinicId)
+        .eq('integration_id', integrationId)
+        .maybeSingle()
+      if (legacyError) throw new HttpError(500, 'Falha ao ler credenciais Meta')
+      if (!legacy?.access_token) return null
+      return {
+        credentialId: legacy.id as string,
+        accessToken: legacy.access_token as string,
+        expiresAt: (legacy.expires_at as string | null) ?? null,
+        metaUserId: (legacy.meta_user_id as string | null) ?? null,
+      }
+    }
+    throw new HttpError(500, 'Falha ao ler credenciais Meta')
+  }
+  if (!data?.id) return null
+
+  const fromVault = await vaultReadMetaToken(supabase, data.id as string, 'access_token')
+  const accessToken = fromVault
+    || (typeof data.access_token === 'string' && data.access_token.trim()
+      ? data.access_token.trim()
+      : null)
+  if (!accessToken) return null
+
   return {
     credentialId: data.id as string,
-    accessToken: data.access_token as string,
+    accessToken,
     expiresAt: (data.expires_at as string | null) ?? null,
     metaUserId: (data.meta_user_id as string | null) ?? null,
   }
@@ -245,6 +334,17 @@ export async function deleteMetaCredentials(
   clinicId: string,
   integrationId: string,
 ): Promise<void> {
+  const { data: existing } = await supabase
+    .from('integration_credentials')
+    .select('id')
+    .eq('clinic_id', clinicId)
+    .eq('integration_id', integrationId)
+    .maybeSingle()
+
+  if (existing?.id) {
+    await vaultDeleteCredentialSecrets(supabase, existing.id as string)
+  }
+
   const { error } = await supabase
     .from('integration_credentials')
     .delete()
