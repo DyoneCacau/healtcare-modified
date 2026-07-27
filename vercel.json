@@ -33,5 +33,11 @@
       ]
     }
   ],
-  "rewrites": [{ "source": "/(.*)", "destination": "/index.html" }]
+  "rewrites": [
+    {
+      "source": "/((?!.*\\.[A-Za-z0-9]+$).*)",
+      "destination": "/index.html"
+    }
+  ]
 }
+
