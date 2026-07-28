@@ -5,11 +5,40 @@ import type {
   PublicSmartHubPayload,
   SmartHub,
   SmartHubInsert,
+  SmartHubLayoutBlock,
   SmartHubUpdate,
 } from '@/types/smartHub';
 import { paginateRange } from './base';
 
 const TABLE = 'smart_hubs';
+const DEFAULT_BLOCKS: SmartHubLayoutBlock[] = [
+  'header',
+  'logo',
+  'description',
+  'buttons',
+  'footer',
+];
+
+function normalizeHub(raw: SmartHub | null): SmartHub | null {
+  if (!raw) return null;
+  const layoutBlocks = Array.isArray(raw.layout_blocks)
+    ? raw.layout_blocks
+    : DEFAULT_BLOCKS;
+  return {
+    ...raw,
+    layout_blocks: layoutBlocks,
+    validation_errors: Array.isArray(raw.validation_errors) ? raw.validation_errors : [],
+    template_id: raw.template_id ?? null,
+    published_at: raw.published_at ?? null,
+    paused_at: raw.paused_at ?? null,
+    last_validated_at: raw.last_validated_at ?? null,
+    whatsapp_number: raw.whatsapp_number ?? null,
+    contact_phone: raw.contact_phone ?? null,
+    contact_email: raw.contact_email ?? null,
+    contact_address: raw.contact_address ?? null,
+    map_embed_url: raw.map_embed_url ?? null,
+  };
+}
 
 export const hubRepository = {
   async getByClinicId(clinicId: string): Promise<SmartHub | null> {
@@ -21,7 +50,7 @@ export const hubRepository = {
       .maybeSingle();
 
     if (error) throw error;
-    return data as SmartHub | null;
+    return normalizeHub(data as SmartHub | null);
   },
 
   async getById(id: string, clinicId: string): Promise<SmartHub | null> {
@@ -34,7 +63,7 @@ export const hubRepository = {
       .maybeSingle();
 
     if (error) throw error;
-    return data as SmartHub | null;
+    return normalizeHub(data as SmartHub | null);
   },
 
   async list(params: ListQueryParams): Promise<PaginatedResult<SmartHub>> {
@@ -65,7 +94,7 @@ export const hubRepository = {
     if (error) throw error;
 
     return {
-      data: (data || []) as SmartHub[],
+      data: ((data || []) as SmartHub[]).map((row) => normalizeHub(row)!),
       total: count ?? 0,
       page,
       pageSize,
@@ -80,7 +109,7 @@ export const hubRepository = {
       .single();
 
     if (error) throw error;
-    return data as SmartHub;
+    return normalizeHub(data as SmartHub)!;
   },
 
   async update(id: string, clinicId: string, payload: SmartHubUpdate): Promise<SmartHub> {
@@ -94,7 +123,7 @@ export const hubRepository = {
       .single();
 
     if (error) throw error;
-    return data as SmartHub;
+    return normalizeHub(data as SmartHub)!;
   },
 
   async softDelete(id: string, clinicId: string, userId?: string | null): Promise<void> {
@@ -128,6 +157,93 @@ export const hubRepository = {
 
     if (error) throw error;
     if (!data) return null;
-    return data as unknown as PublicSmartHubPayload;
+    return normalizePublicPayload(data);
+  },
+
+  async getPreviewById(hubId: string): Promise<PublicSmartHubPayload | null> {
+    const { data, error } = await supabase.rpc('get_preview_smart_hub' as never, {
+      p_hub_id: hubId,
+    } as never);
+
+    if (error) throw error;
+    if (!data) return null;
+    return normalizePublicPayload(data);
+  },
+
+  async validateForPublish(hubId: string): Promise<unknown> {
+    const { data, error } = await supabase.rpc('validate_smart_hub_for_publish' as never, {
+      p_hub_id: hubId,
+    } as never);
+    if (error) throw error;
+    return data;
+  },
+
+  async publish(hubId: string): Promise<unknown> {
+    const { data, error } = await supabase.rpc('publish_smart_hub' as never, {
+      p_hub_id: hubId,
+    } as never);
+    if (error) throw error;
+    return data;
+  },
+
+  async pause(hubId: string): Promise<unknown> {
+    const { data, error } = await supabase.rpc('pause_smart_hub' as never, {
+      p_hub_id: hubId,
+    } as never);
+    if (error) throw error;
+    return data;
+  },
+
+  async revertToDraft(hubId: string): Promise<unknown> {
+    const { data, error } = await supabase.rpc('unpublish_smart_hub_to_draft' as never, {
+      p_hub_id: hubId,
+    } as never);
+    if (error) throw error;
+    return data;
+  },
+
+  async applyTemplate(hubId: string, templateId: string): Promise<unknown> {
+    const { data, error } = await supabase.rpc('apply_smart_hub_template' as never, {
+      p_hub_id: hubId,
+      p_template_id: templateId,
+    } as never);
+    if (error) throw error;
+    return data;
   },
 };
+
+function normalizePublicPayload(raw: unknown): PublicSmartHubPayload {
+  const data = raw as PublicSmartHubPayload;
+  const hub = data.hub;
+  const layoutBlocks = Array.isArray(hub?.layout_blocks)
+    ? hub.layout_blocks
+    : typeof hub?.layout_blocks === 'string'
+      ? (() => {
+          try {
+            return JSON.parse(hub.layout_blocks as unknown as string);
+          } catch {
+            return ['header', 'logo', 'description', 'buttons', 'footer'];
+          }
+        })()
+      : ['header', 'logo', 'description', 'buttons', 'footer'];
+
+  return {
+    ...data,
+    hub: {
+      ...hub,
+      layout_blocks: layoutBlocks,
+      validation_errors: Array.isArray(hub?.validation_errors) ? hub.validation_errors : [],
+      template_id: hub?.template_id ?? null,
+      published_at: hub?.published_at ?? null,
+      paused_at: hub?.paused_at ?? null,
+      last_validated_at: hub?.last_validated_at ?? null,
+      whatsapp_number: hub?.whatsapp_number ?? null,
+      contact_phone: hub?.contact_phone ?? null,
+      contact_email: hub?.contact_email ?? null,
+      contact_address: hub?.contact_address ?? null,
+      map_embed_url: hub?.map_embed_url ?? null,
+    },
+    buttons: Array.isArray(data.buttons) ? data.buttons : [],
+    assets: Array.isArray(data.assets) ? data.assets : [],
+  };
+}

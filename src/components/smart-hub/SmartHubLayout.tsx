@@ -7,12 +7,14 @@ import {
   BarChart3,
   Settings,
   Globe,
+  Eye,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { MainLayout } from '@/components/layout/MainLayout';
 
 const NAV_ITEMS = [
   { label: 'Dashboard', path: '/smart-hub', icon: LayoutDashboard, exact: true },
+  { label: 'Prévia', path: '/smart-hub/previa', icon: Eye },
   { label: 'Páginas', path: '/smart-hub/paginas', icon: FileEdit },
   { label: 'Templates', path: '/smart-hub/templates', icon: LayoutTemplate },
   { label: 'Botões', path: '/smart-hub/botoes', icon: MousePointerClick },

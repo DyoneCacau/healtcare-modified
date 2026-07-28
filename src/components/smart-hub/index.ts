@@ -12,3 +12,5 @@ export { HubContact } from './HubContact';
 export { HubWhatsAppButton } from './HubWhatsAppButton';
 export { SmartHubLayout } from './SmartHubLayout';
 export { DashboardStatsCard } from './DashboardStatsCard';
+export { HubPublicView } from './HubPublicView';
+export { PublishWorkflowCard } from './PublishWorkflowCard';

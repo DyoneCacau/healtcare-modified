@@ -8,18 +8,7 @@ interface HubLogoProps {
 }
 
 export const HubLogo = memo(function HubLogo({ src, alt = 'Logo', className }: HubLogoProps) {
-  if (!src) {
-    return (
-      <div
-        className={cn(
-          'mx-auto flex h-20 w-20 items-center justify-center rounded-full bg-white/10 text-2xl font-semibold',
-          className
-        )}
-      >
-        {alt.charAt(0).toUpperCase()}
-      </div>
-    );
-  }
+  if (!src) return null;
 
   return (
     <img

@@ -47,6 +47,7 @@ const SmartHubButtons = lazy(() => import("./pages/smart-hub/SmartHubButtons"));
 const SmartHubAnalytics = lazy(() => import("./pages/smart-hub/SmartHubAnalytics"));
 const SmartHubSettings = lazy(() => import("./pages/smart-hub/SmartHubSettings"));
 const SmartHubDomain = lazy(() => import("./pages/smart-hub/SmartHubDomain"));
+const SmartHubPreview = lazy(() => import("./pages/smart-hub/SmartHubPreview"));
 const PublicSmartHub = lazy(() => import("./pages/smart-hub/PublicSmartHub"));
 const MarketingCrm = lazy(() =>
   import("./pages/marketing/MarketingPlaceholders").then((m) => ({ default: m.MarketingCrm }))
@@ -380,6 +381,16 @@ function AppRoutes() {
             <RequireFeature feature="smart_hub">
               <LazyPage>
                 <SmartHubDashboard />
+              </LazyPage>
+            </RequireFeature>
+          }
+        />
+        <Route
+          path="/smart-hub/previa"
+          element={
+            <RequireFeature feature="smart_hub">
+              <LazyPage>
+                <SmartHubPreview />
               </LazyPage>
             </RequireFeature>
           }

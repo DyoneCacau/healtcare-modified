@@ -1,17 +1,9 @@
-import { useEffect, useMemo } from 'react';
+import { useEffect } from 'react';
 import { useParams } from 'react-router-dom';
-import {
-  HubBanner,
-  HubHeader,
-  HubGrid,
-  HubFooter,
-  HubSocialLinks,
-  HubWhatsAppButton,
-} from '@/components/smart-hub';
+import { HubPublicView } from '@/components/smart-hub';
 import { usePublicSmartHub } from '@/hooks/useSmartHub';
-import { AnalyticsService } from '@/services/smartHub';
+import { AnalyticsService, isReservedSlug } from '@/services/smartHub';
 import type { SmartHubButton } from '@/types/smartHub';
-import { isReservedSlug } from '@/services/smartHub';
 import NotFound from '@/pages/NotFound';
 
 function usePublicSeo(opts: {
@@ -74,26 +66,7 @@ export default function PublicSmartHub() {
 
 function PublicSmartHubContent({ slug }: { slug?: string }) {
   const { data, isLoading, error } = usePublicSmartHub(slug);
-
   const hub = data?.hub;
-  const buttons = data?.buttons ?? [];
-  const theme = data?.theme;
-
-  const primary = theme?.primary_color || hub?.primary_color || '#0F766E';
-  const background =
-    theme?.background_color ||
-    hub?.background_url ||
-    undefined;
-
-  const socialLinks = useMemo(
-    () =>
-      buttons
-        .filter((b) => b.type === 'social' && b.url)
-        .map((b) => ({ label: b.title, url: b.url! })),
-    [buttons]
-  );
-
-  const whatsapp = buttons.find((b) => b.type === 'whatsapp');
 
   usePublicSeo({
     title: hub?.seo_title || hub?.title,
@@ -115,9 +88,9 @@ function PublicSmartHubContent({ slug }: { slug?: string }) {
   }, [hub?.id]);
 
   const handleButtonClick = async (button: SmartHubButton) => {
-    if (hub?.id && button.track_click) {
+    if (hub?.id && button.track_click !== false) {
       try {
-        await AnalyticsService.trackClick(hub.id, button.id, {
+        await AnalyticsService.trackClick(hub.id, button.id?.startsWith('hub-') ? null : button.id, {
           target_url: button.url,
           device_type:
             window.innerWidth < 768 ? 'mobile' : window.innerWidth < 1024 ? 'tablet' : 'desktop',
@@ -139,54 +112,9 @@ function PublicSmartHubContent({ slug }: { slug?: string }) {
     );
   }
 
-  if (error || !hub) {
+  if (error || !data || !hub) {
     return <NotFound />;
   }
 
-  return (
-    <div
-      className="min-h-screen"
-      style={{
-        backgroundColor: typeof background === 'string' && background.startsWith('#') ? background : undefined,
-        backgroundImage:
-          typeof background === 'string' && background.startsWith('http')
-            ? `url(${background})`
-            : hub.background_url
-              ? `url(${hub.background_url})`
-              : undefined,
-        backgroundSize: 'cover',
-        backgroundPosition: 'center',
-        fontFamily: theme?.font_family || hub.font_family,
-      }}
-    >
-      <div className="min-h-screen bg-background/80 backdrop-blur-[2px]">
-        <HubBanner src={hub.banner_url} />
-        <div className="mx-auto flex w-full max-w-2xl flex-col gap-6 py-8">
-          <HubHeader
-            title={hub.title}
-            subtitle={hub.subtitle}
-            description={hub.description}
-            logoUrl={hub.logo_url}
-            primaryColor={primary}
-          />
-
-          {whatsapp?.url && (
-            <HubWhatsAppButton
-              phone={whatsapp.url}
-              label={whatsapp.title || 'WhatsApp'}
-              onClick={() => handleButtonClick(whatsapp)}
-            />
-          )}
-
-          <HubGrid
-            buttons={buttons.filter((b) => b.type !== 'whatsapp' && b.type !== 'social')}
-            onButtonClick={handleButtonClick}
-          />
-
-          <HubSocialLinks links={socialLinks} />
-          <HubFooter />
-        </div>
-      </div>
-    </div>
-  );
+  return <HubPublicView payload={data} onButtonClick={handleButtonClick} />;
 }

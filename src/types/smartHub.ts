@@ -1,4 +1,4 @@
-/** Tipos do módulo Healthcare Smart Hub (Fase 1) */
+/** Tipos do módulo Healthcare Smart Hub (Fase 1 + Fase 2) */
 
 export type SmartHubStatus = 'draft' | 'published' | 'offline' | 'archived';
 export type SmartHubPageStatus = 'draft' | 'published' | 'archived';
@@ -14,6 +14,38 @@ export type SmartHubButtonType =
   | 'social';
 export type SmartHubButtonStatus = 'active' | 'inactive' | 'archived';
 export type SmartHubEntityStatus = 'active' | 'inactive' | 'archived' | 'pending' | 'error';
+
+export type SmartHubLayoutBlock =
+  | 'banner'
+  | 'logo'
+  | 'header'
+  | 'description'
+  | 'whatsapp'
+  | 'contact'
+  | 'map'
+  | 'buttons'
+  | 'grid'
+  | 'social'
+  | 'footer'
+  | string;
+
+export interface SmartHubValidationIssue {
+  code: string;
+  message: string;
+}
+
+export interface SmartHubValidationResult {
+  ok: boolean;
+  errors: SmartHubValidationIssue[];
+  warnings: SmartHubValidationIssue[];
+  visible_buttons?: number;
+}
+
+export interface SmartHubPublishResult {
+  ok: boolean;
+  status: SmartHubStatus | string;
+  validation?: SmartHubValidationResult;
+}
 
 export interface SmartHub {
   id: string;
@@ -33,6 +65,18 @@ export interface SmartHub {
   seo_description: string | null;
   favicon_url: string | null;
   status: SmartHubStatus;
+  /** Fase 2 */
+  template_id: string | null;
+  published_at: string | null;
+  paused_at: string | null;
+  last_validated_at: string | null;
+  validation_errors: SmartHubValidationIssue[] | unknown[];
+  whatsapp_number: string | null;
+  contact_phone: string | null;
+  contact_email: string | null;
+  contact_address: string | null;
+  map_embed_url: string | null;
+  layout_blocks: SmartHubLayoutBlock[];
   created_at: string;
   updated_at: string;
   created_by: string | null;
@@ -208,9 +252,10 @@ export interface PublicSmartHubPayload {
   buttons: SmartHubButton[];
   page: SmartHubPage | null;
   assets: SmartHubAsset[];
+  preview?: boolean;
 }
 
-/** Métricas do dashboard (placeholder até Fase Analytics) */
+/** Métricas do dashboard */
 export interface SmartHubDashboardMetrics {
   publicUrl: string;
   status: SmartHubStatus;
@@ -260,3 +305,22 @@ export type SmartHubButtonInsert = Partial<SmartHubButton> & {
 };
 
 export type SmartHubButtonUpdate = Partial<Omit<SmartHubButton, 'id' | 'clinic_id' | 'hub_id' | 'created_at'>>;
+
+export const SMART_HUB_STATUS_LABELS: Record<SmartHubStatus, string> = {
+  draft: 'Rascunho',
+  published: 'Publicado',
+  offline: 'Pausado',
+  archived: 'Arquivado',
+};
+
+export const SMART_HUB_BUTTON_TYPE_LABELS: Record<SmartHubButtonType, string> = {
+  link: 'Link',
+  whatsapp: 'WhatsApp',
+  phone: 'Telefone',
+  email: 'E-mail',
+  map: 'Mapa',
+  video: 'Vídeo',
+  form: 'Formulário',
+  internal: 'Interno',
+  social: 'Social',
+};

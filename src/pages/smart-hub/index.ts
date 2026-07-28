@@ -5,4 +5,5 @@ export { default as SmartHubButtons } from './SmartHubButtons';
 export { default as SmartHubAnalytics } from './SmartHubAnalytics';
 export { default as SmartHubSettings } from './SmartHubSettings';
 export { default as SmartHubDomain } from './SmartHubDomain';
+export { default as SmartHubPreview } from './SmartHubPreview';
 export { default as PublicSmartHub } from './PublicSmartHub';

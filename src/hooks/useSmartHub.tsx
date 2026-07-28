@@ -3,7 +3,7 @@ import { toast } from 'sonner';
 import { useAuth } from '@/hooks/useAuth';
 import { useClinic } from '@/hooks/useClinic';
 import { HubService, ThemeService, PageService, TemplateService, DomainService } from '@/services/smartHub';
-import type { SmartHubUpdate } from '@/types/smartHub';
+import type { SmartHubUpdate, SmartHubValidationResult } from '@/types/smartHub';
 
 export function useSmartHub() {
   const { clinicId } = useClinic();
@@ -51,13 +51,21 @@ export function useSmartHub() {
     enabled: !!clinicId && !!hubQuery.data?.id,
   });
 
+  const invalidateHub = () => {
+    queryClient.invalidateQueries({ queryKey: ['smart-hub', clinicId] });
+    queryClient.invalidateQueries({ queryKey: ['smart-hub-pages', clinicId] });
+    queryClient.invalidateQueries({ queryKey: ['smart-hub-theme', clinicId] });
+    queryClient.invalidateQueries({ queryKey: ['smart-hub-analytics-metrics', clinicId] });
+    queryClient.invalidateQueries({ queryKey: ['smart-hub-preview', hubQuery.data?.id] });
+  };
+
   const createHub = useMutation({
     mutationFn: async (input: { title: string; slug?: string }) => {
       if (!clinicId) throw new Error('Selecione uma clínica.');
       return HubService.create(clinicId, { ...input, userId: user?.id });
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['smart-hub', clinicId] });
+      invalidateHub();
       toast.success('Smart Hub criado com sucesso.');
     },
     onError: (err: Error) => toast.error(err.message || 'Erro ao criar Smart Hub.'),
@@ -69,7 +77,7 @@ export function useSmartHub() {
       return HubService.update(hubQuery.data.id, clinicId, payload, user?.id);
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['smart-hub', clinicId] });
+      invalidateHub();
       toast.success('Smart Hub atualizado.');
     },
     onError: (err: Error) => toast.error(err.message || 'Erro ao atualizar Smart Hub.'),
@@ -79,6 +87,68 @@ export function useSmartHub() {
     mutationFn: async (slug: string) => {
       return HubService.isSlugAvailable(slug, hubQuery.data?.id);
     },
+  });
+
+  const validateHub = useMutation({
+    mutationFn: async () => {
+      if (!hubQuery.data?.id) throw new Error('Hub não encontrado.');
+      return HubService.validateForPublish(hubQuery.data.id);
+    },
+    onSuccess: (result: SmartHubValidationResult) => {
+      invalidateHub();
+      if (result.ok) toast.success('Validação ok. Pronto para publicar.');
+      else toast.error(result.errors[0]?.message || 'Corrija os erros antes de publicar.');
+    },
+    onError: (err: Error) => toast.error(err.message || 'Erro ao validar.'),
+  });
+
+  const publishHub = useMutation({
+    mutationFn: async () => {
+      if (!hubQuery.data?.id) throw new Error('Hub não encontrado.');
+      return HubService.publish(hubQuery.data.id);
+    },
+    onSuccess: (result) => {
+      invalidateHub();
+      if (result.ok) toast.success('Smart Hub publicado.');
+      else toast.error(result.validation?.errors[0]?.message || 'Não foi possível publicar.');
+    },
+    onError: (err: Error) => toast.error(err.message || 'Erro ao publicar.'),
+  });
+
+  const pauseHub = useMutation({
+    mutationFn: async () => {
+      if (!hubQuery.data?.id) throw new Error('Hub não encontrado.');
+      return HubService.pause(hubQuery.data.id);
+    },
+    onSuccess: () => {
+      invalidateHub();
+      toast.success('Smart Hub pausado (offline).');
+    },
+    onError: (err: Error) => toast.error(err.message || 'Erro ao pausar.'),
+  });
+
+  const revertToDraft = useMutation({
+    mutationFn: async () => {
+      if (!hubQuery.data?.id) throw new Error('Hub não encontrado.');
+      return HubService.revertToDraft(hubQuery.data.id);
+    },
+    onSuccess: () => {
+      invalidateHub();
+      toast.success('Hub voltou para rascunho.');
+    },
+    onError: (err: Error) => toast.error(err.message || 'Erro ao reverter.'),
+  });
+
+  const applyTemplate = useMutation({
+    mutationFn: async (templateId: string) => {
+      if (!hubQuery.data?.id) throw new Error('Hub não encontrado.');
+      return TemplateService.apply(hubQuery.data.id, templateId);
+    },
+    onSuccess: () => {
+      invalidateHub();
+      toast.success('Template aplicado.');
+    },
+    onError: (err: Error) => toast.error(err.message || 'Erro ao aplicar template.'),
   });
 
   return {
@@ -94,6 +164,11 @@ export function useSmartHub() {
     createHub,
     updateHub,
     checkSlug,
+    validateHub,
+    publishHub,
+    pauseHub,
+    revertToDraft,
+    applyTemplate,
     refetch: hubQuery.refetch,
   };
 }
@@ -107,5 +182,17 @@ export function usePublicSmartHub(slug: string | undefined) {
     },
     enabled: !!slug,
     staleTime: 60_000,
+  });
+}
+
+export function usePreviewSmartHub(hubId: string | undefined) {
+  return useQuery({
+    queryKey: ['smart-hub-preview', hubId],
+    queryFn: async () => {
+      if (!hubId) return null;
+      return HubService.getPreviewById(hubId);
+    },
+    enabled: !!hubId,
+    staleTime: 10_000,
   });
 }

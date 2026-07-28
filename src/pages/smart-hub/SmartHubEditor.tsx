@@ -1,15 +1,24 @@
+import { Link } from 'react-router-dom';
 import { SmartHubLayout } from '@/components/smart-hub';
 import { useSmartHub } from '@/hooks/useSmartHub';
 import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
 
-/** Editor visual — estrutura pronta; implementação na próxima fase. */
+/** Editor visual avançado fica para fase futura; aqui listamos páginas e linkamos prévia. */
 export default function SmartHubEditor() {
   const { hub, pages, isLoading } = useSmartHub();
 
   return (
     <SmartHubLayout
       title="Páginas"
-      description="Edite o layout da página pública. Editor visual disponível na próxima fase."
+      description="Páginas do hub. Use Prévia e Templates para ajustar o layout público."
+      actions={
+        hub ? (
+          <Button variant="outline" size="sm" asChild>
+            <Link to="/smart-hub/previa">Abrir prévia</Link>
+          </Button>
+        ) : undefined
+      }
     >
       {isLoading ? (
         <div className="flex justify-center py-16">
@@ -42,7 +51,8 @@ export default function SmartHubEditor() {
             </div>
           )}
           <p className="text-sm text-muted-foreground">
-            O editor visual drag-and-drop será implementado na Fase 2.
+            Blocos do layout: {(hub.layout_blocks || []).join(' · ') || 'padrão'}. Altere em
+            Templates.
           </p>
         </div>
       )}

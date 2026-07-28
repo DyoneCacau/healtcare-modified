@@ -1896,6 +1896,753 @@ export type Database = {
           },
         ]
       }
+      smart_hubs: {
+        Row: {
+          id: string
+          clinic_id: string
+          slug: string
+          title: string
+          subtitle: string | null
+          description: string | null
+          logo_url: string | null
+          banner_url: string | null
+          background_url: string | null
+          theme: string
+          primary_color: string
+          secondary_color: string
+          font_family: string
+          seo_title: string | null
+          seo_description: string | null
+          favicon_url: string | null
+          status: string
+          template_id: string | null
+          published_at: string | null
+          paused_at: string | null
+          last_validated_at: string | null
+          validation_errors: Json
+          whatsapp_number: string | null
+          contact_phone: string | null
+          contact_email: string | null
+          contact_address: string | null
+          map_embed_url: string | null
+          layout_blocks: Json
+          created_at: string
+          updated_at: string
+          created_by: string | null
+          updated_by: string | null
+          deleted_at: string | null
+        }
+        Insert: {
+          id?: string
+          clinic_id: string
+          slug: string
+          title?: string
+          subtitle?: string | null
+          description?: string | null
+          logo_url?: string | null
+          banner_url?: string | null
+          background_url?: string | null
+          theme?: string
+          primary_color?: string
+          secondary_color?: string
+          font_family?: string
+          seo_title?: string | null
+          seo_description?: string | null
+          favicon_url?: string | null
+          status?: string
+          template_id?: string | null
+          published_at?: string | null
+          paused_at?: string | null
+          last_validated_at?: string | null
+          validation_errors?: Json
+          whatsapp_number?: string | null
+          contact_phone?: string | null
+          contact_email?: string | null
+          contact_address?: string | null
+          map_embed_url?: string | null
+          layout_blocks?: Json
+          created_at?: string
+          updated_at?: string
+          created_by?: string | null
+          updated_by?: string | null
+          deleted_at?: string | null
+        }
+        Update: {
+          id?: string
+          clinic_id?: string
+          slug?: string
+          title?: string
+          subtitle?: string | null
+          description?: string | null
+          logo_url?: string | null
+          banner_url?: string | null
+          background_url?: string | null
+          theme?: string
+          primary_color?: string
+          secondary_color?: string
+          font_family?: string
+          seo_title?: string | null
+          seo_description?: string | null
+          favicon_url?: string | null
+          status?: string
+          template_id?: string | null
+          published_at?: string | null
+          paused_at?: string | null
+          last_validated_at?: string | null
+          validation_errors?: Json
+          whatsapp_number?: string | null
+          contact_phone?: string | null
+          contact_email?: string | null
+          contact_address?: string | null
+          map_embed_url?: string | null
+          layout_blocks?: Json
+          created_at?: string
+          updated_at?: string
+          created_by?: string | null
+          updated_by?: string | null
+          deleted_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "smart_hubs_clinic_id_fkey"
+            columns: ["clinic_id"]
+            isOneToOne: true
+            referencedRelation: "clinics"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "smart_hubs_template_id_fkey"
+            columns: ["template_id"]
+            isOneToOne: false
+            referencedRelation: "smart_hub_templates"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      smart_hub_pages: {
+        Row: {
+          id: string
+          clinic_id: string
+          hub_id: string
+          title: string
+          slug: string
+          layout_json: Json
+          is_home: boolean
+          status: string
+          created_at: string
+          updated_at: string
+          created_by: string | null
+          updated_by: string | null
+          deleted_at: string | null
+        }
+        Insert: {
+          id?: string
+          clinic_id: string
+          hub_id: string
+          title?: string
+          slug?: string
+          layout_json?: Json
+          is_home?: boolean
+          status?: string
+          created_at?: string
+          updated_at?: string
+          created_by?: string | null
+          updated_by?: string | null
+          deleted_at?: string | null
+        }
+        Update: {
+          id?: string
+          clinic_id?: string
+          hub_id?: string
+          title?: string
+          slug?: string
+          layout_json?: Json
+          is_home?: boolean
+          status?: string
+          created_at?: string
+          updated_at?: string
+          created_by?: string | null
+          updated_by?: string | null
+          deleted_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "smart_hub_pages_clinic_id_fkey"
+            columns: ["clinic_id"]
+            isOneToOne: false
+            referencedRelation: "clinics"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "smart_hub_pages_hub_id_fkey"
+            columns: ["hub_id"]
+            isOneToOne: false
+            referencedRelation: "smart_hubs"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      smart_hub_buttons: {
+        Row: {
+          id: string
+          clinic_id: string
+          hub_id: string
+          title: string
+          subtitle: string | null
+          icon: string | null
+          type: string
+          url: string | null
+          image: string | null
+          background_color: string | null
+          text_color: string | null
+          visible: boolean
+          order_index: number
+          track_click: boolean
+          status: string
+          created_at: string
+          updated_at: string
+          created_by: string | null
+          updated_by: string | null
+          deleted_at: string | null
+        }
+        Insert: {
+          id?: string
+          clinic_id: string
+          hub_id: string
+          title: string
+          subtitle?: string | null
+          icon?: string | null
+          type?: string
+          url?: string | null
+          image?: string | null
+          background_color?: string | null
+          text_color?: string | null
+          visible?: boolean
+          order_index?: number
+          track_click?: boolean
+          status?: string
+          created_at?: string
+          updated_at?: string
+          created_by?: string | null
+          updated_by?: string | null
+          deleted_at?: string | null
+        }
+        Update: {
+          id?: string
+          clinic_id?: string
+          hub_id?: string
+          title?: string
+          subtitle?: string | null
+          icon?: string | null
+          type?: string
+          url?: string | null
+          image?: string | null
+          background_color?: string | null
+          text_color?: string | null
+          visible?: boolean
+          order_index?: number
+          track_click?: boolean
+          status?: string
+          created_at?: string
+          updated_at?: string
+          created_by?: string | null
+          updated_by?: string | null
+          deleted_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "smart_hub_buttons_clinic_id_fkey"
+            columns: ["clinic_id"]
+            isOneToOne: false
+            referencedRelation: "clinics"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "smart_hub_buttons_hub_id_fkey"
+            columns: ["hub_id"]
+            isOneToOne: false
+            referencedRelation: "smart_hubs"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      smart_hub_templates: {
+        Row: {
+          id: string
+          name: string
+          description: string | null
+          thumbnail: string | null
+          json_layout: Json
+          is_default: boolean
+          status: string
+          created_at: string
+          updated_at: string
+          created_by: string | null
+          updated_by: string | null
+          deleted_at: string | null
+        }
+        Insert: {
+          id?: string
+          name: string
+          description?: string | null
+          thumbnail?: string | null
+          json_layout?: Json
+          is_default?: boolean
+          status?: string
+          created_at?: string
+          updated_at?: string
+          created_by?: string | null
+          updated_by?: string | null
+          deleted_at?: string | null
+        }
+        Update: {
+          id?: string
+          name?: string
+          description?: string | null
+          thumbnail?: string | null
+          json_layout?: Json
+          is_default?: boolean
+          status?: string
+          created_at?: string
+          updated_at?: string
+          created_by?: string | null
+          updated_by?: string | null
+          deleted_at?: string | null
+        }
+        Relationships: []
+      }
+      smart_hub_theme: {
+        Row: {
+          id: string
+          clinic_id: string
+          hub_id: string
+          theme_name: string
+          primary_color: string
+          secondary_color: string
+          accent_color: string | null
+          background_color: string | null
+          text_color: string | null
+          button_radius: string
+          font_family: string
+          custom_css: string | null
+          config_json: Json
+          status: string
+          created_at: string
+          updated_at: string
+          created_by: string | null
+          updated_by: string | null
+          deleted_at: string | null
+        }
+        Insert: {
+          id?: string
+          clinic_id: string
+          hub_id: string
+          theme_name?: string
+          primary_color?: string
+          secondary_color?: string
+          accent_color?: string | null
+          background_color?: string | null
+          text_color?: string | null
+          button_radius?: string
+          font_family?: string
+          custom_css?: string | null
+          config_json?: Json
+          status?: string
+          created_at?: string
+          updated_at?: string
+          created_by?: string | null
+          updated_by?: string | null
+          deleted_at?: string | null
+        }
+        Update: {
+          id?: string
+          clinic_id?: string
+          hub_id?: string
+          theme_name?: string
+          primary_color?: string
+          secondary_color?: string
+          accent_color?: string | null
+          background_color?: string | null
+          text_color?: string | null
+          button_radius?: string
+          font_family?: string
+          custom_css?: string | null
+          config_json?: Json
+          status?: string
+          created_at?: string
+          updated_at?: string
+          created_by?: string | null
+          updated_by?: string | null
+          deleted_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "smart_hub_theme_clinic_id_fkey"
+            columns: ["clinic_id"]
+            isOneToOne: false
+            referencedRelation: "clinics"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "smart_hub_theme_hub_id_fkey"
+            columns: ["hub_id"]
+            isOneToOne: true
+            referencedRelation: "smart_hubs"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      smart_hub_assets: {
+        Row: {
+          id: string
+          clinic_id: string
+          hub_id: string
+          file_name: string
+          file_type: string | null
+          storage_path: string
+          public_url: string | null
+          status: string
+          created_at: string
+          updated_at: string
+          created_by: string | null
+          updated_by: string | null
+          deleted_at: string | null
+        }
+        Insert: {
+          id?: string
+          clinic_id: string
+          hub_id: string
+          file_name: string
+          file_type?: string | null
+          storage_path: string
+          public_url?: string | null
+          status?: string
+          created_at?: string
+          updated_at?: string
+          created_by?: string | null
+          updated_by?: string | null
+          deleted_at?: string | null
+        }
+        Update: {
+          id?: string
+          clinic_id?: string
+          hub_id?: string
+          file_name?: string
+          file_type?: string | null
+          storage_path?: string
+          public_url?: string | null
+          status?: string
+          created_at?: string
+          updated_at?: string
+          created_by?: string | null
+          updated_by?: string | null
+          deleted_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "smart_hub_assets_clinic_id_fkey"
+            columns: ["clinic_id"]
+            isOneToOne: false
+            referencedRelation: "clinics"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "smart_hub_assets_hub_id_fkey"
+            columns: ["hub_id"]
+            isOneToOne: false
+            referencedRelation: "smart_hubs"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      smart_hub_domains: {
+        Row: {
+          id: string
+          clinic_id: string
+          hub_id: string
+          domain: string
+          is_primary: boolean
+          is_verified: boolean
+          verification_token: string | null
+          ssl_status: string
+          status: string
+          created_at: string
+          updated_at: string
+          created_by: string | null
+          updated_by: string | null
+          deleted_at: string | null
+        }
+        Insert: {
+          id?: string
+          clinic_id: string
+          hub_id: string
+          domain: string
+          is_primary?: boolean
+          is_verified?: boolean
+          verification_token?: string | null
+          ssl_status?: string
+          status?: string
+          created_at?: string
+          updated_at?: string
+          created_by?: string | null
+          updated_by?: string | null
+          deleted_at?: string | null
+        }
+        Update: {
+          id?: string
+          clinic_id?: string
+          hub_id?: string
+          domain?: string
+          is_primary?: boolean
+          is_verified?: boolean
+          verification_token?: string | null
+          ssl_status?: string
+          status?: string
+          created_at?: string
+          updated_at?: string
+          created_by?: string | null
+          updated_by?: string | null
+          deleted_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "smart_hub_domains_clinic_id_fkey"
+            columns: ["clinic_id"]
+            isOneToOne: false
+            referencedRelation: "clinics"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "smart_hub_domains_hub_id_fkey"
+            columns: ["hub_id"]
+            isOneToOne: false
+            referencedRelation: "smart_hubs"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      smart_hub_visits: {
+        Row: {
+          id: string
+          clinic_id: string
+          hub_id: string
+          visitor_id: string | null
+          session_id: string | null
+          referrer: string | null
+          utm_source: string | null
+          utm_medium: string | null
+          utm_campaign: string | null
+          device_type: string | null
+          browser: string | null
+          os: string | null
+          country: string | null
+          city: string | null
+          ip_hash: string | null
+          user_agent: string | null
+          status: string
+          created_at: string
+          updated_at: string
+          created_by: string | null
+          updated_by: string | null
+          deleted_at: string | null
+        }
+        Insert: {
+          id?: string
+          clinic_id: string
+          hub_id: string
+          visitor_id?: string | null
+          session_id?: string | null
+          referrer?: string | null
+          utm_source?: string | null
+          utm_medium?: string | null
+          utm_campaign?: string | null
+          device_type?: string | null
+          browser?: string | null
+          os?: string | null
+          country?: string | null
+          city?: string | null
+          ip_hash?: string | null
+          user_agent?: string | null
+          status?: string
+          created_at?: string
+          updated_at?: string
+          created_by?: string | null
+          updated_by?: string | null
+          deleted_at?: string | null
+        }
+        Update: {
+          id?: string
+          clinic_id?: string
+          hub_id?: string
+          visitor_id?: string | null
+          session_id?: string | null
+          referrer?: string | null
+          utm_source?: string | null
+          utm_medium?: string | null
+          utm_campaign?: string | null
+          device_type?: string | null
+          browser?: string | null
+          os?: string | null
+          country?: string | null
+          city?: string | null
+          ip_hash?: string | null
+          user_agent?: string | null
+          status?: string
+          created_at?: string
+          updated_at?: string
+          created_by?: string | null
+          updated_by?: string | null
+          deleted_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "smart_hub_visits_clinic_id_fkey"
+            columns: ["clinic_id"]
+            isOneToOne: false
+            referencedRelation: "clinics"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "smart_hub_visits_hub_id_fkey"
+            columns: ["hub_id"]
+            isOneToOne: false
+            referencedRelation: "smart_hubs"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      smart_hub_clicks: {
+        Row: {
+          id: string
+          clinic_id: string
+          hub_id: string
+          button_id: string | null
+          visit_id: string | null
+          target_url: string | null
+          device_type: string | null
+          referrer: string | null
+          utm_campaign: string | null
+          status: string
+          created_at: string
+          updated_at: string
+          created_by: string | null
+          updated_by: string | null
+          deleted_at: string | null
+        }
+        Insert: {
+          id?: string
+          clinic_id: string
+          hub_id: string
+          button_id?: string | null
+          visit_id?: string | null
+          target_url?: string | null
+          device_type?: string | null
+          referrer?: string | null
+          utm_campaign?: string | null
+          status?: string
+          created_at?: string
+          updated_at?: string
+          created_by?: string | null
+          updated_by?: string | null
+          deleted_at?: string | null
+        }
+        Update: {
+          id?: string
+          clinic_id?: string
+          hub_id?: string
+          button_id?: string | null
+          visit_id?: string | null
+          target_url?: string | null
+          device_type?: string | null
+          referrer?: string | null
+          utm_campaign?: string | null
+          status?: string
+          created_at?: string
+          updated_at?: string
+          created_by?: string | null
+          updated_by?: string | null
+          deleted_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "smart_hub_clicks_clinic_id_fkey"
+            columns: ["clinic_id"]
+            isOneToOne: false
+            referencedRelation: "clinics"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "smart_hub_clicks_hub_id_fkey"
+            columns: ["hub_id"]
+            isOneToOne: false
+            referencedRelation: "smart_hubs"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      smart_hub_events: {
+        Row: {
+          id: string
+          clinic_id: string
+          hub_id: string
+          event_type: string
+          event_name: string | null
+          payload: Json
+          visit_id: string | null
+          status: string
+          created_at: string
+          updated_at: string
+          created_by: string | null
+          updated_by: string | null
+          deleted_at: string | null
+        }
+        Insert: {
+          id?: string
+          clinic_id: string
+          hub_id: string
+          event_type: string
+          event_name?: string | null
+          payload?: Json
+          visit_id?: string | null
+          status?: string
+          created_at?: string
+          updated_at?: string
+          created_by?: string | null
+          updated_by?: string | null
+          deleted_at?: string | null
+        }
+        Update: {
+          id?: string
+          clinic_id?: string
+          hub_id?: string
+          event_type?: string
+          event_name?: string | null
+          payload?: Json
+          visit_id?: string | null
+          status?: string
+          created_at?: string
+          updated_at?: string
+          created_by?: string | null
+          updated_by?: string | null
+          deleted_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "smart_hub_events_clinic_id_fkey"
+            columns: ["clinic_id"]
+            isOneToOne: false
+            referencedRelation: "clinics"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "smart_hub_events_hub_id_fkey"
+            columns: ["hub_id"]
+            isOneToOne: false
+            referencedRelation: "smart_hubs"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       support_tickets: {
         Row: {
           admin_replied_at: string | null
@@ -2474,6 +3221,29 @@ export type Database = {
       }
       get_user_subscription_status: {
         Args: { _user_id: string }
+        Returns: string
+      }
+      get_public_smart_hub: { Args: { p_slug: string }; Returns: Json }
+      get_preview_smart_hub: { Args: { p_hub_id: string }; Returns: Json }
+      is_smart_hub_slug_available: {
+        Args: { p_slug: string; p_exclude_hub_id?: string | null }
+        Returns: boolean
+      }
+      normalize_smart_hub_slug: { Args: { p_slug: string }; Returns: string }
+      validate_smart_hub_for_publish: { Args: { p_hub_id: string }; Returns: Json }
+      publish_smart_hub: { Args: { p_hub_id: string }; Returns: Json }
+      pause_smart_hub: { Args: { p_hub_id: string }; Returns: Json }
+      unpublish_smart_hub_to_draft: { Args: { p_hub_id: string }; Returns: Json }
+      apply_smart_hub_template: {
+        Args: { p_hub_id: string; p_template_id: string }
+        Returns: Json
+      }
+      track_smart_hub_visit: {
+        Args: { p_hub_id: string; p_payload?: Json }
+        Returns: string
+      }
+      track_smart_hub_click: {
+        Args: { p_hub_id: string; p_button_id?: string | null; p_payload?: Json }
         Returns: string
       }
       has_active_subscription: { Args: { _user_id: string }; Returns: boolean }

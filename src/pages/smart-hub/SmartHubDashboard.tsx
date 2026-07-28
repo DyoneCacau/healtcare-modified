@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { Copy, ExternalLink, Plus } from 'lucide-react';
+import { Link } from 'react-router-dom';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -13,15 +14,25 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
-import { SmartHubLayout, DashboardStatsCard } from '@/components/smart-hub';
+import { SmartHubLayout, DashboardStatsCard, PublishWorkflowCard } from '@/components/smart-hub';
 import { useSmartHub } from '@/hooks/useSmartHub';
 import { useHubAnalytics } from '@/hooks/useHubAnalytics';
 import { useClinic } from '@/hooks/useClinic';
 import { generateSlugFromTitle } from '@/services/smartHub';
+import { SMART_HUB_STATUS_LABELS } from '@/types/smartHub';
 
 export default function SmartHubDashboard() {
   const { clinicId, isLoading: clinicLoading } = useClinic();
-  const { hub, publicUrl, isLoading, createHub } = useSmartHub();
+  const {
+    hub,
+    publicUrl,
+    isLoading,
+    createHub,
+    validateHub,
+    publishHub,
+    pauseHub,
+    revertToDraft,
+  } = useSmartHub();
   const { metrics, isLoading: metricsLoading } = useHubAnalytics(hub);
   const [open, setOpen] = useState(false);
   const [title, setTitle] = useState('');
@@ -133,7 +144,10 @@ export default function SmartHubDashboard() {
       title="Smart Hub"
       description="Central inteligente de conversão da clínica"
       actions={
-        <div className="flex gap-2">
+        <div className="flex flex-wrap gap-2">
+          <Button variant="outline" size="sm" asChild>
+            <Link to="/smart-hub/previa">Prévia</Link>
+          </Button>
           <Button variant="outline" size="sm" onClick={copyUrl}>
             <Copy className="mr-2 h-4 w-4" />
             Copiar URL
@@ -153,8 +167,21 @@ export default function SmartHubDashboard() {
           <p className="truncate font-mono text-sm">{publicUrl}</p>
         </div>
         <Badge variant={hub.status === 'published' ? 'default' : 'secondary'}>
-          {hub.status === 'published' ? 'Online' : hub.status}
+          {SMART_HUB_STATUS_LABELS[hub.status] || hub.status}
         </Badge>
+      </div>
+
+      <div className="mb-6">
+        <PublishWorkflowCard
+          hub={hub}
+          validating={validateHub.isPending}
+          publishing={publishHub.isPending}
+          pausing={pauseHub.isPending}
+          onValidate={() => validateHub.mutate()}
+          onPublish={() => publishHub.mutate()}
+          onPause={() => pauseHub.mutate()}
+          onRevertDraft={() => revertToDraft.mutate()}
+        />
       </div>
 
       {metricsLoading ? (
@@ -165,14 +192,8 @@ export default function SmartHubDashboard() {
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
           <DashboardStatsCard label="Visualizações" value={metrics?.views ?? 0} />
           <DashboardStatsCard label="Cliques" value={metrics?.clicks ?? 0} />
-          <DashboardStatsCard label="Leads" value={metrics?.leads ?? 0} hint="Fase Analytics" />
-          <DashboardStatsCard
-            label="Agendamentos"
-            value={metrics?.appointments ?? 0}
-            hint="Fase Integrações"
-          />
-          <DashboardStatsCard label="Conversões" value={metrics?.conversions ?? 0} />
           <DashboardStatsCard label="CTR" value={`${metrics?.ctr ?? 0}%`} />
+          <DashboardStatsCard label="Conversões" value={metrics?.conversions ?? 0} />
           <DashboardStatsCard label="Botão mais clicado" value={metrics?.topButton ?? '—'} />
           <DashboardStatsCard label="Origem principal" value={metrics?.mainOrigin ?? '—'} />
           <DashboardStatsCard label="Dispositivo principal" value={metrics?.mainDevice ?? '—'} />
@@ -187,7 +208,7 @@ export default function SmartHubDashboard() {
           />
           <DashboardStatsCard
             label="Status"
-            value={metrics?.online ? 'Online' : 'Offline'}
+            value={metrics?.online ? 'Online' : SMART_HUB_STATUS_LABELS[hub.status]}
           />
         </div>
       )}

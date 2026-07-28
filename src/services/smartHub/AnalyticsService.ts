@@ -3,6 +3,7 @@ import {
   domainRepository,
   templateRepository,
   pageRepository,
+  hubRepository,
 } from '@/repositories/smartHub';
 import type {
   ListQueryParams,
@@ -67,6 +68,12 @@ export const AnalyticsService = {
 export const TemplateService = {
   list(): Promise<SmartHubTemplate[]> {
     return templateRepository.list();
+  },
+
+  async apply(hubId: string, templateId: string): Promise<{ ok: boolean }> {
+    const raw = await hubRepository.applyTemplate(hubId, templateId);
+    const data = (raw || {}) as { ok?: boolean };
+    return { ok: Boolean(data.ok) };
   },
 };
 
