@@ -74,7 +74,7 @@ export default function SmartHubDashboard() {
             <DialogHeader>
               <DialogTitle>Criar Smart Hub</DialogTitle>
               <DialogDescription>
-                Defina o título e o slug da URL pública (ex.: /hub/rfclinic).
+                Defina o título e o slug da URL pública (ex.: /hub/minha-clinica).
               </DialogDescription>
             </DialogHeader>
             <div className="space-y-4 py-2">
@@ -87,7 +87,7 @@ export default function SmartHubDashboard() {
                     setTitle(e.target.value);
                     if (!slug) setSlug(generateSlugFromTitle(e.target.value));
                   }}
-                  placeholder="RF Clinic"
+                  placeholder="Minha Clínica"
                 />
               </div>
               <div className="space-y-2">
@@ -96,7 +96,7 @@ export default function SmartHubDashboard() {
                   id="slug"
                   value={slug}
                   onChange={(e) => setSlug(e.target.value)}
-                  placeholder="rfclinic"
+                  placeholder="minha-clinica"
                 />
               </div>
             </div>
