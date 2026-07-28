@@ -23,6 +23,9 @@ import {
   Lock,
   KanbanSquare,
   Plug,
+  Megaphone,
+  Link2,
+  BarChart3,
   // MessageSquare, // TODO(go-live): Atendimento omnichannel
 } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -80,6 +83,19 @@ const menuEntries: MenuEntry[] = [
       { icon: FileBarChart, label: "Relatórios", path: "/relatorios", feature: "relatorios" },
     ],
   },
+  {
+    type: "group",
+    id: "marketing",
+    icon: Megaphone,
+    label: "Marketing",
+    children: [
+      { icon: Users, label: "CRM Marketing", path: "/marketing/crm", feature: "marketing_crm" },
+      { icon: Megaphone, label: "Campanhas", path: "/marketing/campanhas", feature: "marketing_campanhas" },
+      { icon: FileText, label: "Landing Pages", path: "/marketing/landing-pages", feature: "marketing_landing_pages" },
+      { icon: Link2, label: "Smart Hub", path: "/smart-hub", feature: "smart_hub" },
+      { icon: BarChart3, label: "Analytics", path: "/marketing/analytics", feature: "marketing_analytics" },
+    ],
+  },
   { icon: Clock, label: "Ponto", path: "/ponto", feature: "ponto" },
   { icon: FileText, label: "Meus Termos", path: "/termos", feature: "termos" },
   { icon: Package, label: "Estoque", path: "/estoque", feature: "estoque" },
@@ -128,11 +144,23 @@ export function Sidebar() {
     [location.pathname],
   );
 
+  const marketingChildActive = useMemo(
+    () =>
+      location.pathname.startsWith("/smart-hub") ||
+      location.pathname.startsWith("/marketing"),
+    [location.pathname],
+  );
+
   const [financeOpen, setFinanceOpen] = useState(financeChildActive);
+  const [marketingOpen, setMarketingOpen] = useState(marketingChildActive);
 
   useEffect(() => {
     if (financeChildActive) setFinanceOpen(true);
   }, [financeChildActive]);
+
+  useEffect(() => {
+    if (marketingChildActive) setMarketingOpen(true);
+  }, [marketingChildActive]);
 
   // Mostrar seletor só se superadmin ou se tiver mais de uma clínica (como dono)
   const showClinicSelector = isSuperAdmin || clinics.length > 1;
@@ -152,11 +180,18 @@ export function Sidebar() {
     navigate("/login");
   };
 
+  const isItemActive = (item: MenuItem) => {
+    if (item.path === "/smart-hub") {
+      return location.pathname === item.path || location.pathname.startsWith("/smart-hub/");
+    }
+    return location.pathname === item.path;
+  };
+
   const renderLinkItem = (item: MenuItem, opts?: { nested?: boolean }) => {
     const { visible, locked } = canSeeItem(item);
     if (!visible) return null;
 
-    const isActive = location.pathname === item.path;
+    const isActive = isItemActive(item);
     const Icon = item.icon;
     const nested = opts?.nested === true;
 
@@ -230,7 +265,15 @@ export function Sidebar() {
     return <li key={item.path}>{linkContent}</li>;
   };
 
-  const renderFinanceGroup = (group: MenuGroup) => {
+  const renderMenuGroup = (
+    group: MenuGroup,
+    opts: {
+      isOpen: boolean;
+      setOpen: (open: boolean | ((prev: boolean) => boolean)) => void;
+      childActive: boolean;
+      collapsedFallbackPath?: string;
+    },
+  ) => {
     const visibleChildren = group.children
       .map((child) => ({ child, access: canSeeItem(child) }))
       .filter(({ access }) => access.visible);
@@ -238,10 +281,35 @@ export function Sidebar() {
     if (visibleChildren.length === 0) return null;
 
     const GroupIcon = group.icon;
-    const isOpen = financeOpen || financeChildActive;
+    const isOpen = opts.isOpen || opts.childActive;
 
     // Sidebar recolhido: mostra só os filhos acessíveis (tooltips)
     if (collapsed) {
+      if (opts.collapsedFallbackPath) {
+        return (
+          <li key={group.id}>
+            <Tooltip delayDuration={0}>
+              <TooltipTrigger asChild>
+                <button
+                  type="button"
+                  onClick={() => navigate(opts.collapsedFallbackPath!)}
+                  className={cn(
+                    "flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-all duration-200",
+                    opts.childActive
+                      ? "bg-sidebar-primary text-sidebar-primary-foreground shadow-md"
+                      : "text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground",
+                  )}
+                >
+                  <GroupIcon className="h-5 w-5 flex-shrink-0" />
+                </button>
+              </TooltipTrigger>
+              <TooltipContent side="right" className="font-medium">
+                {group.label}
+              </TooltipContent>
+            </Tooltip>
+          </li>
+        );
+      }
       return visibleChildren.map(({ child }) => renderLinkItem(child));
     }
 
@@ -249,10 +317,10 @@ export function Sidebar() {
       <li key={group.id} className="space-y-1">
         <button
           type="button"
-          onClick={() => setFinanceOpen((open) => !open)}
+          onClick={() => opts.setOpen((open) => !open)}
           className={cn(
             "flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-all duration-200",
-            financeChildActive
+            opts.childActive
               ? "bg-sidebar-accent text-sidebar-accent-foreground"
               : "text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground",
           )}
@@ -377,7 +445,22 @@ export function Sidebar() {
 
           {menuEntries.map((entry) => {
             if (isMenuGroup(entry)) {
-              return renderFinanceGroup(entry);
+              if (entry.id === "financeiro") {
+                return renderMenuGroup(entry, {
+                  isOpen: financeOpen,
+                  setOpen: setFinanceOpen,
+                  childActive: financeChildActive,
+                });
+              }
+              if (entry.id === "marketing") {
+                return renderMenuGroup(entry, {
+                  isOpen: marketingOpen,
+                  setOpen: setMarketingOpen,
+                  childActive: marketingChildActive,
+                  collapsedFallbackPath: "/smart-hub",
+                });
+              }
+              return null;
             }
             return renderLinkItem(entry);
           })}

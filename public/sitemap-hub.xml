@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Sitemap base do Smart Hub (Fase 1).
+  Na próxima fase, gerar dinamicamente com todos os hubs published via Edge Function / cron.
+-->
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+  <!-- Exemplo:
+  <url>
+    <loc>https://healthcare.app.br/hub/rfclinic</loc>
+    <changefreq>weekly</changefreq>
+    <priority>0.8</priority>
+  </url>
+  -->
+</urlset>

@@ -51,6 +51,7 @@ const AVAILABLE_MODULES = [
   { key: 'relatorios', label: 'Relatórios' },
   { key: 'ponto', label: 'Ponto Eletrônico' },
   { key: 'termos', label: 'Termos e Contratos' },
+  { key: 'smart_hub', label: 'Smart Hub' },
   {
     key: 'administracao',
     label: 'Administração',

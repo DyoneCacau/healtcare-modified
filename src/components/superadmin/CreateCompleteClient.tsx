@@ -36,7 +36,7 @@ import {
   expandFeatureAliases,
 } from "@/lib/planModules";
 
-// Lista completa de módulos disponíveis (chaves alinhadas com PlansManagement)
+// Lista completa de módulos disponíveis (chaves alinhadas com PlansManagement / planModules)
 const AVAILABLE_MODULES = PLAN_MODULES.map((m) => ({
   id: m.id,
   name: m.name,

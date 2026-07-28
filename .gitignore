@@ -60,3 +60,5 @@ supabase/.temp/
 Thumbs.db
 .env
 .env.local
+
+supabase/.temp/

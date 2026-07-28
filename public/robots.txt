@@ -12,3 +12,11 @@ Allow: /
 
 User-agent: *
 Allow: /
+Allow: /hub/
+Disallow: /smart-hub
+Disallow: /marketing
+Disallow: /administracao
+Disallow: /configuracoes
+Disallow: /superadmin
+
+Sitemap: /sitemap-hub.xml

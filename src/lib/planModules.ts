@@ -20,6 +20,11 @@ export const PLAN_MODULES = [
   },
   { id: 'termos', name: 'Termos e Contratos', description: 'Criação de termos e contratos' },
   {
+    id: 'smart_hub',
+    name: 'Smart Hub',
+    description: 'Página pública inteligente de conversão',
+  },
+  {
     id: 'integracoes',
     name: 'Integrações',
     description: 'Lead Ads, WhatsApp, webhooks, n8n, Make, Zapier e APIs',

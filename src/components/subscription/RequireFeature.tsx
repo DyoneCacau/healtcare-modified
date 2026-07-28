@@ -22,6 +22,11 @@ export const FEATURE_LABELS: Record<string, string> = {
   administracao: 'Administração',
   termos: 'Termos e Documentos',
   configuracoes: 'Configurações',
+  smart_hub: 'Smart Hub',
+  marketing_crm: 'CRM',
+  marketing_campanhas: 'Campanhas',
+  marketing_landing_pages: 'Landing Pages',
+  marketing_analytics: 'Analytics de Marketing',
 };
 
 interface RequireFeatureProps {

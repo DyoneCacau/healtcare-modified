@@ -1,4 +1,4 @@
-import React from "react";
+import React, { lazy, Suspense } from "react";
 import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
@@ -39,6 +39,27 @@ const SignDocument = React.lazy(() => import("./pages/SignDocument"));
 const SelectClinic = React.lazy(() => import("./pages/SelectClinic"));
 const NotFound = React.lazy(() => import("./pages/NotFound"));
 const Billing = React.lazy(() => import("./pages/Billing"));
+
+const SmartHubDashboard = lazy(() => import("./pages/smart-hub/SmartHubDashboard"));
+const SmartHubEditor = lazy(() => import("./pages/smart-hub/SmartHubEditor"));
+const SmartHubTemplates = lazy(() => import("./pages/smart-hub/SmartHubTemplates"));
+const SmartHubButtons = lazy(() => import("./pages/smart-hub/SmartHubButtons"));
+const SmartHubAnalytics = lazy(() => import("./pages/smart-hub/SmartHubAnalytics"));
+const SmartHubSettings = lazy(() => import("./pages/smart-hub/SmartHubSettings"));
+const SmartHubDomain = lazy(() => import("./pages/smart-hub/SmartHubDomain"));
+const PublicSmartHub = lazy(() => import("./pages/smart-hub/PublicSmartHub"));
+const MarketingCrm = lazy(() =>
+  import("./pages/marketing/MarketingPlaceholders").then((m) => ({ default: m.MarketingCrm }))
+);
+const MarketingCampaigns = lazy(() =>
+  import("./pages/marketing/MarketingPlaceholders").then((m) => ({ default: m.MarketingCampaigns }))
+);
+const MarketingLandingPages = lazy(() =>
+  import("./pages/marketing/MarketingPlaceholders").then((m) => ({ default: m.MarketingLandingPages }))
+);
+const MarketingAnalytics = lazy(() =>
+  import("./pages/marketing/MarketingPlaceholders").then((m) => ({ default: m.MarketingAnalytics }))
+);
 
 const queryClient = new QueryClient();
 
@@ -153,6 +174,10 @@ function PublicHome() {
   return <Landing />;
 }
 
+function LazyPage({ children }: { children: React.ReactNode }) {
+  return <Suspense fallback={<LoadingScreen />}>{children}</Suspense>;
+}
+
 function AppRoutes() {
   return (
     <React.Suspense fallback={<LoadingScreen />}>
@@ -164,6 +189,16 @@ function AppRoutes() {
       <Route path="/forgot-password" element={<ForgotPassword />} />
       <Route path="/reset-password" element={<ResetPassword />} />
       <Route path="/assinar/:token" element={<SignDocument />} />
+
+      {/* Página pública do Smart Hub */}
+      <Route
+        path="/hub/:slug"
+        element={
+          <LazyPage>
+            <PublicSmartHub />
+          </LazyPage>
+        }
+      />
 
       <Route element={<AuthenticatedAppLayout />}>
         <Route path="/app" element={<Index />} />
@@ -295,6 +330,120 @@ function AppRoutes() {
           }
         />
         */}
+
+        {/* Marketing */}
+        <Route
+          path="/marketing/crm"
+          element={
+            <RequireFeature feature="marketing_crm">
+              <LazyPage>
+                <MarketingCrm />
+              </LazyPage>
+            </RequireFeature>
+          }
+        />
+        <Route
+          path="/marketing/campanhas"
+          element={
+            <RequireFeature feature="marketing_campanhas">
+              <LazyPage>
+                <MarketingCampaigns />
+              </LazyPage>
+            </RequireFeature>
+          }
+        />
+        <Route
+          path="/marketing/landing-pages"
+          element={
+            <RequireFeature feature="marketing_landing_pages">
+              <LazyPage>
+                <MarketingLandingPages />
+              </LazyPage>
+            </RequireFeature>
+          }
+        />
+        <Route
+          path="/marketing/analytics"
+          element={
+            <RequireFeature feature="marketing_analytics">
+              <LazyPage>
+                <MarketingAnalytics />
+              </LazyPage>
+            </RequireFeature>
+          }
+        />
+
+        {/* Smart Hub */}
+        <Route
+          path="/smart-hub"
+          element={
+            <RequireFeature feature="smart_hub">
+              <LazyPage>
+                <SmartHubDashboard />
+              </LazyPage>
+            </RequireFeature>
+          }
+        />
+        <Route
+          path="/smart-hub/paginas"
+          element={
+            <RequireFeature feature="smart_hub">
+              <LazyPage>
+                <SmartHubEditor />
+              </LazyPage>
+            </RequireFeature>
+          }
+        />
+        <Route
+          path="/smart-hub/templates"
+          element={
+            <RequireFeature feature="smart_hub">
+              <LazyPage>
+                <SmartHubTemplates />
+              </LazyPage>
+            </RequireFeature>
+          }
+        />
+        <Route
+          path="/smart-hub/botoes"
+          element={
+            <RequireFeature feature="smart_hub">
+              <LazyPage>
+                <SmartHubButtons />
+              </LazyPage>
+            </RequireFeature>
+          }
+        />
+        <Route
+          path="/smart-hub/analytics"
+          element={
+            <RequireFeature feature="smart_hub">
+              <LazyPage>
+                <SmartHubAnalytics />
+              </LazyPage>
+            </RequireFeature>
+          }
+        />
+        <Route
+          path="/smart-hub/configuracoes"
+          element={
+            <RequireFeature feature="smart_hub">
+              <LazyPage>
+                <SmartHubSettings />
+              </LazyPage>
+            </RequireFeature>
+          }
+        />
+        <Route
+          path="/smart-hub/dominio"
+          element={
+            <RequireFeature feature="smart_hub">
+              <LazyPage>
+                <SmartHubDomain />
+              </LazyPage>
+            </RequireFeature>
+          }
+        />
 
         <Route
           path="/administracao"
