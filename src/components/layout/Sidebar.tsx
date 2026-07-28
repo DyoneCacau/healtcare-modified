@@ -25,7 +25,6 @@ import {
   Plug,
   Megaphone,
   Link2,
-  BarChart3,
   // MessageSquare, // TODO(go-live): Atendimento omnichannel
 } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -89,11 +88,9 @@ const menuEntries: MenuEntry[] = [
     icon: Megaphone,
     label: "Marketing",
     children: [
-      { icon: Users, label: "CRM Marketing", path: "/marketing/crm", feature: "marketing_crm" },
-      { icon: Megaphone, label: "Campanhas", path: "/marketing/campanhas", feature: "marketing_campanhas" },
-      { icon: FileText, label: "Landing Pages", path: "/marketing/landing-pages", feature: "marketing_landing_pages" },
+      // Placeholders (CRM Marketing, Campanhas, Landing Pages, Analytics) ocultos no menu —
+      // rotas/componentes permanecem em App.tsx para fases futuras.
       { icon: Link2, label: "Smart Hub", path: "/smart-hub", feature: "smart_hub" },
-      { icon: BarChart3, label: "Analytics", path: "/marketing/analytics", feature: "marketing_analytics" },
     ],
   },
   { icon: Clock, label: "Ponto", path: "/ponto", feature: "ponto" },
