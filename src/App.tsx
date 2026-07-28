@@ -159,7 +159,8 @@ function AppRoutes() {
       <Routes>
       <Route path="/" element={<PublicHome />} />
       <Route path="/login" element={<Login />} />
-      <Route path="/privacidade" element={<Privacy />} />
+      <Route path="/privacy" element={<Privacy />} />
+      <Route path="/privacidade" element={<Navigate to="/privacy" replace />} />
       <Route path="/forgot-password" element={<ForgotPassword />} />
       <Route path="/reset-password" element={<ResetPassword />} />
       <Route path="/assinar/:token" element={<SignDocument />} />

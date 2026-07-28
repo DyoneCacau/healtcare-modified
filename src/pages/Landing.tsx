@@ -1076,7 +1076,7 @@ export default function Landing() {
             </Button>
             <p className="text-center text-xs text-slate-500">
               Ao enviar, você concorda com nossa{" "}
-              <Link to="/privacidade" className="underline underline-offset-2">
+              <Link to="/privacy" className="underline underline-offset-2">
                 Política de Privacidade
               </Link>
               .
@@ -1099,7 +1099,7 @@ export default function Landing() {
             <Link to="/login" className="hover:text-white">
               Entrar
             </Link>
-            <Link to="/privacidade" className="hover:text-white">
+            <Link to="/privacy" className="hover:text-white">
               Privacidade
             </Link>
             <button type="button" className="hover:text-white" onClick={() => scrollToId("contato")}>

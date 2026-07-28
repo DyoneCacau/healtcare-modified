@@ -305,7 +305,7 @@ export default function Login() {
               </DialogContent>
             </Dialog>
             <p className="text-center text-xs text-muted-foreground mt-4">
-              <Link to="/privacidade" className="hover:underline">Política de Privacidade</Link>
+              <Link to="/privacy" className="hover:underline">Política de Privacidade</Link>
             </p>
           </div>
         </div>
