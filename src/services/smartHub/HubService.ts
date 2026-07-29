@@ -17,15 +17,50 @@ import {
 } from './slugUtils';
 
 function asValidationResult(raw: unknown): SmartHubValidationResult {
-  const data = (raw || {}) as Record<string, unknown>;
+  // PostgREST pode devolver JSON já parseado ou string
+  const parsed =
+    typeof raw === 'string'
+      ? (() => {
+          try {
+            return JSON.parse(raw) as Record<string, unknown>;
+          } catch {
+            return {};
+          }
+        })()
+      : ((raw || {}) as Record<string, unknown>);
+
+  const errorsRaw = parsed.errors;
+  const warningsRaw = parsed.warnings;
+
+  const normalizeIssues = (value: unknown): SmartHubValidationResult['errors'] => {
+    if (!Array.isArray(value)) return [];
+    return value.map((item) => {
+      if (typeof item === 'string') return { code: 'custom', message: item };
+      if (item && typeof item === 'object') {
+        const obj = item as Record<string, unknown>;
+        return {
+          code: String(obj.code || 'custom'),
+          message: String(obj.message || obj.msg || JSON.stringify(item)),
+        };
+      }
+      return { code: 'custom', message: String(item) };
+    });
+  };
+
+  // Aceita tanto `ok` quanto `valid` (compat)
+  const ok =
+    typeof parsed.ok === 'boolean'
+      ? parsed.ok
+      : typeof parsed.valid === 'boolean'
+        ? parsed.valid
+        : false;
+
   return {
-    ok: Boolean(data.ok),
-    errors: Array.isArray(data.errors) ? (data.errors as SmartHubValidationResult['errors']) : [],
-    warnings: Array.isArray(data.warnings)
-      ? (data.warnings as SmartHubValidationResult['warnings'])
-      : [],
+    ok,
+    errors: normalizeIssues(errorsRaw),
+    warnings: normalizeIssues(warningsRaw),
     visible_buttons:
-      typeof data.visible_buttons === 'number' ? data.visible_buttons : undefined,
+      typeof parsed.visible_buttons === 'number' ? parsed.visible_buttons : undefined,
   };
 }
 

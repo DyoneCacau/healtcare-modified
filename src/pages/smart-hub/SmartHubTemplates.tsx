@@ -43,8 +43,8 @@ export default function SmartHubTemplates() {
                     <p className="mt-2 text-xs text-muted-foreground">{blocks}</p>
                   </div>
                   <div className="flex flex-col items-end gap-1">
-                    {tpl.is_default && <Badge>Padrão</Badge>}
-                    {selected && <Badge variant="secondary">Aplicado</Badge>}
+                    {tpl.is_default && <Badge variant="outline">Padrão do sistema</Badge>}
+                    {selected && <Badge variant="secondary">Aplicado neste hub</Badge>}
                   </div>
                 </div>
                 {!hub ? (

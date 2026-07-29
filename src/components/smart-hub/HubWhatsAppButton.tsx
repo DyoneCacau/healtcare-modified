@@ -1,4 +1,4 @@
-import { memo } from 'react';
+import { memo, type MouseEvent } from 'react';
 import { MessageCircle } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
@@ -7,11 +7,18 @@ interface HubWhatsAppButtonProps {
   message?: string;
   label?: string;
   className?: string;
-  onClick?: () => void;
+  onClick?: (e: MouseEvent<HTMLAnchorElement>) => void;
 }
 
 function buildWhatsAppUrl(phone: string, message?: string): string {
-  const digits = phone.replace(/\D/g, '');
+  const value = phone.trim();
+  if (/^https?:\/\//i.test(value) || value.startsWith('wa.me/')) {
+    const base = value.startsWith('wa.me/') ? `https://${value}` : value;
+    if (!message) return base;
+    const sep = base.includes('?') ? '&' : '?';
+    return `${base}${sep}text=${encodeURIComponent(message)}`;
+  }
+  const digits = value.replace(/\D/g, '');
   const text = message ? `?text=${encodeURIComponent(message)}` : '';
   return `https://wa.me/${digits}${text}`;
 }

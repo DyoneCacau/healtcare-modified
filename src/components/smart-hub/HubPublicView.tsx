@@ -27,6 +27,16 @@ function normalizeBlocks(blocks: SmartHubLayoutBlock[] | undefined): SmartHubLay
   return blocks;
 }
 
+function resolveWhatsAppHref(raw: string): string {
+  const value = raw.trim();
+  if (!value) return '';
+  if (/^https?:\/\//i.test(value) || value.startsWith('wa.me/')) {
+    return value.startsWith('wa.me/') ? `https://${value}` : value;
+  }
+  const digits = value.replace(/\D/g, '');
+  return digits ? `https://wa.me/${digits}` : value;
+}
+
 export const HubPublicView = memo(function HubPublicView({
   payload,
   preview = false,
@@ -40,6 +50,9 @@ export const HubPublicView = memo(function HubPublicView({
   const background = theme?.background_color || hub.background_url || undefined;
   const blocks = normalizeBlocks(hub.layout_blocks);
 
+  const hasWhatsappBlock = blocks.includes('whatsapp');
+  const hasSocialBlock = blocks.includes('social');
+
   const socialLinks = useMemo(
     () =>
       buttons
@@ -48,22 +61,29 @@ export const HubPublicView = memo(function HubPublicView({
     [buttons]
   );
 
-  const whatsappButton = buttons.find((b) => b.type === 'whatsapp');
-  const whatsapp: SmartHubButton | undefined =
-    whatsappButton ||
-    (hub.whatsapp_number
-      ? ({
-          id: 'hub-whatsapp',
-          title: 'WhatsApp',
-          url: hub.whatsapp_number.startsWith('http')
-            ? hub.whatsapp_number
-            : `https://wa.me/${hub.whatsapp_number.replace(/\D/g, '')}`,
-          type: 'whatsapp',
-          track_click: true,
-        } as SmartHubButton)
-      : undefined);
+  const whatsappFromButtons = buttons.filter((b) => b.type === 'whatsapp' && b.url);
+  const whatsappFallback: SmartHubButton | undefined = hub.whatsapp_number
+    ? ({
+        id: 'hub-whatsapp',
+        title: 'WhatsApp',
+        url: resolveWhatsAppHref(hub.whatsapp_number),
+        type: 'whatsapp',
+        track_click: true,
+      } as SmartHubButton)
+    : undefined;
 
-  const gridButtons = buttons.filter((b) => b.type !== 'whatsapp' && b.type !== 'social');
+  const whatsappPrimary = whatsappFromButtons[0] || whatsappFallback;
+
+  /**
+   * WhatsApp/social só saem do grid quando existe bloco dedicado no layout.
+   * Templates como "Clássico" (sem bloco whatsapp) precisam listar o botão no grid.
+   */
+  const gridButtons = buttons.filter((b) => {
+    if (b.type === 'whatsapp' && hasWhatsappBlock) return false;
+    if (b.type === 'social' && hasSocialBlock) return false;
+    return true;
+  });
+
   const hasLogoBlock = blocks.includes('logo');
   const hasHeader = blocks.includes('header');
   const hasDescription = blocks.includes('description');
@@ -74,7 +94,9 @@ export const HubPublicView = memo(function HubPublicView({
       return;
     }
     if (button.url) {
-      window.open(button.url, button.type === 'internal' ? '_self' : '_blank');
+      const href =
+        button.type === 'whatsapp' ? resolveWhatsAppHref(button.url) : button.url;
+      window.open(href, button.type === 'internal' ? '_self' : '_blank');
     }
   };
 
@@ -111,12 +133,15 @@ export const HubPublicView = memo(function HubPublicView({
           />
         );
       case 'whatsapp':
-        return whatsapp?.url ? (
+        return whatsappPrimary?.url ? (
           <HubWhatsAppButton
             key={`${block}-${index}`}
-            phone={whatsapp.url}
-            label={whatsapp.title || 'WhatsApp'}
-            onClick={() => handleClick(whatsapp)}
+            phone={whatsappPrimary.url}
+            label={whatsappPrimary.title || 'WhatsApp'}
+            onClick={(e) => {
+              e.preventDefault();
+              handleClick(whatsappPrimary);
+            }}
           />
         ) : null;
       case 'buttons':
@@ -126,6 +151,11 @@ export const HubPublicView = memo(function HubPublicView({
             key={`${block}-${index}`}
             buttons={gridButtons}
             onButtonClick={handleClick}
+            emptyLabel={
+              preview
+                ? 'Nenhum botão visível nesta prévia. Cadastre um botão em Botões.'
+                : 'Nenhum botão publicado ainda.'
+            }
           />
         );
       case 'social':
@@ -176,6 +206,7 @@ export const HubPublicView = memo(function HubPublicView({
         {preview && (
           <div className="sticky top-0 z-20 border-b bg-amber-50 px-4 py-2 text-center text-xs font-medium text-amber-900">
             Modo prévia — visitantes públicos só veem o hub quando estiver publicado.
+            {buttons.length > 0 ? ` · ${buttons.length} botão(ões) ativo(s)` : ''}
           </div>
         )}
         <div className="mx-auto flex w-full max-w-2xl flex-col gap-6 py-8">{rendered}</div>

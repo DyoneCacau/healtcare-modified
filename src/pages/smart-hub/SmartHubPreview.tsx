@@ -9,12 +9,13 @@ export default function SmartHubPreview() {
     hub,
     isLoading,
     publicUrl,
+    lastValidation,
     validateHub,
     publishHub,
     pauseHub,
     revertToDraft,
   } = useSmartHub();
-  const { data, isLoading: loadingPreview, error } = usePreviewSmartHub(hub?.id);
+  const { data, isLoading: loadingPreview, error, refetch } = usePreviewSmartHub(hub?.id);
 
   return (
     <SmartHubLayout
@@ -50,15 +51,19 @@ export default function SmartHubPreview() {
             validating={validateHub.isPending}
             publishing={publishHub.isPending}
             pausing={pauseHub.isPending}
-            onValidate={() => validateHub.mutate()}
+            lastValidation={lastValidation}
+            onValidate={() => validateHub.mutateAsync()}
             onPublish={() => publishHub.mutate()}
             onPause={() => pauseHub.mutate()}
             onRevertDraft={() => revertToDraft.mutate()}
           />
 
           {error || !data ? (
-            <div className="rounded-lg border border-dashed p-10 text-center text-muted-foreground">
-              Não foi possível carregar a prévia. Verifique se a migration Fase 2 foi aplicada.
+            <div className="space-y-3 rounded-lg border border-dashed p-10 text-center text-muted-foreground">
+              <p>Não foi possível carregar a prévia.</p>
+              <Button variant="outline" size="sm" onClick={() => refetch()}>
+                Tentar novamente
+              </Button>
             </div>
           ) : (
             <div className="overflow-hidden rounded-xl border shadow-sm">

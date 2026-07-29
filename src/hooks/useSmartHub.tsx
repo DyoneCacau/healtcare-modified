@@ -1,14 +1,44 @@
+import { useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import { useAuth } from '@/hooks/useAuth';
 import { useClinic } from '@/hooks/useClinic';
-import { HubService, ThemeService, PageService, TemplateService, DomainService } from '@/services/smartHub';
-import type { SmartHubUpdate, SmartHubValidationResult } from '@/types/smartHub';
+import {
+  HubService,
+  ThemeService,
+  PageService,
+  TemplateService,
+  DomainService,
+  ButtonService,
+} from '@/services/smartHub';
+import type {
+  PublicSmartHubPayload,
+  SmartHubUpdate,
+  SmartHubValidationResult,
+} from '@/types/smartHub';
+
+function invalidateSmartHubQueries(
+  queryClient: ReturnType<typeof useQueryClient>,
+  clinicId: string | null | undefined,
+  hubId?: string | null
+) {
+  if (clinicId) {
+    queryClient.invalidateQueries({ queryKey: ['smart-hub', clinicId] });
+    queryClient.invalidateQueries({ queryKey: ['smart-hub-pages', clinicId] });
+    queryClient.invalidateQueries({ queryKey: ['smart-hub-theme', clinicId] });
+    queryClient.invalidateQueries({ queryKey: ['smart-hub-analytics-metrics', clinicId] });
+    queryClient.invalidateQueries({ queryKey: ['smart-hub-buttons', clinicId] });
+  }
+  if (hubId) {
+    queryClient.invalidateQueries({ queryKey: ['smart-hub-preview', hubId] });
+  }
+}
 
 export function useSmartHub() {
   const { clinicId } = useClinic();
   const { user } = useAuth();
   const queryClient = useQueryClient();
+  const [lastValidation, setLastValidation] = useState<SmartHubValidationResult | null>(null);
 
   const hubQuery = useQuery({
     queryKey: ['smart-hub', clinicId],
@@ -52,11 +82,7 @@ export function useSmartHub() {
   });
 
   const invalidateHub = () => {
-    queryClient.invalidateQueries({ queryKey: ['smart-hub', clinicId] });
-    queryClient.invalidateQueries({ queryKey: ['smart-hub-pages', clinicId] });
-    queryClient.invalidateQueries({ queryKey: ['smart-hub-theme', clinicId] });
-    queryClient.invalidateQueries({ queryKey: ['smart-hub-analytics-metrics', clinicId] });
-    queryClient.invalidateQueries({ queryKey: ['smart-hub-preview', hubQuery.data?.id] });
+    invalidateSmartHubQueries(queryClient, clinicId, hubQuery.data?.id);
   };
 
   const createHub = useMutation({
@@ -90,16 +116,32 @@ export function useSmartHub() {
   });
 
   const validateHub = useMutation({
-    mutationFn: async () => {
+    mutationFn: async (): Promise<SmartHubValidationResult> => {
       if (!hubQuery.data?.id) throw new Error('Hub não encontrado.');
       return HubService.validateForPublish(hubQuery.data.id);
     },
-    onSuccess: (result: SmartHubValidationResult) => {
+    onSuccess: (result) => {
+      setLastValidation(result);
       invalidateHub();
-      if (result.ok) toast.success('Validação ok. Pronto para publicar.');
-      else toast.error(result.errors[0]?.message || 'Corrija os erros antes de publicar.');
+      if (result.ok) {
+        toast.success('Smart Hub validado e pronto para publicação.');
+      } else {
+        const first = result.errors[0]?.message || 'Corrija as pendências antes de publicar.';
+        toast.error(first);
+      }
     },
-    onError: (err: Error) => toast.error(err.message || 'Erro ao validar.'),
+    onError: (err: unknown) => {
+      const message =
+        err && typeof err === 'object' && 'message' in err
+          ? String((err as { message: string }).message)
+          : 'Erro ao validar Smart Hub.';
+      toast.error(message || 'Erro ao validar Smart Hub.');
+      setLastValidation({
+        ok: false,
+        errors: [{ code: 'rpc_error', message: message || 'Erro ao validar.' }],
+        warnings: [],
+      });
+    },
   });
 
   const publishHub = useMutation({
@@ -108,6 +150,7 @@ export function useSmartHub() {
       return HubService.publish(hubQuery.data.id);
     },
     onSuccess: (result) => {
+      if (result.validation) setLastValidation(result.validation);
       invalidateHub();
       if (result.ok) toast.success('Smart Hub publicado.');
       else toast.error(result.validation?.errors[0]?.message || 'Não foi possível publicar.');
@@ -133,6 +176,7 @@ export function useSmartHub() {
       return HubService.revertToDraft(hubQuery.data.id);
     },
     onSuccess: () => {
+      setLastValidation(null);
       invalidateHub();
       toast.success('Hub voltou para rascunho.');
     },
@@ -145,6 +189,7 @@ export function useSmartHub() {
       return TemplateService.apply(hubQuery.data.id, templateId);
     },
     onSuccess: () => {
+      setLastValidation(null);
       invalidateHub();
       toast.success('Template aplicado.');
     },
@@ -161,6 +206,7 @@ export function useSmartHub() {
     isLoading: hubQuery.isLoading,
     isLoadingPages: pagesQuery.isLoading,
     publicUrl: hubQuery.data ? HubService.getPublicUrl(hubQuery.data.slug) : null,
+    lastValidation,
     createHub,
     updateHub,
     checkSlug,
@@ -185,14 +231,66 @@ export function usePublicSmartHub(slug: string | undefined) {
   });
 }
 
+/**
+ * Prévia administrativa: tenta RPC get_preview_smart_hub;
+ * se falhar, monta payload autenticado (hub + theme + botões) para rascunho.
+ */
 export function usePreviewSmartHub(hubId: string | undefined) {
+  const { clinicId } = useClinic();
+
   return useQuery({
-    queryKey: ['smart-hub-preview', hubId],
-    queryFn: async () => {
-      if (!hubId) return null;
-      return HubService.getPreviewById(hubId);
+    queryKey: ['smart-hub-preview', hubId, clinicId],
+    queryFn: async (): Promise<PublicSmartHubPayload | null> => {
+      if (!hubId || !clinicId) return null;
+
+      try {
+        const fromRpc = await HubService.getPreviewById(hubId);
+        if (fromRpc?.hub) {
+          if (import.meta.env.DEV) {
+            console.debug('[smart-hub preview]', {
+              source: 'rpc',
+              buttons: fromRpc.buttons?.length ?? 0,
+              status: fromRpc.hub.status,
+            });
+          }
+          return fromRpc;
+        }
+      } catch (err) {
+        if (import.meta.env.DEV) {
+          console.debug('[smart-hub preview] RPC falhou, usando fallback autenticado', err);
+        }
+      }
+
+      const [hub, theme, buttonsPage] = await Promise.all([
+        HubService.getById(hubId, clinicId),
+        ThemeService.getByHubId(hubId, clinicId),
+        ButtonService.listByHub(hubId, clinicId, { page: 1, pageSize: 100 }),
+      ]);
+
+      if (!hub) return null;
+
+      const buttons = (buttonsPage.data || []).filter(
+        (b) => b.visible && b.status === 'active' && !b.deleted_at
+      );
+
+      if (import.meta.env.DEV) {
+        console.debug('[smart-hub preview]', {
+          source: 'fallback',
+          buttons: buttons.length,
+          status: hub.status,
+        });
+      }
+
+      return {
+        hub,
+        theme,
+        buttons,
+        page: null,
+        assets: [],
+        preview: true,
+      };
     },
-    enabled: !!hubId,
-    staleTime: 10_000,
+    enabled: !!hubId && !!clinicId,
+    staleTime: 5_000,
   });
 }

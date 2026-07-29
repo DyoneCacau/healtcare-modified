@@ -15,6 +15,7 @@ export default function SmartHubSettings() {
     updateHub,
     checkSlug,
     publicUrl,
+    lastValidation,
     validateHub,
     publishHub,
     pauseHub,
@@ -76,7 +77,8 @@ export default function SmartHubSettings() {
             validating={validateHub.isPending}
             publishing={publishHub.isPending}
             pausing={pauseHub.isPending}
-            onValidate={() => validateHub.mutate()}
+            lastValidation={lastValidation}
+            onValidate={() => validateHub.mutateAsync()}
             onPublish={() => publishHub.mutate()}
             onPause={() => pauseHub.mutate()}
             onRevertDraft={() => revertToDraft.mutate()}

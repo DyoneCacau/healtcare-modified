@@ -165,16 +165,37 @@ export const hubRepository = {
       p_hub_id: hubId,
     } as never);
 
-    if (error) throw error;
+    if (error) {
+      if (import.meta.env.DEV) {
+        console.debug('[smart-hub preview] RPC error', error);
+      }
+      throw error;
+    }
     if (!data) return null;
-    return normalizePublicPayload(data);
+    const payload = normalizePublicPayload(data);
+    if (import.meta.env.DEV) {
+      console.debug('[smart-hub preview] RPC ok', {
+        buttons: payload.buttons.length,
+        status: payload.hub?.status,
+        layout_blocks: payload.hub?.layout_blocks,
+      });
+    }
+    return payload;
   },
 
   async validateForPublish(hubId: string): Promise<unknown> {
     const { data, error } = await supabase.rpc('validate_smart_hub_for_publish' as never, {
       p_hub_id: hubId,
     } as never);
-    if (error) throw error;
+    if (error) {
+      if (import.meta.env.DEV) {
+        console.debug('[smart-hub validate] RPC error', error);
+      }
+      throw error;
+    }
+    if (import.meta.env.DEV) {
+      console.debug('[smart-hub validate] RPC result', data);
+    }
     return data;
   },
 

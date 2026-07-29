@@ -7,13 +7,19 @@ interface HubGridProps {
   buttons: SmartHubButton[];
   onButtonClick?: (button: SmartHubButton) => void;
   className?: string;
+  emptyLabel?: string;
 }
 
-export const HubGrid = memo(function HubGrid({ buttons, onButtonClick, className }: HubGridProps) {
+export const HubGrid = memo(function HubGrid({
+  buttons,
+  onButtonClick,
+  className,
+  emptyLabel = 'Nenhum botão publicado ainda.',
+}: HubGridProps) {
   if (!buttons.length) {
     return (
       <div className="rounded-lg border border-dashed p-8 text-center text-sm text-muted-foreground">
-        Nenhum botão publicado ainda.
+        {emptyLabel}
       </div>
     );
   }

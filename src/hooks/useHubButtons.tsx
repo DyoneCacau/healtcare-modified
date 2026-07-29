@@ -10,6 +10,13 @@ export function useHubButtons(hubId?: string | null) {
   const { user } = useAuth();
   const queryClient = useQueryClient();
 
+  const invalidateRelated = () => {
+    queryClient.invalidateQueries({ queryKey: ['smart-hub-buttons', clinicId, hubId] });
+    queryClient.invalidateQueries({ queryKey: ['smart-hub-preview', hubId] });
+    queryClient.invalidateQueries({ queryKey: ['smart-hub', clinicId] });
+    queryClient.invalidateQueries({ queryKey: ['smart-hub-analytics-metrics', clinicId] });
+  };
+
   const query = useQuery({
     queryKey: ['smart-hub-buttons', clinicId, hubId],
     queryFn: async () => {
@@ -23,12 +30,19 @@ export function useHubButtons(hubId?: string | null) {
     mutationFn: async (payload: Omit<SmartHubButtonInsert, 'clinic_id' | 'hub_id'>) => {
       if (!clinicId || !hubId) throw new Error('Hub não encontrado.');
       return ButtonService.create(
-        { ...payload, clinic_id: clinicId, hub_id: hubId, title: payload.title },
+        {
+          ...payload,
+          clinic_id: clinicId,
+          hub_id: hubId,
+          title: payload.title,
+          visible: payload.visible ?? true,
+          status: payload.status ?? 'active',
+        },
         user?.id
       );
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['smart-hub-buttons', clinicId, hubId] });
+      invalidateRelated();
       toast.success('Botão criado.');
     },
     onError: (err: Error) => toast.error(err.message || 'Erro ao criar botão.'),
@@ -40,7 +54,7 @@ export function useHubButtons(hubId?: string | null) {
       return ButtonService.update(id, clinicId, payload, user?.id);
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['smart-hub-buttons', clinicId, hubId] });
+      invalidateRelated();
       toast.success('Botão atualizado.');
     },
     onError: (err: Error) => toast.error(err.message || 'Erro ao atualizar botão.'),
@@ -52,7 +66,7 @@ export function useHubButtons(hubId?: string | null) {
       return ButtonService.softDelete(id, clinicId, user?.id);
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['smart-hub-buttons', clinicId, hubId] });
+      invalidateRelated();
       toast.success('Botão removido.');
     },
     onError: (err: Error) => toast.error(err.message || 'Erro ao remover botão.'),
