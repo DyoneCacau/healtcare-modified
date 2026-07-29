@@ -59,6 +59,9 @@ import {
   buildDestinationUrl,
   resolveClickAction,
   validateSocialDomain,
+  buildButtonCaptureConfig,
+  resolveCaptureConfig,
+  assertValidOwnerInput,
 } from '@/services/smartHub';
 import {
   SMART_HUB_BUTTON_TYPE_LABELS,
@@ -113,6 +116,7 @@ const emptyForm = {
   capture_redirect_wa: false,
   capture_wa_phone: '',
   capture_wa_message: '',
+  capture_use_hub_defaults: true,
   open_in_new_tab: true,
   email_subject: '',
 };
@@ -160,13 +164,37 @@ export default function SmartHubButtons() {
   const showFallbackDestination =
     !isFormAction && !isWhatsApp && !isLink && !isPhone && !isEmail && !isMap && !isInfo;
 
+  const hubResolvedCapture = useMemo(
+    () =>
+      resolveCaptureConfig(hub?.capture_config, {
+        use_hub_defaults: form.capture_use_hub_defaults,
+        interest: form.capture_interest || null,
+        initial_stage: form.capture_stage as SmartHubButtonCaptureConfig['initial_stage'],
+        owner_user_id: form.capture_owner || null,
+        redirect_whatsapp_after_submit: form.capture_redirect_wa,
+        whatsapp_phone: form.capture_wa_phone || null,
+        whatsapp_message: form.capture_wa_message || null,
+      }),
+    [
+      hub?.capture_config,
+      form.capture_use_hub_defaults,
+      form.capture_interest,
+      form.capture_stage,
+      form.capture_owner,
+      form.capture_redirect_wa,
+      form.capture_wa_phone,
+      form.capture_wa_message,
+    ]
+  );
+
   const ownerLabel = useMemo(() => {
-    if (!form.capture_owner) return 'Padrão do Hub';
-    return staff.find((s) => s.id === form.capture_owner)?.name || 'Responsável definido';
-  }, [form.capture_owner, staff]);
+    if (!hubResolvedCapture.owner_user_id) return 'Sem responsável';
+    return staff.find((s) => s.id === hubResolvedCapture.owner_user_id)?.name || 'Responsável definido';
+  }, [hubResolvedCapture.owner_user_id, staff]);
 
   const stageLabel =
-    CRM_STAGES.find((s) => s.id === form.capture_stage)?.label || form.capture_stage;
+    CRM_STAGES.find((s) => s.id === hubResolvedCapture.initial_stage)?.label ||
+    hubResolvedCapture.initial_stage;
 
   const openCreate = () => {
     setEditing(null);
@@ -213,11 +241,18 @@ export default function SmartHubButtons() {
       background_color: btn.background_color || '',
       text_color: btn.text_color || '',
       capture_interest: cap.interest || '',
-      capture_stage: cap.initial_stage || 'new',
+      capture_stage: cap.initial_stage || hub?.capture_config?.initial_stage || 'new',
       capture_owner: cap.owner_user_id || '',
-      capture_redirect_wa: Boolean(cap.redirect_whatsapp_after_submit),
-      capture_wa_phone: cap.whatsapp_phone || '',
-      capture_wa_message: cap.whatsapp_message || '',
+      capture_redirect_wa: Boolean(
+        cap.redirect_whatsapp_after_submit ?? hub?.capture_config?.redirect_whatsapp_after_submit
+      ),
+      capture_wa_phone: cap.whatsapp_phone || hub?.capture_config?.whatsapp_phone || '',
+      capture_wa_message:
+        cap.whatsapp_message ||
+        hub?.capture_config?.whatsapp_followup_message ||
+        hub?.capture_config?.whatsapp_message ||
+        '',
+      capture_use_hub_defaults: resolveCaptureConfig(hub?.capture_config, cap).using_hub_defaults,
       open_in_new_tab: cap.open_in_new_tab !== false,
       email_subject: cap.email_subject || '',
     });
@@ -241,7 +276,12 @@ export default function SmartHubButtons() {
     }
 
     if (isFormAction) {
-      if (form.capture_redirect_wa && !form.capture_wa_phone.trim() && !hub?.whatsapp_number) {
+      if (
+        !form.capture_use_hub_defaults &&
+        form.capture_redirect_wa &&
+        !form.capture_wa_phone.trim() &&
+        !hub?.whatsapp_number
+      ) {
         toast.error('Informe o telefone do WhatsApp após o envio.');
         return false;
       }
@@ -307,13 +347,21 @@ export default function SmartHubButtons() {
       return;
     }
 
-    const capture_config: SmartHubButtonCaptureConfig = {
+    const ownerCheck = assertValidOwnerInput(
+      form.capture_use_hub_defaults ? null : form.capture_owner
+    );
+    if (ownerCheck.ok === false) {
+      toast.error(ownerCheck.message);
+      return;
+    }
+    const ownerId = ownerCheck.owner;
+
+    const capture_config = buildButtonCaptureConfig({
       interest: isFormAction ? form.capture_interest || null : null,
-      initial_stage: isFormAction
-        ? (form.capture_stage as SmartHubButtonCaptureConfig['initial_stage']) || 'new'
-        : 'new',
-      owner_user_id: isFormAction ? form.capture_owner || null : null,
-      redirect_whatsapp_after_submit: isFormAction ? form.capture_redirect_wa : false,
+      useHubDefaults: isFormAction ? form.capture_use_hub_defaults : true,
+      initial_stage: form.capture_stage,
+      owner_user_id: ownerId,
+      redirect_whatsapp_after_submit: form.capture_redirect_wa,
       whatsapp_phone: isFormAction
         ? form.capture_wa_phone || null
         : isWhatsApp
@@ -327,14 +375,14 @@ export default function SmartHubButtons() {
       open_in_new_tab: isWhatsApp || isLink ? form.open_in_new_tab : undefined,
       email_subject: isEmail ? form.email_subject || null : null,
       use_hub_form: isFormAction,
-    };
+    });
 
     const payload = {
       title: form.title.trim(),
       subtitle: form.subtitle || null,
       type: form.type,
-      url: isFormAction ? form.capture_wa_phone || form.url || null : form.url || null,
-      whatsapp_message: isWhatsApp || isFormAction ? form.whatsapp_message || form.capture_wa_message || null : null,
+      url: isFormAction ? null : form.url || null,
+      whatsapp_message: isWhatsApp ? form.whatsapp_message || null : null,
       visual_variant: form.visual_variant,
       click_action: form.click_action,
       capture_config,
@@ -417,7 +465,7 @@ export default function SmartHubButtons() {
     image_alt: form.image_alt,
     background_color: form.background_color || '#0F766E',
     text_color: form.text_color || '#FFFFFF',
-    redirect_whatsapp: isFormAction && form.capture_redirect_wa,
+    redirect_whatsapp: isFormAction && hubResolvedCapture.redirect_whatsapp_after_submit,
     email_subject: form.email_subject,
     open_in_new_tab: form.open_in_new_tab,
   };
@@ -571,19 +619,10 @@ export default function SmartHubButtons() {
       >
         {isFormAction ? (
           <div className="space-y-4">
-            <div className="rounded-md border bg-muted/30 px-3 py-3 text-xs leading-relaxed">
-              <p className="font-medium text-foreground">Fluxo deste botão:</p>
-              <ol className="mt-2 list-decimal space-y-1 pl-4 text-muted-foreground">
-                {formFlowSteps(form.capture_redirect_wa).map((step) => (
-                  <li key={step}>{step}</li>
-                ))}
-              </ol>
-            </div>
-
             <div className="space-y-2">
               <FieldHelpLabel
                 htmlFor="capture-interest"
-                label="Serviço / interesse"
+                label="Serviço ou interesse"
                 help={BUTTON_FIELD_HELP.capture_interest}
               />
               <Input
@@ -592,107 +631,158 @@ export default function SmartHubButtons() {
                 onChange={(e) => setForm((f) => ({ ...f, capture_interest: e.target.value }))}
                 placeholder="Ex.: Clareamento, Ortodontia…"
               />
-              <FieldHint>{BUTTON_FIELD_HELP.capture_interest}</FieldHint>
             </div>
 
-            <div className="space-y-2">
-              <FieldHelpLabel
-                label="Etapa inicial no CRM"
-                help={BUTTON_FIELD_HELP.capture_stage}
+            <div className="flex items-center justify-between gap-2 rounded-md border px-3 py-2">
+              <div className="min-w-0">
+                <p className="text-sm font-medium">Usar configuração padrão do Hub</p>
+                <p className="text-xs text-muted-foreground">
+                  Etapa, responsável e WhatsApp vêm de Configurações → Formulário e CRM.
+                </p>
+              </div>
+              <Switch
+                checked={form.capture_use_hub_defaults}
+                onCheckedChange={(v) => setForm((f) => ({ ...f, capture_use_hub_defaults: v }))}
               />
-              <Select
-                value={form.capture_stage}
-                onValueChange={(v) => setForm((f) => ({ ...f, capture_stage: v }))}
-              >
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent position="popper">
-                  {CRM_STAGES.map((s) => (
-                    <SelectItem key={s.id} value={s.id}>
-                      {s.label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              <FieldHint>{BUTTON_FIELD_HELP.capture_stage}</FieldHint>
             </div>
 
-            <div className="space-y-2">
-              <FieldHelpLabel
-                label="Quem receberá este lead"
-                help={BUTTON_FIELD_HELP.capture_owner}
-              />
-              <Select
-                value={form.capture_owner || '__none__'}
-                onValueChange={(v) =>
+            <div className="rounded-md border bg-muted/30 px-3 py-3 text-xs leading-relaxed">
+              <p className="font-medium text-foreground">Este formulário enviará o contato para:</p>
+              <ul className="mt-2 space-y-1 text-muted-foreground">
+                <li>Etapa: {stageLabel}</li>
+                <li>Responsável: {ownerLabel}</li>
+                <li>
+                  Após o envio:{' '}
+                  {hubResolvedCapture.redirect_whatsapp_after_submit
+                    ? 'Abrir WhatsApp'
+                    : 'Sem redirecionamento'}
+                </li>
+              </ul>
+              <ol className="mt-3 list-decimal space-y-1 pl-4 text-muted-foreground">
+                {formFlowSteps(hubResolvedCapture.redirect_whatsapp_after_submit).map((step) => (
+                  <li key={step}>{step}</li>
+                ))}
+              </ol>
+            </div>
+
+            <div className="rounded-md border px-3 py-2">
+              <button
+                type="button"
+                className="flex w-full items-center justify-between text-left text-sm font-medium"
+                onClick={() =>
                   setForm((f) => ({
                     ...f,
-                    capture_owner: v === '__none__' ? '' : v,
+                    capture_use_hub_defaults: false,
                   }))
                 }
               >
-                <SelectTrigger>
-                  <SelectValue placeholder="Padrão do Hub" />
-                </SelectTrigger>
-                <SelectContent position="popper">
-                  <SelectItem value="__none__">Padrão do Hub</SelectItem>
-                  {staff.map((s) => (
-                    <SelectItem key={s.id} value={s.id}>
-                      {s.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              <FieldHint>{BUTTON_FIELD_HELP.capture_owner}</FieldHint>
-            </div>
-
-            <div className="space-y-2">
-              <div className="flex items-center justify-between gap-2">
-                <FieldHelpLabel
-                  label="Abrir WhatsApp depois do formulário"
-                  help={BUTTON_FIELD_HELP.capture_redirect_wa}
-                />
+                Personalizar somente este botão
                 <Switch
-                  checked={form.capture_redirect_wa}
-                  onCheckedChange={(v) => setForm((f) => ({ ...f, capture_redirect_wa: v }))}
+                  checked={!form.capture_use_hub_defaults}
+                  onCheckedChange={(v) =>
+                    setForm((f) => ({ ...f, capture_use_hub_defaults: !v }))
+                  }
                 />
-              </div>
-              <FieldHint>{BUTTON_FIELD_HELP.capture_redirect_wa}</FieldHint>
+              </button>
+              {!form.capture_use_hub_defaults ? (
+                <div className="mt-4 space-y-4 border-t pt-4">
+                  <div className="space-y-2">
+                    <FieldHelpLabel
+                      label="Etapa inicial no CRM"
+                      help={BUTTON_FIELD_HELP.capture_stage}
+                    />
+                    <Select
+                      value={form.capture_stage}
+                      onValueChange={(v) => setForm((f) => ({ ...f, capture_stage: v }))}
+                    >
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent position="popper">
+                        {CRM_STAGES.map((s) => (
+                          <SelectItem key={s.id} value={s.id}>
+                            {s.label}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-2">
+                    <FieldHelpLabel
+                      label="Quem receberá este lead"
+                      help={BUTTON_FIELD_HELP.capture_owner}
+                    />
+                    <Select
+                      value={form.capture_owner || '__none__'}
+                      onValueChange={(v) =>
+                        setForm((f) => ({
+                          ...f,
+                          capture_owner: v === '__none__' ? '' : v,
+                        }))
+                      }
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder="Sem responsável" />
+                      </SelectTrigger>
+                      <SelectContent position="popper">
+                        <SelectItem value="__none__">Sem responsável</SelectItem>
+                        {staff.map((s) => (
+                          <SelectItem key={s.id} value={s.id}>
+                            {s.name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="flex items-center justify-between gap-2">
+                    <FieldHelpLabel
+                      label="Abrir WhatsApp depois do formulário"
+                      help={BUTTON_FIELD_HELP.capture_redirect_wa}
+                    />
+                    <Switch
+                      checked={form.capture_redirect_wa}
+                      onCheckedChange={(v) =>
+                        setForm((f) => ({ ...f, capture_redirect_wa: v }))
+                      }
+                    />
+                  </div>
+                  {form.capture_redirect_wa ? (
+                    <>
+                      <div className="space-y-2">
+                        <FieldHelpLabel
+                          htmlFor="capture-wa-phone"
+                          label="Telefone do WhatsApp após envio"
+                          help={BUTTON_FIELD_HELP.capture_wa_phone}
+                        />
+                        <Input
+                          id="capture-wa-phone"
+                          value={form.capture_wa_phone}
+                          onChange={(e) =>
+                            setForm((f) => ({ ...f, capture_wa_phone: e.target.value }))
+                          }
+                          placeholder={hub?.whatsapp_number || '5511999999999'}
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <FieldHelpLabel
+                          htmlFor="capture-wa-msg"
+                          label="Mensagem após envio"
+                          help={BUTTON_FIELD_HELP.capture_wa_message}
+                        />
+                        <Input
+                          id="capture-wa-msg"
+                          value={form.capture_wa_message}
+                          onChange={(e) =>
+                            setForm((f) => ({ ...f, capture_wa_message: e.target.value }))
+                          }
+                          placeholder="Olá! Acabei de enviar o formulário pelo site."
+                        />
+                      </div>
+                    </>
+                  ) : null}
+                </div>
+              ) : null}
             </div>
-
-            {form.capture_redirect_wa ? (
-              <>
-                <div className="space-y-2">
-                  <FieldHelpLabel
-                    htmlFor="capture-wa-phone"
-                    label="Telefone do WhatsApp após envio"
-                    help={BUTTON_FIELD_HELP.capture_wa_phone}
-                  />
-                  <Input
-                    id="capture-wa-phone"
-                    value={form.capture_wa_phone}
-                    onChange={(e) => setForm((f) => ({ ...f, capture_wa_phone: e.target.value }))}
-                    placeholder={hub?.whatsapp_number || '5511999999999'}
-                  />
-                </div>
-                <div className="space-y-2">
-                  <FieldHelpLabel
-                    htmlFor="capture-wa-msg"
-                    label="Mensagem após envio"
-                    help={BUTTON_FIELD_HELP.capture_wa_message}
-                  />
-                  <Input
-                    id="capture-wa-msg"
-                    value={form.capture_wa_message}
-                    onChange={(e) =>
-                      setForm((f) => ({ ...f, capture_wa_message: e.target.value }))
-                    }
-                    placeholder="Olá! Acabei de enviar o formulário pelo site."
-                  />
-                </div>
-              </>
-            ) : null}
           </div>
         ) : null}
 
@@ -1060,7 +1150,9 @@ export default function SmartHubButtons() {
               <div>
                 <dt className="text-[11px] uppercase tracking-wide opacity-70">Redirecionamento</dt>
                 <dd>
-                  {form.capture_redirect_wa ? 'WhatsApp após envio' : 'Sem redirecionamento'}
+                  {hubResolvedCapture.redirect_whatsapp_after_submit
+                    ? 'WhatsApp após envio'
+                    : 'Sem redirecionamento'}
                 </dd>
               </div>
             </>

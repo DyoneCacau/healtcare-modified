@@ -11,8 +11,8 @@ import {
   SheetHeader,
   SheetTitle,
 } from '@/components/ui/sheet';
-import { CaptureService, mergeCaptureConfig } from '@/services/smartHub';
-import type { SmartHub, SmartHubButton, SmartHubCaptureConfig } from '@/types/smartHub';
+import { CaptureService, resolveCaptureConfig } from '@/services/smartHub';
+import type { SmartHub, SmartHubButton } from '@/types/smartHub';
 import { cn } from '@/lib/utils';
 
 interface HubCaptureFormProps {
@@ -52,9 +52,9 @@ export function HubCaptureForm({
   preview = false,
   className,
 }: HubCaptureFormProps) {
-  const config: SmartHubCaptureConfig = useMemo(
-    () => mergeCaptureConfig(hub.capture_config),
-    [hub.capture_config]
+  const config = useMemo(
+    () => resolveCaptureConfig(hub.capture_config, button?.capture_config),
+    [hub.capture_config, button?.capture_config]
   );
 
   const fields = useMemo(
@@ -68,9 +68,7 @@ export function HubCaptureForm({
   const [name, setName] = useState('');
   const [phone, setPhone] = useState('');
   const [email, setEmail] = useState('');
-  const [interest, setInterest] = useState(
-    button?.capture_config?.interest || ''
-  );
+  const [interest, setInterest] = useState(config.interest || '');
   const [message, setMessage] = useState('');
   const [preferredTime, setPreferredTime] = useState('');
   const [preferredDate, setPreferredDate] = useState('');
@@ -78,30 +76,37 @@ export function HubCaptureForm({
   const [honeypot, setHoneypot] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [fieldError, setFieldError] = useState<string | null>(null);
+  const [requestId, setRequestId] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
 
   const reset = () => {
     setName('');
     setPhone('');
     setEmail('');
-    setInterest(button?.capture_config?.interest || '');
+    setInterest(config.interest || '');
     setMessage('');
     setPreferredTime('');
     setPreferredDate('');
     setPrivacyAccepted(false);
     setHoneypot('');
     setFieldError(null);
+    setRequestId(null);
     setSuccess(null);
   };
 
   const handleClose = (next: boolean) => {
-    if (!next) reset();
+    if (!next) {
+      if (submitting) return;
+      reset();
+    }
     onOpenChange(next);
   };
 
   const onSubmit = async (e: FormEvent) => {
     e.preventDefault();
+    if (submitting) return;
     setFieldError(null);
+    setRequestId(null);
 
     if (!name.trim()) {
       setFieldError('Informe seu nome.');
@@ -111,7 +116,7 @@ export function HubCaptureForm({
       setFieldError('Informe um WhatsApp válido.');
       return;
     }
-    if (config.require_privacy_accept !== false && !privacyAccepted) {
+    if (config.require_privacy_accept && !privacyAccepted) {
       setFieldError('Autorize o uso dos dados para continuar.');
       return;
     }
@@ -151,22 +156,36 @@ export function HubCaptureForm({
 
       if (!result.ok) {
         setFieldError(result.error || 'Não foi possível enviar agora. Tente novamente.');
+        setRequestId(result.request_id || null);
         return;
       }
 
-      setSuccess(result.message || 'Recebemos seus dados. Nossa equipe entrará em contato.');
+      setSuccess(result.message || 'Recebemos seus dados.');
+      setFieldError(null);
+      setRequestId(null);
 
-      if (result.whatsapp_url) {
-        window.setTimeout(() => {
-          window.open(result.whatsapp_url!, '_blank', 'noopener,noreferrer');
-        }, 400);
-      } else if (result.redirect_url) {
-        window.setTimeout(() => {
-          window.location.href = result.redirect_url!;
-        }, 800);
-      }
+      const waUrl = result.whatsapp_url;
+      const redirect = result.redirect_url;
+
+      window.setTimeout(() => {
+        reset();
+        onOpenChange(false);
+        if (waUrl) {
+          try {
+            window.open(waUrl, '_blank', 'noopener,noreferrer');
+          } catch {
+            /* redirecionamento não invalida o lead já salvo */
+          }
+        } else if (redirect) {
+          try {
+            window.location.href = redirect;
+          } catch {
+            /* ignore */
+          }
+        }
+      }, 600);
     } catch {
-      setFieldError('Não foi possível enviar agora. Tente novamente.');
+      setFieldError('Não foi possível conectar. Verifique sua internet e tente novamente.');
     } finally {
       setSubmitting(false);
     }
@@ -181,7 +200,6 @@ export function HubCaptureForm({
         )}
       </div>
 
-      {/* Honeypot */}
       <div className="absolute left-[-9999px] top-auto h-0 w-0 overflow-hidden" aria-hidden>
         <label htmlFor="website">Website</label>
         <input
@@ -201,6 +219,7 @@ export function HubCaptureForm({
               <Checkbox
                 id="privacy"
                 checked={privacyAccepted}
+                disabled={submitting || Boolean(success)}
                 onCheckedChange={(v) => setPrivacyAccepted(Boolean(v))}
               />
               <Label htmlFor="privacy" className="text-sm font-normal leading-snug">
@@ -237,6 +256,7 @@ export function HubCaptureForm({
                 placeholder={field.placeholder}
                 rows={3}
                 required={field.required}
+                disabled={submitting || Boolean(success)}
               />
             </div>
           );
@@ -266,6 +286,7 @@ export function HubCaptureForm({
               onChange={(e) => ctrl.set(e.target.value)}
               placeholder={field.placeholder}
               required={field.required}
+              disabled={submitting || Boolean(success)}
               inputMode={field.key === 'whatsapp' ? 'tel' : undefined}
               autoComplete={
                 field.key === 'name'
@@ -281,18 +302,32 @@ export function HubCaptureForm({
         );
       })}
 
-      {fieldError && <p className="text-sm text-destructive">{fieldError}</p>}
+      {fieldError && (
+        <div className="space-y-1">
+          <p className="text-sm text-destructive">{fieldError}</p>
+          {requestId ? (
+            <p className="text-[11px] text-muted-foreground">
+              Código de atendimento: {requestId}
+            </p>
+          ) : null}
+        </div>
+      )}
       {success && <p className="text-sm text-emerald-700">{success}</p>}
 
       <div className="flex flex-wrap gap-2 pt-1">
-        <Button type="submit" disabled={submitting} className="min-h-[44px] flex-1">
+        <Button
+          type="submit"
+          disabled={submitting || Boolean(success)}
+          className="min-h-[44px] flex-1"
+        >
           {submitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-          {config.submit_label || 'Enviar'}
+          {submitting ? 'Enviando...' : config.submit_label || 'Enviar'}
         </Button>
         <Button
           type="button"
           variant="outline"
           className="min-h-[44px]"
+          disabled={submitting}
           onClick={() => handleClose(false)}
         >
           <X className="mr-1 h-4 w-4" />

@@ -89,6 +89,8 @@ export interface SmartHubCaptureConfig {
 
 export interface SmartHubButtonCaptureConfig {
   use_hub_form?: boolean;
+  /** Quando true, usa etapa/responsável/WhatsApp do Hub (não duplica no botão). */
+  use_hub_defaults?: boolean;
   initial_stage?: 'new' | 'contact' | 'scheduled' | 'won' | 'lost';
   owner_user_id?: string | null;
   interest?: string | null;

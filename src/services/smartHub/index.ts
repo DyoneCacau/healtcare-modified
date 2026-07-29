@@ -12,4 +12,5 @@ export * from './slugUtils';
 export * from './imageUtils';
 export * from './buttonDestinations';
 export * from './captureDefaults';
+export * from './resolveCaptureConfig';
 export { CaptureService } from './CaptureService';

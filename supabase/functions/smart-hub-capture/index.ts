@@ -2,10 +2,10 @@
  * Captação pública do Smart Hub → CRM.
  *
  * Deploy: `npx supabase functions deploy smart-hub-capture --no-verify-jwt`
- * (visitante anônimo em /hub/:slug não tem JWT).
  *
- * Reutiliza `ingestLead` (mesma camada da API universal de leads).
- * O clinic_id NUNCA vem do browser — é resolvido pelo slug do hub publicado.
+ * Causa histórica de falha ao visitante: após `ingestLead` ter sucesso,
+ * erros em atividade/analytics/notificação derrubavam a resposta (HTTP 500),
+ * e o frontend engolia o corpo do erro mostrando mensagem genérica.
  */
 import { serviceClient } from '../_shared/integrations.ts'
 import { corsHeaders, handleOptions } from '../_shared/cors.ts'
@@ -13,12 +13,15 @@ import { HttpError } from '../_shared/httpError.ts'
 import { assertRateLimit } from '../_shared/rateLimit.ts'
 import { assertClinicModules } from '../_shared/clinicAccess.ts'
 import { ingestLead } from '../_shared/leads.ts'
+import {
+  newRequestId,
+  normalizePhoneDigits,
+  resolveCaptureConfigEdge,
+} from '../_shared/smartHubCaptureResolve.ts'
 
 const MAX_BODY_BYTES = 50_000
 const RATE_LIMIT = 20
 const RATE_WINDOW_MS = 60_000
-
-const ALLOWED_STAGES = new Set(['new', 'contact', 'scheduled', 'won', 'lost'])
 
 function json(req: Request, body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), {
@@ -37,66 +40,114 @@ function sanitizeText(value: unknown, max = 1000): string | null {
   return text || null
 }
 
+function logCapture(
+  level: 'info' | 'warn' | 'error',
+  payload: Record<string, unknown>,
+): void {
+  const line = JSON.stringify({
+    scope: 'smart-hub-capture',
+    level,
+    ts: new Date().toISOString(),
+    ...payload,
+  })
+  if (level === 'error') console.error(line)
+  else if (level === 'warn') console.warn(line)
+  else console.log(line)
+}
+
 Deno.serve(async (req) => {
   const options = handleOptions(req)
   if (options) return options
 
+  const requestId = newRequestId()
+
   if (req.method !== 'POST') {
-    return json(req, { error: 'Método não permitido' }, 405)
+    return json(req, {
+      ok: false,
+      code: 'method_not_allowed',
+      message: 'Método não permitido',
+      request_id: requestId,
+    }, 405)
   }
+
+  let slugForLog = ''
+  let buttonIdForLog: string | null = null
+  let step = 'parse_body'
 
   try {
     const contentLength = Number(req.headers.get('content-length') || 0)
     if (Number.isFinite(contentLength) && contentLength > MAX_BODY_BYTES) {
-      throw new HttpError(413, 'Payload muito grande')
+      throw new HttpError(413, 'Payload muito grande', 'payload_too_large')
     }
 
     const raw = await req.text()
     if (new TextEncoder().encode(raw).byteLength > MAX_BODY_BYTES) {
-      throw new HttpError(413, 'Payload muito grande')
+      throw new HttpError(413, 'Payload muito grande', 'payload_too_large')
     }
 
     let body: Record<string, unknown>
     try {
       body = JSON.parse(raw || '{}') as Record<string, unknown>
     } catch {
-      throw new HttpError(400, 'JSON inválido')
+      throw new HttpError(400, 'JSON inválido', 'invalid_json')
     }
 
-    // Honeypot: bots preenchem "website"
+    const action = asString(body.action, 40) || 'submit'
+
+    // Honeypot
     if (asString(body.website) || asString(body.company_url)) {
       return json(req, {
         ok: true,
-        created: false,
-        duplicate: false,
-        message: 'Recebemos seus dados. Nossa equipe entrará em contato.',
+        result: 'created',
+        message: 'Recebemos seus dados.',
+        request_id: requestId,
       })
     }
 
     const slug = asString(body.slug, 120).toLowerCase()
-    if (!slug) throw new HttpError(400, 'Hub inválido')
+    slugForLog = slug
+    if (!slug) throw new HttpError(400, 'Hub inválido', 'hub_unavailable')
 
     const ip =
       req.headers.get('cf-connecting-ip') ||
       req.headers.get('x-forwarded-for')?.split(',')[0]?.trim() ||
       'unknown'
-    assertRateLimit(`sh-capture:${slug}:${ip}`, RATE_LIMIT, RATE_WINDOW_MS)
 
+    step = 'rate_limit'
+    try {
+      assertRateLimit(`sh-capture:${slug}:${ip}`, RATE_LIMIT, RATE_WINDOW_MS)
+    } catch (err) {
+      if (err instanceof HttpError) {
+        throw new HttpError(429, 'Muitas tentativas foram realizadas. Aguarde um momento.', 'rate_limited')
+      }
+      throw err
+    }
+
+    step = 'load_hub'
     const supabase = serviceClient()
 
     const { data: hub, error: hubError } = await supabase
       .from('smart_hubs')
-      .select('id, clinic_id, slug, title, status, capture_config, template_id, style_preset')
+      .select('id, clinic_id, slug, title, status, capture_config, template_id, style_preset, whatsapp_number')
       .eq('slug', slug)
       .is('deleted_at', null)
       .maybeSingle()
 
-    if (hubError) throw new HttpError(500, 'Falha ao carregar hub')
-    if (!hub) throw new HttpError(404, 'Página não encontrada')
-    if (hub.status !== 'published') {
-      throw new HttpError(403, 'Este hub não está disponível no momento')
+    if (hubError) {
+      logCapture('error', {
+        request_id: requestId,
+        step,
+        code: hubError.code,
+        slug,
+      })
+      throw new HttpError(500, 'Não foi possível enviar agora. Tente novamente.', 'server_error')
+    }
+    if (!hub) throw new HttpError(404, 'Este formulário não está disponível agora.', 'hub_unavailable')
+    if (hub.status !== 'published' && action !== 'validate' && action !== 'test') {
+      throw new HttpError(403, 'Este formulário não está disponível agora.', 'hub_unavailable')
     }
 
+    step = 'load_clinic'
     const { data: clinic } = await supabase
       .from('clinics')
       .select('id, name, is_active')
@@ -104,21 +155,30 @@ Deno.serve(async (req) => {
       .maybeSingle()
 
     if (!clinic || clinic.is_active === false) {
-      throw new HttpError(403, 'Clínica indisponível')
+      throw new HttpError(403, 'Este formulário não está disponível agora.', 'clinic_unavailable')
     }
 
-    await assertClinicModules(supabase, hub.clinic_id, ['smart_hub', 'crm'])
-
-    const capture =
-      hub.capture_config && typeof hub.capture_config === 'object' && !Array.isArray(hub.capture_config)
-        ? (hub.capture_config as Record<string, unknown>)
-        : {}
+    step = 'assert_modules'
+    try {
+      await assertClinicModules(supabase, hub.clinic_id, ['smart_hub', 'crm'])
+    } catch (err) {
+      if (err instanceof HttpError) {
+        throw new HttpError(
+          err.status,
+          'O atendimento por formulário está temporariamente indisponível.',
+          err.status === 403 ? 'module_unavailable' : 'capture_not_configured',
+        )
+      }
+      throw err
+    }
 
     const buttonId = asString(body.button_id, 80) || null
+    buttonIdForLog = buttonId
     let buttonCapture: Record<string, unknown> = {}
     let buttonTitle: string | null = null
 
     if (buttonId) {
+      step = 'load_button'
       const { data: button } = await supabase
         .from('smart_hub_buttons')
         .select('id, title, click_action, capture_config, hub_id, clinic_id')
@@ -140,34 +200,102 @@ Deno.serve(async (req) => {
       }
     }
 
-    const requirePrivacy = Boolean(capture.require_privacy_accept ?? true)
-    if (requirePrivacy && body.privacy_accepted !== true) {
-      throw new HttpError(400, 'É necessário autorizar o uso dos dados')
+    const resolved = resolveCaptureConfigEdge(hub.capture_config, buttonCapture)
+
+    // ---- validate (sem criar lead) ----
+    if (action === 'validate') {
+      step = 'validate'
+      const issues: string[] = []
+      if (hub.status !== 'published') issues.push('Publique o Smart Hub antes de receber contatos.')
+      if (!resolved.initial_stage) issues.push('Etapa inicial inválida.')
+      if (resolved.redirect_whatsapp_after_submit) {
+        const phone =
+          resolved.whatsapp_phone ||
+          normalizePhoneDigits(String(hub.whatsapp_number || ''))
+        if (!phone) {
+          issues.push('Informe o telefone do WhatsApp para redirecionamento após o envio.')
+        }
+      }
+
+      const ready = issues.length === 0 && hub.status === 'published'
+      logCapture('info', {
+        request_id: requestId,
+        step,
+        slug,
+        button_id: buttonId,
+        ready,
+        issue_count: issues.length,
+      })
+      return json(req, {
+        ok: ready,
+        ready,
+        issues,
+        message: ready
+          ? 'Formulário pronto para receber contatos.'
+          : 'Corrija os seguintes itens:',
+        summary: {
+          stage: resolved.initial_stage,
+          has_owner: Boolean(resolved.owner_user_id),
+          redirect_whatsapp: resolved.redirect_whatsapp_after_submit,
+          using_hub_defaults: resolved.using_hub_defaults,
+        },
+        request_id: requestId,
+      })
     }
 
-    const name = asString(body.name ?? body.nome, 120)
-    const phone = asString(body.phone ?? body.whatsapp ?? body.telefone, 40)
-    if (!name) throw new HttpError(400, 'Informe seu nome.')
+    const isTest = action === 'test'
+    if (isTest) {
+      step = 'auth_test'
+      const authHeader = req.headers.get('Authorization') || ''
+      const jwt = authHeader.replace(/^Bearer\s+/i, '').trim()
+      if (!jwt) {
+        throw new HttpError(401, 'Autenticação necessária para o teste.', 'unauthorized')
+      }
+      const { data: userData, error: userErr } = await supabase.auth.getUser(jwt)
+      if (userErr || !userData?.user) {
+        throw new HttpError(401, 'Autenticação necessária para o teste.', 'unauthorized')
+      }
+      const { data: membership } = await supabase
+        .from('clinic_users')
+        .select('user_id')
+        .eq('clinic_id', hub.clinic_id)
+        .eq('user_id', userData.user.id)
+        .maybeSingle()
+      if (!membership) {
+        throw new HttpError(403, 'Sem permissão para testar este hub.', 'forbidden')
+      }
+    }
+
+    step = 'validate_fields'
+    if (resolved.require_privacy_accept && body.privacy_accepted !== true && !isTest) {
+      throw new HttpError(400, 'Autorize o uso dos dados para continuar.', 'consent_required')
+    }
+
+    const name = isTest
+      ? asString(body.name, 120) || `TESTE Smart Hub ${new Date().toISOString().slice(0, 16)}`
+      : asString(body.name ?? body.nome, 120)
+    const phone = isTest
+      ? asString(body.phone, 40) || '5500000000000'
+      : asString(body.phone ?? body.whatsapp ?? body.telefone, 40)
+
+    if (!name) throw new HttpError(400, 'Informe seu nome.', 'invalid_name')
     if (!phone || phone.replace(/\D/g, '').length < 10) {
-      throw new HttpError(400, 'Informe um WhatsApp válido.')
+      throw new HttpError(400, 'Informe um WhatsApp válido.', 'invalid_phone')
     }
 
     const email = sanitizeText(body.email, 160)
-    const interest = sanitizeText(body.interest ?? body.servico ?? body.service, 200)
+    const interest =
+      sanitizeText(body.interest ?? body.servico ?? body.service, 200) ||
+      resolved.interest
     const message = sanitizeText(body.message ?? body.mensagem, 1500)
     const preferredTime = sanitizeText(body.preferred_time ?? body.melhor_horario, 120)
     const preferredDate = sanitizeText(body.preferred_date ?? body.data_preferida, 40)
 
-    const stageRaw = asString(
-      buttonCapture.initial_stage ?? capture.initial_stage ?? 'new',
-      20,
-    )
-    const stage = ALLOWED_STAGES.has(stageRaw) ? stageRaw : 'new'
-
-    const ownerUserId =
-      asString(buttonCapture.owner_user_id ?? capture.default_owner_user_id, 80) || null
+    const stage = resolved.initial_stage
+    const ownerUserId = resolved.owner_user_id
 
     const notesParts = [
+      isTest ? '⚠️ LEAD DE TESTE — Smart Hub (pode excluir)' : null,
       message ? `Mensagem: ${message}` : null,
       preferredTime ? `Melhor horário: ${preferredTime}` : null,
       preferredDate ? `Data preferida: ${preferredDate}` : null,
@@ -175,10 +303,12 @@ Deno.serve(async (req) => {
       `Origem: Smart Hub (${hub.slug})`,
     ].filter(Boolean)
 
+    const sourceDetail = isTest ? 'smart_hub_test' : 'smart_hub_form'
+
     const sourcePayload = {
       provider: 'smart_hub',
       source: 'smart_hub',
-      source_detail: 'smart_hub_form',
+      source_detail: sourceDetail,
       hub_id: hub.id,
       hub_slug: hub.slug,
       hub_title: hub.title,
@@ -196,17 +326,30 @@ Deno.serve(async (req) => {
       device_type: sanitizeText(body.device_type, 40),
       privacy_accepted: true,
       privacy_accepted_at: new Date().toISOString(),
-      privacy_version: asString(capture.privacy_version, 40) || 'v1',
+      privacy_version: resolved.privacy_version,
       preferred_time: preferredTime,
       preferred_date: preferredDate,
+      is_test: isTest,
     }
+
+    step = 'ingest_lead'
+    logCapture('info', {
+      request_id: requestId,
+      step,
+      slug,
+      button_id: buttonId,
+      stage,
+      has_owner: Boolean(ownerUserId),
+      using_hub_defaults: resolved.using_hub_defaults,
+      is_test: isTest,
+    })
 
     const result = await ingestLead(supabase, {
       clinicId: hub.clinic_id,
       integrationId: null,
       provider: 'smart_hub',
       defaultLeadSource: 'smart_hub',
-      dedupe: 'auto',
+      dedupe: isTest ? 'none' : 'auto',
       ownerUserId: ownerUserId || undefined,
       payload: {
         name,
@@ -220,102 +363,197 @@ Deno.serve(async (req) => {
       },
     })
 
-    const activityType = result.created ? 'smart_hub_form_submitted' : 'smart_hub_contact_updated'
-    const activityDesc = result.created
-      ? 'Lead criado pelo Smart Hub'
-      : 'Novo contato recebido pelo Smart Hub'
+    // Lead já persistido — falhas secundárias NÃO podem falhar a resposta ao visitante
+    step = 'secondary_activity'
+    try {
+      const activityType = result.created
+        ? 'smart_hub_form_submitted'
+        : 'smart_hub_contact_updated'
+      const activityDesc = result.created
+        ? isTest
+          ? 'Lead de teste criado pelo Smart Hub'
+          : 'Lead criado pelo Smart Hub'
+        : 'Novo contato recebido pelo Smart Hub'
 
-    await supabase.rpc('add_crm_lead_activity', {
-      p_lead_id: result.leadId,
-      p_activity_type: activityType,
-      p_description: activityDesc,
-      p_result: null,
-      p_origin: 'smart_hub',
-      p_metadata: {
+      const { error: actErr } = await supabase.rpc('add_crm_lead_activity', {
+        p_lead_id: result.leadId,
+        p_activity_type: activityType,
+        p_description: activityDesc,
+        p_result: null,
+        p_origin: 'smart_hub',
+        p_metadata: {
+          hub_id: hub.id,
+          button_id: buttonId,
+          duplicate: result.duplicate,
+          matched_by: result.matchedBy,
+          is_test: isTest,
+          request_id: requestId,
+        },
+      })
+      if (actErr) {
+        logCapture('warn', {
+          request_id: requestId,
+          step: 'secondary_activity',
+          code: actErr.code,
+          slug,
+          button_id: buttonId,
+        })
+      }
+    } catch (secErr) {
+      logCapture('warn', {
+        request_id: requestId,
+        step: 'secondary_activity',
+        slug,
+        button_id: buttonId,
+        error: secErr instanceof Error ? secErr.message : 'unknown',
+      })
+    }
+
+    step = 'secondary_analytics'
+    try {
+      const { error: evErr } = await supabase.from('smart_hub_events').insert({
+        clinic_id: hub.clinic_id,
         hub_id: hub.id,
+        event_type: result.created
+          ? isTest
+            ? 'form_test'
+            : 'form_submitted'
+          : 'form_duplicate',
+        event_name: buttonTitle || 'Captura Smart Hub',
+        payload: {
+          button_id: buttonId,
+          lead_created: result.created,
+          duplicate: result.duplicate,
+          is_test: isTest,
+          request_id: requestId,
+        },
+        status: 'active',
+      })
+      if (evErr) {
+        logCapture('warn', {
+          request_id: requestId,
+          step: 'secondary_analytics',
+          code: evErr.code,
+          slug,
+          button_id: buttonId,
+        })
+      }
+    } catch (secErr) {
+      logCapture('warn', {
+        request_id: requestId,
+        step: 'secondary_analytics',
+        slug,
         button_id: buttonId,
-        duplicate: result.duplicate,
-        matched_by: result.matchedBy,
-      },
-    })
+        error: secErr instanceof Error ? secErr.message : 'unknown',
+      })
+    }
 
-    // Evento de analytics do hub
-    await supabase.from('smart_hub_events').insert({
-      clinic_id: hub.clinic_id,
-      hub_id: hub.id,
-      event_type: result.created ? 'form_submitted' : 'form_duplicate',
-      event_name: buttonTitle || 'Captura Smart Hub',
-      payload: {
+    step = 'secondary_notify'
+    try {
+      await supabase.rpc('notify_clinic_crm_users', {
+        p_clinic_id: hub.clinic_id,
+        p_title: result.created
+          ? isTest
+            ? 'Lead de teste — Smart Hub'
+            : 'Novo lead pelo Smart Hub'
+          : 'Contato atualizado pelo Smart Hub',
+        p_message: [name, interest ? `Interesse: ${interest}` : null, 'Origem: Smart Hub']
+          .filter(Boolean)
+          .join(' · '),
+        p_reference_id: result.leadId,
+        p_owner_user_id: ownerUserId,
+      })
+    } catch (secErr) {
+      logCapture('warn', {
+        request_id: requestId,
+        step: 'secondary_notify',
+        slug,
         button_id: buttonId,
-        lead_created: result.created,
-        duplicate: result.duplicate,
-      },
-      status: 'active',
-    })
-
-    const notifyTitle = result.created
-      ? 'Novo lead pelo Smart Hub'
-      : 'Contato atualizado pelo Smart Hub'
-    const notifyMessage = [
-      name,
-      phone ? `Tel: ${phone}` : null,
-      interest ? `Interesse: ${interest}` : null,
-      `Origem: Smart Hub`,
-    ]
-      .filter(Boolean)
-      .join(' · ')
-
-    await supabase.rpc('notify_clinic_crm_users', {
-      p_clinic_id: hub.clinic_id,
-      p_title: notifyTitle,
-      p_message: notifyMessage,
-      p_reference_id: result.leadId,
-      p_owner_user_id: ownerUserId,
-    })
-
-    const redirectWhatsapp = Boolean(
-      buttonCapture.redirect_whatsapp_after_submit ??
-        capture.redirect_whatsapp_after_submit ??
-        false,
-    )
+        error: secErr instanceof Error ? secErr.message : 'unknown',
+      })
+    }
 
     let whatsappUrl: string | null = null
-    if (redirectWhatsapp) {
-      const waNumber = asString(
-        buttonCapture.whatsapp_phone ?? capture.whatsapp_phone ?? '',
-        40,
-      )
-      const digits = waNumber.replace(/\D/g, '')
+    if (resolved.redirect_whatsapp_after_submit && !isTest) {
+      const digits =
+        resolved.whatsapp_phone ||
+        normalizePhoneDigits(String(hub.whatsapp_number || '')) ||
+        ''
       if (digits) {
         const tpl =
-          asString(capture.whatsapp_followup_message, 500) ||
+          resolved.whatsapp_message ||
           `Olá! Acabei de enviar meus dados pelo site. Meu nome é ${name}.`
         whatsappUrl = `https://wa.me/${digits}?text=${encodeURIComponent(tpl)}`
       }
     }
 
-    const successMessage =
-      asString(capture.success_message, 300) ||
-      (result.duplicate
-        ? 'Já recebemos seu contato e atualizamos seu atendimento.'
-        : 'Recebemos seus dados. Nossa equipe entrará em contato.')
+    const successMessage = isTest
+      ? `Lead de teste criado na etapa “${stage}”. Localize e exclua no CRM se desejar.`
+      : resolved.success_message ||
+        (result.duplicate
+          ? 'Já tínhamos seu contato e atualizamos o atendimento.'
+          : 'Recebemos seus dados.')
+
+    logCapture('info', {
+      request_id: requestId,
+      step: 'done',
+      slug,
+      button_id: buttonId,
+      result: result.created ? 'created' : 'updated',
+      duplicate: result.duplicate,
+    })
 
     return json(req, {
       ok: true,
+      result: result.created ? 'created' : 'updated',
       created: result.created,
       duplicate: result.duplicate,
       message: successMessage,
-      redirect_url: sanitizeText(
-        buttonCapture.redirect_url ?? capture.redirect_url,
-        500,
-      ),
+      redirect_url: isTest ? null : resolved.redirect_url,
       whatsapp_url: whatsappUrl,
+      stage: isTest ? stage : undefined,
+      request_id: requestId,
     })
   } catch (err) {
     if (err instanceof HttpError) {
-      return json(req, { ok: false, error: err.message }, err.status)
+      logCapture('warn', {
+        request_id: requestId,
+        step,
+        slug: slugForLog,
+        button_id: buttonIdForLog,
+        status: err.status,
+        code: err.code || 'http_error',
+      })
+      return json(
+        req,
+        {
+          ok: false,
+          code: err.code || (err.status === 429 ? 'rate_limited' : 'server_error'),
+          message: err.message,
+          error: err.message,
+          request_id: requestId,
+        },
+        err.status,
+      )
     }
-    console.error('[smart-hub-capture]', err)
-    return json(req, { ok: false, error: 'Não foi possível enviar agora. Tente novamente.' }, 500)
+    logCapture('error', {
+      request_id: requestId,
+      step,
+      slug: slugForLog,
+      button_id: buttonIdForLog,
+      code: 'unhandled',
+      error: err instanceof Error ? err.message : 'unknown',
+    })
+    return json(
+      req,
+      {
+        ok: false,
+        code: 'server_error',
+        message: 'Não foi possível enviar agora. Tente novamente.',
+        error: 'Não foi possível enviar agora. Tente novamente.',
+        request_id: requestId,
+      },
+      500,
+    )
   }
 })

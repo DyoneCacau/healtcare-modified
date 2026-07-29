@@ -41,14 +41,15 @@ import {
   generateSlugFromTitle,
   defaultCaptureConfig,
   mergeCaptureConfig,
+  CaptureService,
+  assertValidOwnerInput,
+  normalizeOwnerUserId,
 } from '@/services/smartHub';
 import {
   SMART_HUB_STYLE_PRESET_LABELS,
-  SMART_HUB_CAPTURE_MODE_LABELS,
   type PublicSmartHubPayload,
   type SmartHubAssetKind,
   type SmartHubCaptureConfig,
-  type SmartHubCaptureMode,
   type SmartHubStylePreset,
   type SmartHubVisualConfig,
 } from '@/types/smartHub';
@@ -316,6 +317,16 @@ export default function SmartHubSettings() {
   };
 
   const saveSettings = async () => {
+    const ownerCheck = assertValidOwnerInput(captureConfig.default_owner_user_id);
+    if (ownerCheck.ok === false) {
+      toast.error(ownerCheck.message);
+      return;
+    }
+    const sanitizedCapture: SmartHubCaptureConfig = {
+      ...captureConfig,
+      default_owner_user_id: normalizeOwnerUserId(ownerCheck.owner),
+      initial_stage: captureConfig.initial_stage || 'new',
+    };
     // Nome público e slug são enviados em campos separados — nunca sobrescrever um pelo outro.
     await updateHub.mutateAsync({
       title: title.trim(),
@@ -336,7 +347,7 @@ export default function SmartHubSettings() {
       contact_email: contactEmail || null,
       contact_address: contactAddress || null,
       map_embed_url: mapEmbedUrl || null,
-      capture_config: captureConfig,
+      capture_config: sanitizedCapture,
     });
     await refreshHubQueries();
   };
@@ -694,82 +705,21 @@ export default function SmartHubSettings() {
 
       <div className="space-y-6 rounded-lg border bg-card p-4 sm:p-6">
         <div>
-          <h3 className="text-sm font-semibold">Captação</h3>
+          <h3 className="text-sm font-semibold">Formulário e CRM</h3>
           <p className="text-xs text-muted-foreground">
-            Como a clínica recebe contatos do Smart Hub (formulário + CRM ou WhatsApp direto).
+            Configure como os contatos recebidos pelos formulários serão organizados no CRM.
           </p>
         </div>
 
-        {!hasCrm && (
+        {!hasCrm ? (
           <div className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">
-            O modo Formulário + CRM exige o módulo CRM no plano. O WhatsApp direto continua disponível.
+            O módulo CRM no plano é necessário para receber leads pelos formulários do Smart Hub.
+            Botões com ação “Abrir WhatsApp” continuam funcionando normalmente.
           </div>
-        )}
-
-        <div className="space-y-2">
-          <Label>Modo padrão de conversão</Label>
-          <Select
-            value={captureConfig.mode || 'whatsapp_direct'}
-            onValueChange={(v) => {
-              if (v === 'form_crm' && !hasCrm) {
-                toast.error('Inclua o CRM no plano para usar o formulário integrado.');
-                return;
-              }
-              setCaptureConfig((prev) => ({ ...prev, mode: v as SmartHubCaptureMode }));
-            }}
-          >
-            <SelectTrigger>
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              {(Object.keys(SMART_HUB_CAPTURE_MODE_LABELS) as SmartHubCaptureMode[]).map(
-                (key) => (
-                  <SelectItem key={key} value={key} disabled={key === 'form_crm' && !hasCrm}>
-                    {SMART_HUB_CAPTURE_MODE_LABELS[key]}
-                  </SelectItem>
-                )
-              )}
-            </SelectContent>
-          </Select>
-        </div>
-
-        {captureConfig.mode === 'whatsapp_direct' && (
-          <div className="space-y-3 rounded-md border border-dashed p-3 text-sm">
-            <p className="text-muted-foreground">
-              Os contatos pelo WhatsApp deverão ser cadastrados manualmente no CRM. O clique é
-              registrado no Analytics, sem criar lead automaticamente.
-            </p>
-            <div className="space-y-2">
-              <Label>Mensagem inicial do WhatsApp</Label>
-              <Textarea
-                value={captureConfig.whatsapp_message || ''}
-                onChange={(e) =>
-                  setCaptureConfig((prev) => ({ ...prev, whatsapp_message: e.target.value }))
-                }
-                rows={2}
-              />
-            </div>
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              onClick={async () => {
-                const text =
-                  captureConfig.manual_copy_message ||
-                  'Lead WhatsApp — cadastro manual no CRM (origem Smart Hub).';
-                await navigator.clipboard.writeText(text);
-                toast.success('Mensagem copiada para cadastro manual.');
-              }}
-            >
-              Copiar mensagem padrão para cadastro manual
-            </Button>
-          </div>
-        )}
-
-        {captureConfig.mode === 'form_crm' && hasCrm && (
+        ) : (
           <div className="grid gap-4 sm:grid-cols-2">
             <div className="space-y-2">
-              <Label>Coluna inicial do Kanban</Label>
+              <Label>Etapa inicial padrão</Label>
               <Select
                 value={captureConfig.initial_stage || 'new'}
                 onValueChange={(v) =>
@@ -791,7 +741,7 @@ export default function SmartHubSettings() {
                 </SelectContent>
               </Select>
               <p className="text-xs text-muted-foreground">
-                O CRM atual usa um funil único com etapas fixas (não há pipelines separados).
+                Etapa do Kanban em que o lead entra após o formulário.
               </p>
             </div>
             <div className="space-y-2">
@@ -838,7 +788,7 @@ export default function SmartHubSettings() {
               />
             </div>
             <div className="space-y-2">
-              <Label>Texto do botão de envio</Label>
+              <Label>Texto do botão Enviar</Label>
               <Input
                 value={captureConfig.submit_label || ''}
                 onChange={(e) =>
@@ -847,7 +797,7 @@ export default function SmartHubSettings() {
               />
             </div>
             <div className="space-y-2">
-              <Label>URL após envio (opcional)</Label>
+              <Label>URL opcional após envio</Label>
               <Input
                 value={captureConfig.redirect_url || ''}
                 onChange={(e) =>
@@ -858,21 +808,7 @@ export default function SmartHubSettings() {
             </div>
             <div className="flex items-center justify-between gap-3 rounded-lg border px-3 py-2 sm:col-span-2">
               <div>
-                <Label>Redirecionar para WhatsApp após criar o lead</Label>
-                <p className="text-xs text-muted-foreground">
-                  Só abre o WhatsApp depois de confirmar o salvamento.
-                </p>
-              </div>
-              <Switch
-                checked={Boolean(captureConfig.redirect_whatsapp_after_submit)}
-                onCheckedChange={(v) =>
-                  setCaptureConfig((prev) => ({ ...prev, redirect_whatsapp_after_submit: v }))
-                }
-              />
-            </div>
-            <div className="flex items-center justify-between gap-3 rounded-lg border px-3 py-2 sm:col-span-2">
-              <div>
-                <Label>Exigir aceite da política de privacidade</Label>
+                <Label>Exigir aceite de privacidade</Label>
               </div>
               <Switch
                 checked={captureConfig.require_privacy_accept !== false}
@@ -882,13 +818,119 @@ export default function SmartHubSettings() {
               />
             </div>
             <div className="space-y-2 sm:col-span-2">
-              <Label>Texto de confirmação</Label>
+              <Label>Texto do consentimento</Label>
+              <Textarea
+                value={captureConfig.privacy_text || ''}
+                onChange={(e) =>
+                  setCaptureConfig((prev) => ({ ...prev, privacy_text: e.target.value }))
+                }
+                rows={2}
+              />
+            </div>
+            <div className="space-y-2 sm:col-span-2">
+              <Label>Mensagem de confirmação</Label>
               <Input
                 value={captureConfig.success_message || ''}
                 onChange={(e) =>
                   setCaptureConfig((prev) => ({ ...prev, success_message: e.target.value }))
                 }
               />
+            </div>
+            <div className="flex items-center justify-between gap-3 rounded-lg border px-3 py-2 sm:col-span-2">
+              <div>
+                <Label>Abrir WhatsApp após envio</Label>
+                <p className="text-xs text-muted-foreground">
+                  Só abre o WhatsApp depois de confirmar o salvamento no CRM.
+                </p>
+              </div>
+              <Switch
+                checked={Boolean(captureConfig.redirect_whatsapp_after_submit)}
+                onCheckedChange={(v) =>
+                  setCaptureConfig((prev) => ({ ...prev, redirect_whatsapp_after_submit: v }))
+                }
+              />
+            </div>
+            {captureConfig.redirect_whatsapp_after_submit ? (
+              <>
+                <div className="space-y-2">
+                  <Label>Telefone do WhatsApp</Label>
+                  <Input
+                    value={captureConfig.whatsapp_phone || whatsappNumber || ''}
+                    onChange={(e) =>
+                      setCaptureConfig((prev) => ({
+                        ...prev,
+                        whatsapp_phone: e.target.value || null,
+                      }))
+                    }
+                    placeholder={whatsappNumber || '5511999999999'}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label>Mensagem do WhatsApp</Label>
+                  <Input
+                    value={
+                      captureConfig.whatsapp_followup_message ||
+                      captureConfig.whatsapp_message ||
+                      ''
+                    }
+                    onChange={(e) =>
+                      setCaptureConfig((prev) => ({
+                        ...prev,
+                        whatsapp_followup_message: e.target.value || null,
+                      }))
+                    }
+                    placeholder="Olá! Acabei de enviar o formulário…"
+                  />
+                </div>
+              </>
+            ) : null}
+
+            <div className="flex flex-wrap gap-2 sm:col-span-2">
+              <Button
+                type="button"
+                variant="outline"
+                disabled={!hub?.slug || !hasCrm}
+                onClick={async () => {
+                  if (!hub?.slug) return;
+                  const result = await CaptureService.validateCapture(hub.slug);
+                  if (result.ready || result.ok) {
+                    toast.success(result.message || 'Formulário pronto para receber contatos.');
+                  } else {
+                    const issues = result.issues?.length
+                      ? result.issues.join(' ')
+                      : result.error || 'Corrija a configuração.';
+                    toast.error(result.message || 'Corrija os seguintes itens:', {
+                      description: issues,
+                    });
+                  }
+                }}
+              >
+                Verificar configuração
+              </Button>
+              <Button
+                type="button"
+                variant="secondary"
+                disabled={!hub?.slug || !hasCrm || hub.status !== 'published'}
+                onClick={async () => {
+                  if (!hub?.slug) return;
+                  const result = await CaptureService.submitTestLead(hub.slug);
+                  if (!result.ok) {
+                    toast.error(result.error || 'Falha no teste', {
+                      description: result.request_id
+                        ? `Código: ${result.request_id}`
+                        : undefined,
+                    });
+                    return;
+                  }
+                  toast.success(result.message || 'Lead de teste criado.', {
+                    description: result.stage
+                      ? `Etapa: ${result.stage}. Procure no CRM por “TESTE Smart Hub”.`
+                      : 'Procure no CRM por “TESTE Smart Hub”.',
+                  });
+                }}
+              >
+                Enviar lead de teste
+              </Button>
             </div>
           </div>
         )}
