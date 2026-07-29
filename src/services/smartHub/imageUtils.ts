@@ -115,6 +115,30 @@ export function isNearInvisible(bg: string, fg: string): boolean {
   }
 }
 
+/** Escolhe texto branco ou escuro conforme o fundo (para legibilidade). */
+export function pickContrastingTextColor(bg: string, fallbackBg = '#0F766E'): string {
+  const normalized = normalizeHexColor(bg, fallbackBg);
+  return relativeLuminance(normalized) > 0.45 ? '#0F172A' : '#FFFFFF';
+}
+
+/**
+ * Cor de texto para exibição pública.
+ * Se o contraste salvo for fraco, usa branco/escuro só na renderização —
+ * não altera valores persistidos.
+ */
+export function resolveDisplayTextColor(
+  bg: string | null | undefined,
+  fg: string | null | undefined,
+  defaults?: { bg?: string; fg?: string }
+): string {
+  const bgHex = normalizeHexColor(bg || defaults?.bg || '#0F766E');
+  const fgHex = normalizeHexColor(fg || defaults?.fg || '#FFFFFF', '#FFFFFF');
+  if (isPoorContrast(bgHex, fgHex)) {
+    return pickContrastingTextColor(bgHex);
+  }
+  return fgHex;
+}
+
 export function normalizeHexColor(value: string, fallback = '#0F766E'): string {
   const v = value.trim();
   if (/^#[0-9a-fA-F]{6}$/.test(v)) return v.toUpperCase();

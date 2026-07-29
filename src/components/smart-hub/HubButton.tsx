@@ -16,6 +16,7 @@ import {
 import { cn } from '@/lib/utils';
 import type { SmartHubButton } from '@/types/smartHub';
 import { buildDestinationUrl } from '@/services/smartHub/buttonDestinations';
+import { resolveDisplayTextColor } from '@/services/smartHub/imageUtils';
 
 interface HubButtonProps {
   button: SmartHubButton;
@@ -24,6 +25,8 @@ interface HubButtonProps {
   defaultBg?: string;
   defaultFg?: string;
   radiusClass?: string;
+  /** Quando true (padrão), corrige contraste só na tela se a combinação salva for ilegível. */
+  autoFixContrast?: boolean;
 }
 
 function TypeIcon({ type, className }: { type: string; className?: string }) {
@@ -61,14 +64,31 @@ export const HubButton = memo(function HubButton({
   defaultBg,
   defaultFg,
   radiusClass = 'rounded-xl',
+  autoFixContrast = true,
 }: HubButtonProps) {
   const bg = button.background_color || defaultBg || undefined;
-  const color = button.text_color || defaultFg || undefined;
+  const rawFg = button.text_color || defaultFg || undefined;
+  const color =
+    autoFixContrast && bg
+      ? resolveDisplayTextColor(bg, rawFg, {
+          bg: defaultBg || '#0F766E',
+          fg: defaultFg || '#FFFFFF',
+        })
+      : rawFg;
   const href =
-    buildDestinationUrl(button.type, button.url, button.whatsapp_message) || '#';
+    buildDestinationUrl(
+      button.type,
+      button.url,
+      button.whatsapp_message,
+      button.capture_config?.email_subject
+    ) || '#';
   const variant = button.visual_variant || 'simple';
   const imageAlt = button.image_alt || button.title;
-  const openInNewTab = button.type !== 'internal' && button.type !== 'phone' && button.type !== 'email';
+  const openInNewTabPref = button.capture_config?.open_in_new_tab;
+  const openInNewTab =
+    openInNewTabPref !== undefined
+      ? openInNewTabPref
+      : button.type !== 'internal' && button.type !== 'phone' && button.type !== 'email';
 
   const handleClick = (e: MouseEvent) => {
     if (onClick) {

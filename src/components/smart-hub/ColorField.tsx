@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Label } from '@/components/ui/label';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
@@ -16,6 +16,7 @@ interface ColorFieldProps {
   label: string;
   value: string;
   fallback?: string;
+  /** Quando informado, exibe aviso de contraste (sem alterar cores automaticamente). */
   contrastAgainst?: string;
   help?: string;
   onChange: (value: string) => void;
@@ -34,6 +35,11 @@ export function ColorField({
 }: ColorFieldProps) {
   const [hexDraft, setHexDraft] = useState(value);
   const normalized = normalizeHexColor(value, fallback);
+
+  useEffect(() => {
+    setHexDraft(value);
+  }, [value]);
+
   const poor =
     contrastAgainst &&
     isPoorContrast(normalized, normalizeHexColor(contrastAgainst, '#FFFFFF'));
@@ -98,8 +104,8 @@ export function ColorField({
           Esta combinação deixa o texto praticamente invisível.
         </p>
       ) : poor ? (
-        <p className="text-xs text-amber-700">
-          Esta combinação pode dificultar a leitura.
+        <p className="text-xs text-amber-700 dark:text-amber-300">
+          Essa combinação de cores pode dificultar a leitura.
         </p>
       ) : null}
     </div>

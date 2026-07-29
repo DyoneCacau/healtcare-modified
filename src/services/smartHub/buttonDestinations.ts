@@ -3,7 +3,8 @@ import type { SmartHubButtonType } from '@/types/smartHub';
 export function buildDestinationUrl(
   type: SmartHubButtonType | string,
   rawUrl: string | null | undefined,
-  whatsappMessage?: string | null
+  whatsappMessage?: string | null,
+  emailSubject?: string | null
 ): string | null {
   if (!rawUrl?.trim()) return null;
   const value = rawUrl.trim();
@@ -27,8 +28,14 @@ export function buildDestinationUrl(
       const digits = value.replace(/[^\d+]/g, '');
       return digits.startsWith('tel:') ? digits : `tel:${digits}`;
     }
-    case 'email':
-      return value.startsWith('mailto:') ? value : `mailto:${value}`;
+    case 'email': {
+      const address = value.replace(/^mailto:/i, '');
+      const base = `mailto:${address}`;
+      if (emailSubject?.trim()) {
+        return `${base}?subject=${encodeURIComponent(emailSubject.trim())}`;
+      }
+      return base;
+    }
     case 'instagram':
       if (/instagram\.com/i.test(value)) return ensureHttp(value);
       return `https://instagram.com/${value.replace(/^@/, '')}`;

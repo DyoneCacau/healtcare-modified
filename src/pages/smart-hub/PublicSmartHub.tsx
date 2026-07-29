@@ -146,7 +146,7 @@ function PublicSmartHubContent({ slug }: { slug?: string }) {
     const capture = mergeCaptureConfig(hub?.capture_config);
     const destination =
       buildDestinationUrl(
-        action === 'whatsapp' ? 'whatsapp' : button.type,
+        action === 'whatsapp' ? 'whatsapp' : action === 'email' ? 'email' : button.type,
         button.url ||
           (action === 'whatsapp'
             ? button.capture_config?.whatsapp_phone ||
@@ -155,7 +155,8 @@ function PublicSmartHubContent({ slug }: { slug?: string }) {
             : null),
         button.whatsapp_message ||
           button.capture_config?.whatsapp_message ||
-          capture.whatsapp_message
+          capture.whatsapp_message,
+        button.capture_config?.email_subject
       ) || button.url;
 
     if (hub?.id && button.track_click !== false) {
@@ -178,8 +179,11 @@ function PublicSmartHubContent({ slug }: { slug?: string }) {
     }
 
     if (destination) {
-      const self = action === 'phone' || action === 'email' || button.type === 'internal';
-      window.open(destination, self ? '_self' : '_blank', 'noopener,noreferrer');
+      const openInNew =
+        button.capture_config?.open_in_new_tab !== undefined
+          ? Boolean(button.capture_config.open_in_new_tab)
+          : !(action === 'phone' || action === 'email' || button.type === 'internal');
+      window.open(destination, openInNew ? '_blank' : '_self', 'noopener,noreferrer');
     }
   };
 
