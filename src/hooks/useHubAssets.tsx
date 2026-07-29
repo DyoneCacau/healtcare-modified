@@ -3,11 +3,25 @@ import { toast } from 'sonner';
 import { useAuth } from '@/hooks/useAuth';
 import { useClinic } from '@/hooks/useClinic';
 import { AssetService } from '@/services/smartHub';
+import type { SmartHubAssetKind } from '@/types/smartHub';
+
+export type HubAssetUploadInput = {
+  file: File;
+  kind?: SmartHubAssetKind;
+  previousStoragePath?: string | null;
+  buttonId?: string | null;
+};
 
 export function useHubAssets(hubId?: string | null) {
   const { clinicId } = useClinic();
   const { user } = useAuth();
   const queryClient = useQueryClient();
+
+  const invalidateRelated = () => {
+    queryClient.invalidateQueries({ queryKey: ['smart-hub-assets', clinicId, hubId] });
+    queryClient.invalidateQueries({ queryKey: ['smart-hub', clinicId] });
+    queryClient.invalidateQueries({ queryKey: ['smart-hub-preview', hubId] });
+  };
 
   const query = useQuery({
     queryKey: ['smart-hub-assets', clinicId, hubId],
@@ -19,15 +33,27 @@ export function useHubAssets(hubId?: string | null) {
   });
 
   const uploadAsset = useMutation({
-    mutationFn: async (file: File) => {
+    mutationFn: async (input: File | HubAssetUploadInput) => {
       if (!clinicId || !hubId) throw new Error('Hub não encontrado.');
-      return AssetService.upload(clinicId, hubId, file, user?.id);
+      const file = input instanceof File ? input : input.file;
+      const kind = input instanceof File ? undefined : input.kind;
+      const previousStoragePath =
+        input instanceof File ? undefined : input.previousStoragePath;
+      const buttonId = input instanceof File ? undefined : input.buttonId;
+
+      return AssetService.upload(clinicId, hubId, file, {
+        userId: user?.id,
+        kind,
+        previousStoragePath,
+        buttonId,
+      });
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['smart-hub-assets', clinicId, hubId] });
-      toast.success('Arquivo enviado.');
+      invalidateRelated();
+      toast.success('Imagem enviada com sucesso.');
     },
-    onError: (err: Error) => toast.error(err.message || 'Erro no upload.'),
+    onError: (err: Error) =>
+      toast.error(err.message || 'Não foi possível enviar a imagem.'),
   });
 
   const deleteAsset = useMutation({
@@ -36,7 +62,7 @@ export function useHubAssets(hubId?: string | null) {
       return AssetService.softDelete(id, clinicId, user?.id);
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['smart-hub-assets', clinicId, hubId] });
+      invalidateRelated();
       toast.success('Arquivo removido.');
     },
     onError: (err: Error) => toast.error(err.message || 'Erro ao remover arquivo.'),

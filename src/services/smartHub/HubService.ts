@@ -123,6 +123,8 @@ export const HubService = {
       status: 'draft',
       layout_blocks: ['header', 'logo', 'description', 'buttons', 'footer'],
       validation_errors: [],
+      style_preset: 'clean',
+      visual_config: {},
       created_by: input.userId ?? null,
       updated_by: input.userId ?? null,
     } as SmartHubInsert);

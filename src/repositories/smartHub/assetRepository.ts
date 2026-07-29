@@ -1,9 +1,19 @@
 import { supabase } from '@/integrations/supabase/client';
-import type { SmartHubAsset, ListQueryParams, PaginatedResult } from '@/types/smartHub';
+import type {
+  SmartHubAsset,
+  SmartHubAssetKind,
+  ListQueryParams,
+  PaginatedResult,
+} from '@/types/smartHub';
 import { paginateRange } from './base';
+import {
+  compressImageToWebp,
+  normalizeAssetFileName,
+  validateSmartHubImage,
+} from '@/services/smartHub/imageUtils';
 
 const TABLE = 'smart_hub_assets';
-const BUCKET = 'clinic-documents';
+const BUCKET = 'smart-hub-assets';
 
 export const assetRepository = {
   async listByHub(
@@ -60,6 +70,13 @@ export const assetRepository = {
   },
 
   async softDelete(id: string, clinicId: string, userId?: string | null): Promise<void> {
+    const { data: row } = await supabase
+      .from(TABLE)
+      .select('storage_path')
+      .eq('id', id)
+      .eq('clinic_id', clinicId)
+      .maybeSingle();
+
     const { error } = await supabase
       .from(TABLE)
       .update({
@@ -71,36 +88,76 @@ export const assetRepository = {
       .eq('clinic_id', clinicId);
 
     if (error) throw error;
+
+    const path = (row as { storage_path?: string } | null)?.storage_path;
+    if (path) {
+      await supabase.storage.from(BUCKET).remove([path]).catch(() => undefined);
+    }
   },
 
-  /** Upload no bucket existente clinic-documents */
+  async removeStoragePath(storagePath: string | null | undefined): Promise<void> {
+    if (!storagePath) return;
+    // Só remove se estiver no bucket do Smart Hub e path tiver clinic_id
+    if (!storagePath.includes('/')) return;
+    await supabase.storage.from(BUCKET).remove([storagePath]).catch(() => undefined);
+  },
+
+  /**
+   * Upload: {clinic_id}/{hub_id}/{kind}/[buttonId/]{timestamp}-{name}
+   */
   async uploadFile(
     clinicId: string,
     hubId: string,
-    file: File
+    file: File,
+    kind: SmartHubAssetKind = 'other',
+    buttonId?: string | null
   ): Promise<{
     storage_path: string;
     public_url: string;
     file_name: string;
     file_type: string;
   }> {
-    const ext = file.name.split('.').pop() || 'bin';
-    const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, '_');
-    const storage_path = `${clinicId}/smart-hub/${hubId}/${Date.now()}-${safeName}`;
+    const check = validateSmartHubImage(file, kind);
+    if (!check.ok) throw new Error(check.message);
+
+    const prepared = await compressImageToWebp(file, {
+      maxWidth: kind === 'banner' || kind === 'background' ? 1800 : 1200,
+      quality: 0.84,
+    });
+
+    const safeName = normalizeAssetFileName(prepared.name);
+    const folder =
+      kind === 'button' && buttonId
+        ? `${clinicId}/${hubId}/buttons/${buttonId}`
+        : `${clinicId}/${hubId}/${kind}`;
+    const storage_path = `${folder}/${Date.now()}-${safeName}`;
 
     const { error: uploadError } = await supabase.storage
       .from(BUCKET)
-      .upload(storage_path, file, { contentType: file.type, upsert: false });
+      .upload(storage_path, prepared, {
+        contentType: prepared.type || 'image/webp',
+        upsert: false,
+        cacheControl: '3600',
+      });
 
-    if (uploadError) throw uploadError;
+    if (uploadError) {
+      const msg = uploadError.message || '';
+      if (/mime|type/i.test(msg)) {
+        throw new Error('Escolha uma imagem JPG, PNG ou WebP.');
+      }
+      if (/size|large|limit/i.test(msg)) {
+        throw new Error('A imagem ultrapassa o tamanho permitido.');
+      }
+      throw new Error('Não foi possível enviar a imagem.');
+    }
 
     const { data: urlData } = supabase.storage.from(BUCKET).getPublicUrl(storage_path);
 
     return {
       storage_path,
-      public_url: urlData.publicUrl,
-      file_name: file.name,
-      file_type: file.type || ext,
+      public_url: `${urlData.publicUrl}?v=${Date.now()}`,
+      file_name: prepared.name,
+      file_type: prepared.type || 'image/webp',
     };
   },
 };

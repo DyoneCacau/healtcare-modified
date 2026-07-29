@@ -1,4 +1,4 @@
-/** Tipos do módulo Healthcare Smart Hub (Fase 1 + Fase 2) */
+/** Tipos do módulo Healthcare Smart Hub (Fase 1 + 2 + 2.1) */
 
 export type SmartHubStatus = 'draft' | 'published' | 'offline' | 'archived';
 export type SmartHubPageStatus = 'draft' | 'published' | 'archived';
@@ -11,9 +11,36 @@ export type SmartHubButtonType =
   | 'video'
   | 'form'
   | 'internal'
-  | 'social';
+  | 'social'
+  | 'instagram'
+  | 'facebook'
+  | 'tiktok'
+  | 'youtube'
+  | 'site'
+  | 'appointment'
+  | 'procedure'
+  | 'info';
 export type SmartHubButtonStatus = 'active' | 'inactive' | 'archived';
 export type SmartHubEntityStatus = 'active' | 'inactive' | 'archived' | 'pending' | 'error';
+
+export type SmartHubButtonVisualVariant =
+  | 'simple'
+  | 'icon_card'
+  | 'image_card'
+  | 'horizontal_card'
+  | 'featured_card'
+  | 'list_item'
+  | 'grid';
+
+export type SmartHubStylePreset =
+  | 'clean'
+  | 'elegant'
+  | 'colorful'
+  | 'minimal'
+  | 'premium'
+  | 'whatsapp';
+
+export type SmartHubAssetKind = 'logo' | 'banner' | 'profile' | 'button' | 'background' | 'other';
 
 export type SmartHubLayoutBlock =
   | 'banner'
@@ -28,6 +55,27 @@ export type SmartHubLayoutBlock =
   | 'social'
   | 'footer'
   | string;
+
+export interface SmartHubVisualConfig {
+  background_color?: string;
+  text_color?: string;
+  button_bg_color?: string;
+  button_text_color?: string;
+  card_bg_color?: string;
+  border_color?: string;
+  background_mode?: 'solid' | 'gradient' | 'image';
+  gradient_from?: string;
+  gradient_to?: string;
+  banner_overlay_color?: string;
+  banner_overlay_opacity?: number;
+  content_align?: 'left' | 'center' | 'right';
+  max_width?: 'sm' | 'md' | 'lg';
+  font_weight_title?: 'normal' | 'medium' | 'semibold' | 'bold';
+  border_radius?: 'none' | 'md' | 'lg' | 'xl' | 'full';
+  shadow_style?: 'none' | 'sm' | 'md' | 'lg';
+  spacing?: 'compact' | 'normal' | 'relaxed';
+  floating_whatsapp?: boolean;
+}
 
 export interface SmartHubValidationIssue {
   code: string;
@@ -57,6 +105,7 @@ export interface SmartHub {
   logo_url: string | null;
   banner_url: string | null;
   background_url: string | null;
+  profile_url: string | null;
   theme: string;
   primary_color: string;
   secondary_color: string;
@@ -65,7 +114,6 @@ export interface SmartHub {
   seo_description: string | null;
   favicon_url: string | null;
   status: SmartHubStatus;
-  /** Fase 2 */
   template_id: string | null;
   published_at: string | null;
   paused_at: string | null;
@@ -77,6 +125,8 @@ export interface SmartHub {
   contact_address: string | null;
   map_embed_url: string | null;
   layout_blocks: SmartHubLayoutBlock[];
+  style_preset: SmartHubStylePreset | string;
+  visual_config: SmartHubVisualConfig;
   created_at: string;
   updated_at: string;
   created_by: string | null;
@@ -110,6 +160,10 @@ export interface SmartHubButton {
   type: SmartHubButtonType;
   url: string | null;
   image: string | null;
+  image_alt: string | null;
+  visual_variant: SmartHubButtonVisualVariant | string;
+  image_position: 'left' | 'top' | 'right' | 'background' | string;
+  whatsapp_message: string | null;
   background_color: string | null;
   text_color: string | null;
   visible: boolean;
@@ -168,6 +222,7 @@ export interface SmartHubAsset {
   file_type: string | null;
   storage_path: string;
   public_url: string | null;
+  asset_kind: SmartHubAssetKind | string;
   status: string;
   created_at: string;
   updated_at: string;
@@ -255,7 +310,6 @@ export interface PublicSmartHubPayload {
   preview?: boolean;
 }
 
-/** Métricas do dashboard */
 export interface SmartHubDashboardMetrics {
   publicUrl: string;
   status: SmartHubStatus;
@@ -304,7 +358,9 @@ export type SmartHubButtonInsert = Partial<SmartHubButton> & {
   title: string;
 };
 
-export type SmartHubButtonUpdate = Partial<Omit<SmartHubButton, 'id' | 'clinic_id' | 'hub_id' | 'created_at'>>;
+export type SmartHubButtonUpdate = Partial<
+  Omit<SmartHubButton, 'id' | 'clinic_id' | 'hub_id' | 'created_at'>
+>;
 
 export const SMART_HUB_STATUS_LABELS: Record<SmartHubStatus, string> = {
   draft: 'Rascunho',
@@ -314,13 +370,40 @@ export const SMART_HUB_STATUS_LABELS: Record<SmartHubStatus, string> = {
 };
 
 export const SMART_HUB_BUTTON_TYPE_LABELS: Record<SmartHubButtonType, string> = {
-  link: 'Link',
+  link: 'Link externo',
   whatsapp: 'WhatsApp',
-  phone: 'Telefone',
+  phone: 'Ligação',
   email: 'E-mail',
-  map: 'Mapa',
+  map: 'Google Maps',
   video: 'Vídeo',
   form: 'Formulário',
   internal: 'Interno',
-  social: 'Social',
+  social: 'Rede social',
+  instagram: 'Instagram',
+  facebook: 'Facebook',
+  tiktok: 'TikTok',
+  youtube: 'YouTube',
+  site: 'Site',
+  appointment: 'Agendamento',
+  procedure: 'Procedimentos',
+  info: 'Texto informativo',
+};
+
+export const SMART_HUB_VARIANT_LABELS: Record<SmartHubButtonVisualVariant, string> = {
+  simple: 'Botão simples',
+  icon_card: 'Card com ícone',
+  image_card: 'Card com imagem',
+  horizontal_card: 'Card horizontal',
+  featured_card: 'Card destacado',
+  list_item: 'Item de lista',
+  grid: 'Grid',
+};
+
+export const SMART_HUB_STYLE_PRESET_LABELS: Record<SmartHubStylePreset, string> = {
+  clean: 'Clean',
+  elegant: 'Elegante',
+  colorful: 'Colorido',
+  minimal: 'Minimalista',
+  premium: 'Premium',
+  whatsapp: 'WhatsApp',
 };

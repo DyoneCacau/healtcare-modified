@@ -14,3 +14,6 @@ export { SmartHubLayout } from './SmartHubLayout';
 export { DashboardStatsCard } from './DashboardStatsCard';
 export { HubPublicView } from './HubPublicView';
 export { PublishWorkflowCard } from './PublishWorkflowCard';
+export { SmartHubImageUpload } from './SmartHubImageUpload';
+export { ColorField } from './ColorField';
+export { TemplateThumbnail } from './TemplateThumbnail';

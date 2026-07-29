@@ -9,3 +9,5 @@ export {
   PageService,
 } from './AnalyticsService';
 export * from './slugUtils';
+export * from './imageUtils';
+export * from './buttonDestinations';

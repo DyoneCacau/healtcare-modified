@@ -24,6 +24,10 @@ function normalizeHub(raw: SmartHub | null): SmartHub | null {
   const layoutBlocks = Array.isArray(raw.layout_blocks)
     ? raw.layout_blocks
     : DEFAULT_BLOCKS;
+  const visualConfig =
+    raw.visual_config && typeof raw.visual_config === 'object' && !Array.isArray(raw.visual_config)
+      ? raw.visual_config
+      : {};
   return {
     ...raw,
     layout_blocks: layoutBlocks,
@@ -37,6 +41,9 @@ function normalizeHub(raw: SmartHub | null): SmartHub | null {
     contact_email: raw.contact_email ?? null,
     contact_address: raw.contact_address ?? null,
     map_embed_url: raw.map_embed_url ?? null,
+    profile_url: raw.profile_url ?? null,
+    style_preset: raw.style_preset || 'clean',
+    visual_config: visualConfig,
   };
 }
 
@@ -262,9 +269,23 @@ function normalizePublicPayload(raw: unknown): PublicSmartHubPayload {
       contact_phone: hub?.contact_phone ?? null,
       contact_email: hub?.contact_email ?? null,
       contact_address: hub?.contact_address ?? null,
+      profile_url: hub?.profile_url ?? null,
       map_embed_url: hub?.map_embed_url ?? null,
+      style_preset: hub?.style_preset || 'clean',
+      visual_config:
+        hub?.visual_config && typeof hub.visual_config === 'object' && !Array.isArray(hub.visual_config)
+          ? hub.visual_config
+          : {},
     },
-    buttons: Array.isArray(data.buttons) ? data.buttons : [],
+    buttons: Array.isArray(data.buttons)
+      ? data.buttons.map((b) => ({
+          ...b,
+          image_alt: b.image_alt ?? null,
+          visual_variant: b.visual_variant || 'simple',
+          image_position: b.image_position || 'left',
+          whatsapp_message: b.whatsapp_message ?? null,
+        }))
+      : [],
     assets: Array.isArray(data.assets) ? data.assets : [],
   };
 }

@@ -104,7 +104,11 @@ export function useSmartHub() {
     },
     onSuccess: () => {
       invalidateHub();
-      toast.success('Smart Hub atualizado.');
+      if (hubQuery.data?.status === 'published') {
+        toast.success('Alterações salvas e atualizadas na página pública.');
+      } else {
+        toast.success('Alterações salvas na prévia.');
+      }
     },
     onError: (err: Error) => toast.error(err.message || 'Erro ao atualizar Smart Hub.'),
   });

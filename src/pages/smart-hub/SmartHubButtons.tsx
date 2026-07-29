@@ -1,8 +1,15 @@
 import { useState } from 'react';
 import { Pencil, Plus, Trash2 } from 'lucide-react';
-import { SmartHubLayout } from '@/components/smart-hub';
+import { toast } from 'sonner';
+import {
+  SmartHubLayout,
+  SmartHubImageUpload,
+  ColorField,
+} from '@/components/smart-hub';
 import { useSmartHub } from '@/hooks/useSmartHub';
 import { useHubButtons } from '@/hooks/useHubButtons';
+import { useClinic } from '@/hooks/useClinic';
+import { useAuth } from '@/hooks/useAuth';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -23,18 +30,44 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import {
+  AssetService,
+  buildDestinationUrl,
+  validateSocialDomain,
+} from '@/services/smartHub';
+import {
   SMART_HUB_BUTTON_TYPE_LABELS,
+  SMART_HUB_VARIANT_LABELS,
   type SmartHubButton,
   type SmartHubButtonType,
+  type SmartHubButtonVisualVariant,
 } from '@/types/smartHub';
 
 const BUTTON_TYPES = Object.keys(SMART_HUB_BUTTON_TYPE_LABELS) as SmartHubButtonType[];
+const VARIANT_KEYS = Object.keys(SMART_HUB_VARIANT_LABELS) as SmartHubButtonVisualVariant[];
+
+function storagePathFromPublicUrl(url: string | null | undefined): string | null {
+  if (!url) return null;
+  try {
+    const clean = url.split('?')[0];
+    const marker = '/smart-hub-assets/';
+    const idx = clean.indexOf(marker);
+    if (idx === -1) return null;
+    return decodeURIComponent(clean.slice(idx + marker.length));
+  } catch {
+    return null;
+  }
+}
 
 const emptyForm = {
   title: '',
   subtitle: '',
   type: 'link' as SmartHubButtonType,
   url: '',
+  whatsapp_message: '',
+  visual_variant: 'simple' as SmartHubButtonVisualVariant,
+  icon: '',
+  image: '',
+  image_alt: '',
   visible: true,
   order_index: 0,
   track_click: true,
@@ -43,12 +76,15 @@ const emptyForm = {
 };
 
 export default function SmartHubButtons() {
+  const { clinicId } = useClinic();
+  const { user } = useAuth();
   const { hub, isLoading } = useSmartHub();
   const { buttons, isLoading: loadingButtons, createButton, updateButton, deleteButton } =
     useHubButtons(hub?.id);
   const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState<SmartHubButton | null>(null);
   const [form, setForm] = useState(emptyForm);
+  const [uploadingImage, setUploadingImage] = useState(false);
 
   const openCreate = () => {
     setEditing(null);
@@ -66,6 +102,11 @@ export default function SmartHubButtons() {
       subtitle: btn.subtitle || '',
       type: btn.type,
       url: btn.url || '',
+      whatsapp_message: btn.whatsapp_message || '',
+      visual_variant: (btn.visual_variant as SmartHubButtonVisualVariant) || 'simple',
+      icon: btn.icon || '',
+      image: btn.image || '',
+      image_alt: btn.image_alt || '',
       visible: btn.visible,
       order_index: btn.order_index,
       track_click: btn.track_click,
@@ -75,13 +116,56 @@ export default function SmartHubButtons() {
     setOpen(true);
   };
 
+  const validateForm = (): boolean => {
+    if (!form.title.trim()) {
+      toast.error('Informe o título do botão.');
+      return false;
+    }
+
+    const socialError = validateSocialDomain(form.type, form.url);
+    if (socialError) {
+      toast.error(socialError);
+      return false;
+    }
+
+    if (form.type !== 'info' && form.url.trim()) {
+      const href = buildDestinationUrl(form.type, form.url, form.whatsapp_message);
+      if (!href) {
+        toast.error('Informe um destino válido para o botão.');
+        return false;
+      }
+    }
+
+    if (
+      ['whatsapp', 'phone', 'email', 'link', 'site', 'map', 'appointment', 'procedure'].includes(
+        form.type
+      ) &&
+      !form.url.trim() &&
+      form.type !== 'info'
+    ) {
+      // allow empty for some types but warn for conversion-critical ones
+      if (['whatsapp', 'phone', 'email', 'link'].includes(form.type)) {
+        toast.error('Informe a URL ou destino do botão.');
+        return false;
+      }
+    }
+
+    return true;
+  };
+
   const save = async () => {
-    if (!form.title.trim()) return;
+    if (!validateForm()) return;
+
     const payload = {
       title: form.title.trim(),
       subtitle: form.subtitle || null,
       type: form.type,
       url: form.url || null,
+      whatsapp_message: form.type === 'whatsapp' ? form.whatsapp_message || null : null,
+      visual_variant: form.visual_variant,
+      icon: form.icon || null,
+      image: form.image || null,
+      image_alt: form.image_alt || null,
       visible: form.visible,
       order_index: Number(form.order_index) || 0,
       track_click: form.track_click,
@@ -96,6 +180,44 @@ export default function SmartHubButtons() {
       await createButton.mutateAsync(payload);
     }
     setOpen(false);
+  };
+
+  const handleButtonImageUpload = async (file: File) => {
+    if (!clinicId || !hub?.id || !editing?.id) {
+      toast.error('Salve o botão antes de enviar a imagem.');
+      return;
+    }
+    setUploadingImage(true);
+    try {
+      const asset = await AssetService.upload(clinicId, hub.id, file, {
+        userId: user?.id,
+        kind: 'button',
+        buttonId: editing.id,
+        previousStoragePath: storagePathFromPublicUrl(form.image),
+      });
+      const url = asset.public_url || '';
+      setForm((f) => ({ ...f, image: url }));
+      await updateButton.mutateAsync({ id: editing.id, image: url || null });
+      setEditing((prev) => (prev ? { ...prev, image: url || null } : prev));
+      toast.success('Imagem enviada com sucesso.');
+    } catch (err) {
+      const message =
+        err && typeof err === 'object' && 'message' in err
+          ? String((err as { message: string }).message)
+          : 'Não foi possível enviar a imagem.';
+      toast.error(message);
+      throw err;
+    } finally {
+      setUploadingImage(false);
+    }
+  };
+
+  const handleButtonImageRemove = async () => {
+    setForm((f) => ({ ...f, image: '' }));
+    if (editing?.id) {
+      await updateButton.mutateAsync({ id: editing.id, image: null });
+      setEditing((prev) => (prev ? { ...prev, image: null } : prev));
+    }
   };
 
   return (
@@ -126,15 +248,33 @@ export default function SmartHubButtons() {
               key={btn.id}
               className="flex flex-wrap items-center justify-between gap-3 rounded-lg border bg-card p-4"
             >
-              <div className="min-w-0 flex-1">
-                <p className="font-medium">{btn.title}</p>
-                <p className="text-sm text-muted-foreground">
-                  {SMART_HUB_BUTTON_TYPE_LABELS[btn.type] || btn.type}
-                  {btn.url ? ` · ${btn.url}` : ''}
-                </p>
+              <div className="flex min-w-0 flex-1 items-center gap-3">
+                {btn.image ? (
+                  <img
+                    src={btn.image}
+                    alt={btn.image_alt || btn.title}
+                    className="h-12 w-12 shrink-0 rounded-md border object-cover"
+                  />
+                ) : (
+                  <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-md border bg-muted text-xs text-muted-foreground">
+                    —
+                  </div>
+                )}
+                <div className="min-w-0">
+                  <p className="font-medium">{btn.title}</p>
+                  <p className="truncate text-sm text-muted-foreground">
+                    {SMART_HUB_BUTTON_TYPE_LABELS[btn.type] || btn.type}
+                    {btn.url ? ` · ${btn.url}` : ''}
+                  </p>
+                </div>
               </div>
-              <div className="flex items-center gap-2">
+              <div className="flex flex-wrap items-center gap-2">
                 <Badge variant="outline">#{btn.order_index}</Badge>
+                <Badge variant="secondary">
+                  {SMART_HUB_VARIANT_LABELS[
+                    btn.visual_variant as SmartHubButtonVisualVariant
+                  ] || btn.visual_variant || 'Simples'}
+                </Badge>
                 <Badge variant={btn.visible ? 'default' : 'secondary'}>
                   {btn.visible ? 'Visível' : 'Oculto'}
                 </Badge>
@@ -155,7 +295,15 @@ export default function SmartHubButtons() {
           ))}
           {!buttons.length && (
             <div className="rounded-lg border border-dashed p-10 text-center text-muted-foreground">
-              Nenhum botão cadastrado. Crie o primeiro para habilitar a publicação.
+              <p className="font-medium text-foreground">Nenhum botão ainda</p>
+              <p className="mt-1 text-sm">
+                Crie o primeiro botão (WhatsApp, agendamento, redes sociais…) para ativar a
+                conversão na página pública.
+              </p>
+              <Button className="mt-4" onClick={openCreate}>
+                <Plus className="mr-2 h-4 w-4" />
+                Criar primeiro botão
+              </Button>
             </div>
           )}
         </div>
@@ -204,9 +352,102 @@ export default function SmartHubButtons() {
               <Input
                 value={form.url}
                 onChange={(e) => setForm((f) => ({ ...f, url: e.target.value }))}
-                placeholder="https://..."
+                placeholder={
+                  form.type === 'whatsapp'
+                    ? '5511999999999'
+                    : form.type === 'email'
+                      ? 'contato@clinica.com'
+                      : 'https://...'
+                }
               />
             </div>
+            {form.type === 'whatsapp' && (
+              <div className="space-y-2">
+                <Label>Mensagem pré-preenchida do WhatsApp</Label>
+                <Input
+                  value={form.whatsapp_message}
+                  onChange={(e) =>
+                    setForm((f) => ({ ...f, whatsapp_message: e.target.value }))
+                  }
+                  placeholder="Olá! Gostaria de agendar uma consulta."
+                />
+              </div>
+            )}
+            <div className="space-y-2">
+              <Label>Variante visual</Label>
+              <Select
+                value={form.visual_variant}
+                onValueChange={(v) =>
+                  setForm((f) => ({
+                    ...f,
+                    visual_variant: v as SmartHubButtonVisualVariant,
+                  }))
+                }
+              >
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {VARIANT_KEYS.map((v) => (
+                    <SelectItem key={v} value={v}>
+                      {SMART_HUB_VARIANT_LABELS[v]}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2">
+              <Label>Ícone (nome opcional)</Label>
+              <Input
+                value={form.icon}
+                onChange={(e) => setForm((f) => ({ ...f, icon: e.target.value }))}
+                placeholder="message-circle, calendar, phone…"
+              />
+            </div>
+
+            {editing?.id ? (
+              <div className="space-y-2">
+                <Label>Imagem do botão</Label>
+                {clinicId && hub && (
+                  <SmartHubImageUpload
+                    kind="button"
+                    currentUrl={form.image || null}
+                    clinicId={clinicId}
+                    hubId={hub.id}
+                    disabled={uploadingImage || updateButton.isPending}
+                    onUpload={handleButtonImageUpload}
+                    onRemove={handleButtonImageRemove}
+                  />
+                )}
+                <div className="space-y-2">
+                  <Label>Texto alternativo da imagem</Label>
+                  <Input
+                    value={form.image_alt}
+                    onChange={(e) => setForm((f) => ({ ...f, image_alt: e.target.value }))}
+                  />
+                </div>
+              </div>
+            ) : (
+              <div className="space-y-2">
+                <Label>URL da imagem (opcional)</Label>
+                <Input
+                  value={form.image}
+                  onChange={(e) => setForm((f) => ({ ...f, image: e.target.value }))}
+                  placeholder="https://… ou envie após salvar"
+                />
+                <p className="text-xs text-muted-foreground">
+                  Após criar o botão, edite-o para enviar uma imagem pelo upload.
+                </p>
+                <div className="space-y-2">
+                  <Label>Texto alternativo da imagem</Label>
+                  <Input
+                    value={form.image_alt}
+                    onChange={(e) => setForm((f) => ({ ...f, image_alt: e.target.value }))}
+                  />
+                </div>
+              </div>
+            )}
+
             <div className="grid gap-4 sm:grid-cols-2">
               <div className="space-y-2">
                 <Label>Ordem</Label>
@@ -236,22 +477,21 @@ export default function SmartHubButtons() {
               />
             </div>
             <div className="grid gap-4 sm:grid-cols-2">
-              <div className="space-y-2">
-                <Label>Cor de fundo</Label>
-                <Input
-                  type="color"
-                  value={form.background_color || '#0F766E'}
-                  onChange={(e) => setForm((f) => ({ ...f, background_color: e.target.value }))}
-                />
-              </div>
-              <div className="space-y-2">
-                <Label>Cor do texto</Label>
-                <Input
-                  type="color"
-                  value={form.text_color || '#ffffff'}
-                  onChange={(e) => setForm((f) => ({ ...f, text_color: e.target.value }))}
-                />
-              </div>
+              <ColorField
+                id="btn_bg"
+                label="Cor de fundo"
+                value={form.background_color || '#0F766E'}
+                fallback="#0F766E"
+                onChange={(v) => setForm((f) => ({ ...f, background_color: v }))}
+              />
+              <ColorField
+                id="btn_text"
+                label="Cor do texto"
+                value={form.text_color || '#FFFFFF'}
+                fallback="#FFFFFF"
+                contrastAgainst={form.background_color || '#0F766E'}
+                onChange={(v) => setForm((f) => ({ ...f, text_color: v }))}
+              />
             </div>
           </div>
           <DialogFooter>
