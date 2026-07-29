@@ -8,6 +8,7 @@ import {
   isPoorContrast,
   normalizeHexColor,
 } from '@/services/smartHub/imageUtils';
+import { FieldHelpLabel } from './FieldHelpLabel';
 import { cn } from '@/lib/utils';
 
 interface ColorFieldProps {
@@ -16,6 +17,7 @@ interface ColorFieldProps {
   value: string;
   fallback?: string;
   contrastAgainst?: string;
+  help?: string;
   onChange: (value: string) => void;
   className?: string;
 }
@@ -26,6 +28,7 @@ export function ColorField({
   value,
   fallback = '#0F766E',
   contrastAgainst,
+  help,
   onChange,
   className,
 }: ColorFieldProps) {
@@ -41,7 +44,11 @@ export function ColorField({
   return (
     <div className={cn('space-y-2', className)}>
       <div className="flex items-center justify-between gap-2">
-        <Label htmlFor={id}>{label}</Label>
+        {help ? (
+          <FieldHelpLabel htmlFor={id} label={label} help={help} />
+        ) : (
+          <Label htmlFor={id}>{label}</Label>
+        )}
         <Button
           type="button"
           variant="ghost"

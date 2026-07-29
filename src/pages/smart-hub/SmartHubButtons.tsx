@@ -1,11 +1,21 @@
 import { useState } from 'react';
-import { Pencil, Plus, Trash2 } from 'lucide-react';
+import { Eye, Pencil, Plus, Trash2 } from 'lucide-react';
 import { toast } from 'sonner';
 import {
   SmartHubLayout,
   SmartHubImageUpload,
   ColorField,
+  FieldHelpLabel,
+  FieldHint,
+  TipCallout,
+  FormSection,
+  ButtonEditorPreview,
 } from '@/components/smart-hub';
+import {
+  BUTTON_FIELD_HELP,
+  CLICK_ACTION_HELP,
+  VARIANT_HELP,
+} from '@/components/smart-hub/buttonEditorCopy';
 import { useSmartHub } from '@/hooks/useSmartHub';
 import { useHubButtons } from '@/hooks/useHubButtons';
 import { useClinic } from '@/hooks/useClinic';
@@ -13,11 +23,11 @@ import { useAuth } from '@/hooks/useAuth';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
   DialogFooter,
   DialogHeader,
   DialogTitle,
@@ -29,6 +39,12 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
+import {
+  Sheet,
+  SheetContent,
+  SheetHeader,
+  SheetTitle,
+} from '@/components/ui/sheet';
 import {
   AssetService,
   buildDestinationUrl,
@@ -47,6 +63,7 @@ import {
 import { CRM_STAGES } from '@/types/crm';
 import { useClinicStaffOptions } from '@/hooks/useClinicStaffOptions';
 import { useSubscription } from '@/hooks/useSubscription';
+import { cn } from '@/lib/utils';
 
 const BUTTON_TYPES = Object.keys(SMART_HUB_BUTTON_TYPE_LABELS) as SmartHubButtonType[];
 const VARIANT_KEYS = Object.keys(SMART_HUB_VARIANT_LABELS) as SmartHubButtonVisualVariant[];
@@ -97,9 +114,15 @@ export default function SmartHubButtons() {
   const { buttons, isLoading: loadingButtons, createButton, updateButton, deleteButton } =
     useHubButtons(hub?.id);
   const [open, setOpen] = useState(false);
+  const [previewOpen, setPreviewOpen] = useState(false);
   const [editing, setEditing] = useState<SmartHubButton | null>(null);
   const [form, setForm] = useState(emptyForm);
   const [uploadingImage, setUploadingImage] = useState(false);
+
+  const actionHelp = CLICK_ACTION_HELP[form.click_action] || CLICK_ACTION_HELP.auto;
+  const variantHelp = VARIANT_HELP[form.visual_variant] || VARIANT_HELP.simple;
+  const showCaptureFields =
+    (form.click_action === 'form' || form.type === 'form') && hasCrm;
 
   const openCreate = () => {
     setEditing(null);
@@ -107,6 +130,7 @@ export default function SmartHubButtons() {
       ...emptyForm,
       order_index: buttons.length,
     });
+    setPreviewOpen(false);
     setOpen(true);
   };
 
@@ -134,7 +158,13 @@ export default function SmartHubButtons() {
       capture_owner: cap.owner_user_id || '',
       capture_redirect_wa: Boolean(cap.redirect_whatsapp_after_submit),
     });
+    setPreviewOpen(false);
     setOpen(true);
+  };
+
+  const handleDialogOpenChange = (next: boolean) => {
+    setOpen(next);
+    if (!next) setPreviewOpen(false);
   };
 
   const validateForm = (): boolean => {
@@ -164,7 +194,6 @@ export default function SmartHubButtons() {
       !form.url.trim() &&
       form.type !== 'info'
     ) {
-      // allow empty for some types but warn for conversion-critical ones
       if (['whatsapp', 'phone', 'email', 'link'].includes(form.type)) {
         toast.error('Informe a URL ou destino do botão.');
         return false;
@@ -219,6 +248,7 @@ export default function SmartHubButtons() {
       await createButton.mutateAsync(payload);
     }
     setOpen(false);
+    setPreviewOpen(false);
   };
 
   const handleButtonImageUpload = async (file: File) => {
@@ -258,6 +288,417 @@ export default function SmartHubButtons() {
       setEditing((prev) => (prev ? { ...prev, image: null } : prev));
     }
   };
+
+  const previewModel = {
+    title: form.title,
+    subtitle: form.subtitle,
+    type: form.type,
+    click_action: form.click_action,
+    visual_variant: form.visual_variant,
+    url: form.url,
+    whatsapp_message: form.whatsapp_message,
+    icon: form.icon,
+    image: form.image,
+    image_alt: form.image_alt,
+    background_color: form.background_color || '#0F766E',
+    text_color: form.text_color || '#FFFFFF',
+  };
+
+  const formFields = (
+    <div className="space-y-5">
+      <FormSection
+        title="Informações do botão"
+        description="O que o visitante vê e o que acontece ao tocar."
+      >
+        <div className="space-y-2">
+          <FieldHelpLabel htmlFor="btn-title" label="Título" help={BUTTON_FIELD_HELP.title} />
+          <Input
+            id="btn-title"
+            value={form.title}
+            onChange={(e) => setForm((f) => ({ ...f, title: e.target.value }))}
+            placeholder="Ex.: Agendar consulta"
+          />
+        </div>
+        <div className="space-y-2">
+          <FieldHelpLabel
+            htmlFor="btn-subtitle"
+            label="Subtítulo"
+            help={BUTTON_FIELD_HELP.subtitle}
+          />
+          <Input
+            id="btn-subtitle"
+            value={form.subtitle}
+            onChange={(e) => setForm((f) => ({ ...f, subtitle: e.target.value }))}
+            placeholder="Ex.: Resposta em poucos minutos"
+          />
+        </div>
+        <div className="space-y-2">
+          <FieldHelpLabel label="Tipo" help={BUTTON_FIELD_HELP.type} />
+          <Select
+            value={form.type}
+            onValueChange={(v) => setForm((f) => ({ ...f, type: v as SmartHubButtonType }))}
+          >
+            <SelectTrigger>
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent position="popper" className="max-h-72">
+              {BUTTON_TYPES.map((t) => (
+                <SelectItem key={t} value={t}>
+                  {SMART_HUB_BUTTON_TYPE_LABELS[t]}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <FieldHint>{BUTTON_FIELD_HELP.type}</FieldHint>
+        </div>
+        <div className="space-y-2">
+          <FieldHelpLabel label="Ação ao clicar" help={BUTTON_FIELD_HELP.click_action} />
+          <Select
+            value={form.click_action}
+            onValueChange={(v) =>
+              setForm((f) => ({ ...f, click_action: v as SmartHubClickAction }))
+            }
+          >
+            <SelectTrigger>
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent position="popper" className="max-h-80">
+              {CLICK_ACTIONS.map((a) => (
+                <SelectItem key={a} value={a} disabled={a === 'form' && !hasCrm}>
+                  <span className="flex flex-col items-start gap-0.5 py-0.5 text-left">
+                    <span>{SMART_HUB_CLICK_ACTION_LABELS[a]}</span>
+                    <span className="text-[11px] font-normal leading-snug text-muted-foreground">
+                      {CLICK_ACTION_HELP[a].description}
+                    </span>
+                  </span>
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <div className="space-y-2 rounded-md border bg-muted/30 px-3 py-2">
+            <div className="flex flex-wrap items-center gap-1.5">
+              <span className="text-xs font-medium">
+                {SMART_HUB_CLICK_ACTION_LABELS[form.click_action]}
+              </span>
+              {actionHelp.badge ? <Badge variant="secondary">{actionHelp.badge}</Badge> : null}
+            </div>
+            <FieldHint>{actionHelp.description}</FieldHint>
+          </div>
+          {form.click_action === 'form' && actionHelp.badge ? (
+            <TipCallout badge={actionHelp.badge}>
+              Ideal quando você quer que o visitante deixe nome e telefone e o lead entre no CRM.
+            </TipCallout>
+          ) : null}
+          {form.click_action === 'whatsapp' ? (
+            <TipCallout badge={actionHelp.badge}>
+              O clique abre o WhatsApp e é registrado no Analytics. Lead não é criado
+              automaticamente.
+            </TipCallout>
+          ) : null}
+        </div>
+      </FormSection>
+
+      <FormSection
+        title="Destino e comportamento"
+        description="Para onde o visitante vai e como o lead é organizado."
+      >
+        {showCaptureFields ? (
+          <div className="space-y-4 rounded-md border border-dashed bg-muted/20 p-3">
+            <p className="text-xs font-medium text-foreground">Destino do formulário (CRM)</p>
+            <div className="space-y-2">
+              <FieldHelpLabel
+                htmlFor="capture-interest"
+                label="Serviço / interesse"
+                help={BUTTON_FIELD_HELP.capture_interest}
+              />
+              <Input
+                id="capture-interest"
+                value={form.capture_interest}
+                onChange={(e) => setForm((f) => ({ ...f, capture_interest: e.target.value }))}
+                placeholder="Ex.: Clareamento, Ortodontia…"
+              />
+              <FieldHint>{BUTTON_FIELD_HELP.capture_interest}</FieldHint>
+            </div>
+            <div className="space-y-2">
+              <FieldHelpLabel label="Coluna inicial" help={BUTTON_FIELD_HELP.capture_stage} />
+              <Select
+                value={form.capture_stage}
+                onValueChange={(v) => setForm((f) => ({ ...f, capture_stage: v }))}
+              >
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent position="popper">
+                  {CRM_STAGES.map((s) => (
+                    <SelectItem key={s.id} value={s.id}>
+                      {s.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <FieldHint>{BUTTON_FIELD_HELP.capture_stage}</FieldHint>
+            </div>
+            <div className="space-y-2">
+              <FieldHelpLabel label="Responsável" help={BUTTON_FIELD_HELP.capture_owner} />
+              <Select
+                value={form.capture_owner || '__none__'}
+                onValueChange={(v) =>
+                  setForm((f) => ({
+                    ...f,
+                    capture_owner: v === '__none__' ? '' : v,
+                  }))
+                }
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Padrão do Hub" />
+                </SelectTrigger>
+                <SelectContent position="popper">
+                  <SelectItem value="__none__">Padrão do Hub</SelectItem>
+                  {staff.map((s) => (
+                    <SelectItem key={s.id} value={s.id}>
+                      {s.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <FieldHint>{BUTTON_FIELD_HELP.capture_owner}</FieldHint>
+            </div>
+            <div className="space-y-2">
+              <div className="flex items-center justify-between gap-2">
+                <FieldHelpLabel
+                  label="WhatsApp após envio"
+                  help={BUTTON_FIELD_HELP.capture_redirect_wa}
+                />
+                <Switch
+                  checked={form.capture_redirect_wa}
+                  onCheckedChange={(v) => setForm((f) => ({ ...f, capture_redirect_wa: v }))}
+                />
+              </div>
+              <FieldHint>{BUTTON_FIELD_HELP.capture_redirect_wa}</FieldHint>
+            </div>
+          </div>
+        ) : null}
+
+        <div className="space-y-2">
+          <FieldHelpLabel htmlFor="btn-url" label="URL / destino" help={BUTTON_FIELD_HELP.url} />
+          <Input
+            id="btn-url"
+            value={form.url}
+            onChange={(e) => setForm((f) => ({ ...f, url: e.target.value }))}
+            placeholder={
+              form.type === 'whatsapp' || form.click_action === 'whatsapp'
+                ? '5511999999999'
+                : form.type === 'email'
+                  ? 'contato@clinica.com'
+                  : 'https://...'
+            }
+          />
+          <FieldHint>{BUTTON_FIELD_HELP.url}</FieldHint>
+        </div>
+
+        {(form.type === 'whatsapp' || form.click_action === 'whatsapp') && (
+          <div className="space-y-2">
+            <FieldHelpLabel
+              htmlFor="wa-msg"
+              label="Mensagem pré-preenchida do WhatsApp"
+              help={BUTTON_FIELD_HELP.whatsapp_message}
+            />
+            <Input
+              id="wa-msg"
+              value={form.whatsapp_message}
+              onChange={(e) => setForm((f) => ({ ...f, whatsapp_message: e.target.value }))}
+              placeholder="Olá! Gostaria de agendar uma consulta."
+            />
+          </div>
+        )}
+
+        <div className="grid gap-4 sm:grid-cols-2">
+          <div className="space-y-2">
+            <FieldHelpLabel
+              htmlFor="btn-order"
+              label="Ordem"
+              help={BUTTON_FIELD_HELP.order_index}
+            />
+            <Input
+              id="btn-order"
+              type="number"
+              value={form.order_index}
+              onChange={(e) =>
+                setForm((f) => ({ ...f, order_index: Number(e.target.value) || 0 }))
+              }
+            />
+          </div>
+          <div className="space-y-2">
+            <div className="flex items-center justify-between gap-2 pt-1 sm:pt-6">
+              <FieldHelpLabel label="Visível" help={BUTTON_FIELD_HELP.visible} />
+              <Switch
+                id="visible"
+                checked={form.visible}
+                onCheckedChange={(v) => setForm((f) => ({ ...f, visible: v }))}
+              />
+            </div>
+          </div>
+        </div>
+        <div className="flex items-center justify-between gap-2">
+          <FieldHelpLabel label="Rastrear cliques" help={BUTTON_FIELD_HELP.track_click} />
+          <Switch
+            id="track"
+            checked={form.track_click}
+            onCheckedChange={(v) => setForm((f) => ({ ...f, track_click: v }))}
+          />
+        </div>
+      </FormSection>
+
+      <FormSection
+        title="Aparência"
+        description="Como o botão aparece na página pública."
+      >
+        <div className="space-y-2">
+          <FieldHelpLabel label="Variante visual" help={BUTTON_FIELD_HELP.visual_variant} />
+          <Select
+            value={form.visual_variant}
+            onValueChange={(v) =>
+              setForm((f) => ({
+                ...f,
+                visual_variant: v as SmartHubButtonVisualVariant,
+              }))
+            }
+          >
+            <SelectTrigger>
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent position="popper" className="max-h-80">
+              {VARIANT_KEYS.map((v) => (
+                <SelectItem key={v} value={v}>
+                  <span className="flex flex-col items-start gap-0.5 py-0.5 text-left">
+                    <span className="flex flex-wrap items-center gap-1.5">
+                      {SMART_HUB_VARIANT_LABELS[v]}
+                      {VARIANT_HELP[v].badge ? (
+                        <Badge variant="outline" className="text-[10px] font-normal">
+                          {VARIANT_HELP[v].badge}
+                        </Badge>
+                      ) : null}
+                    </span>
+                    <span className="text-[11px] font-normal leading-snug text-muted-foreground">
+                      {VARIANT_HELP[v].description}
+                    </span>
+                  </span>
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <div className="space-y-2 rounded-md border bg-muted/30 px-3 py-2">
+            <div className="flex flex-wrap items-center gap-1.5">
+              <span className="text-xs font-medium">
+                {SMART_HUB_VARIANT_LABELS[form.visual_variant]}
+              </span>
+              {variantHelp.badge ? <Badge variant="outline">{variantHelp.badge}</Badge> : null}
+            </div>
+            <FieldHint>{variantHelp.description}</FieldHint>
+          </div>
+          {form.visual_variant === 'featured_card' && variantHelp.badge ? (
+            <TipCallout badge={variantHelp.badge}>
+              Use no botão principal da página (agendar, falar no WhatsApp, etc.).
+            </TipCallout>
+          ) : null}
+          {form.visual_variant === 'simple' && variantHelp.badge ? (
+            <TipCallout badge={variantHelp.badge}>
+              Formato limpo e direto — ótimo para a maioria dos botões.
+            </TipCallout>
+          ) : null}
+        </div>
+
+        <div className="grid gap-4 sm:grid-cols-2">
+          <ColorField
+            id="btn_bg"
+            label="Cor de fundo"
+            help={BUTTON_FIELD_HELP.background_color}
+            value={form.background_color || '#0F766E'}
+            fallback="#0F766E"
+            onChange={(v) => setForm((f) => ({ ...f, background_color: v }))}
+          />
+          <ColorField
+            id="btn_text"
+            label="Cor do texto"
+            help={BUTTON_FIELD_HELP.text_color}
+            value={form.text_color || '#FFFFFF'}
+            fallback="#FFFFFF"
+            contrastAgainst={form.background_color || '#0F766E'}
+            onChange={(v) => setForm((f) => ({ ...f, text_color: v }))}
+          />
+        </div>
+
+        <div className="space-y-2">
+          <FieldHelpLabel htmlFor="btn-icon" label="Ícone" help={BUTTON_FIELD_HELP.icon} />
+          <Input
+            id="btn-icon"
+            value={form.icon}
+            onChange={(e) => setForm((f) => ({ ...f, icon: e.target.value }))}
+            placeholder="message-circle, calendar, phone…"
+          />
+          <FieldHint>{BUTTON_FIELD_HELP.icon}</FieldHint>
+        </div>
+
+        {editing?.id ? (
+          <div className="space-y-2">
+            <FieldHelpLabel label="Imagem do botão" help={BUTTON_FIELD_HELP.image} />
+            {clinicId && hub && (
+              <SmartHubImageUpload
+                kind="button"
+                currentUrl={form.image || null}
+                clinicId={clinicId}
+                hubId={hub.id}
+                disabled={uploadingImage || updateButton.isPending}
+                onUpload={handleButtonImageUpload}
+                onRemove={handleButtonImageRemove}
+              />
+            )}
+            <div className="space-y-2">
+              <FieldHelpLabel
+                htmlFor="img-alt"
+                label="Texto alternativo da imagem"
+                help={BUTTON_FIELD_HELP.image_alt}
+              />
+              <Input
+                id="img-alt"
+                value={form.image_alt}
+                onChange={(e) => setForm((f) => ({ ...f, image_alt: e.target.value }))}
+              />
+            </div>
+          </div>
+        ) : (
+          <div className="space-y-2">
+            <FieldHelpLabel
+              htmlFor="img-url"
+              label="URL da imagem (opcional)"
+              help={BUTTON_FIELD_HELP.image}
+            />
+            <Input
+              id="img-url"
+              value={form.image}
+              onChange={(e) => setForm((f) => ({ ...f, image: e.target.value }))}
+              placeholder="https://… ou envie após salvar"
+            />
+            <FieldHint>
+              Após criar o botão, edite-o para enviar uma imagem pelo upload.
+            </FieldHint>
+            <div className="space-y-2">
+              <FieldHelpLabel
+                htmlFor="img-alt-new"
+                label="Texto alternativo da imagem"
+                help={BUTTON_FIELD_HELP.image_alt}
+              />
+              <Input
+                id="img-alt-new"
+                value={form.image_alt}
+                onChange={(e) => setForm((f) => ({ ...f, image_alt: e.target.value }))}
+              />
+            </div>
+          </div>
+        )}
+      </FormSection>
+    </div>
+  );
 
   return (
     <SmartHubLayout
@@ -312,7 +753,9 @@ export default function SmartHubButtons() {
                 <Badge variant="secondary">
                   {SMART_HUB_VARIANT_LABELS[
                     btn.visual_variant as SmartHubButtonVisualVariant
-                  ] || btn.visual_variant || 'Simples'}
+                  ] ||
+                    btn.visual_variant ||
+                    'Simples'}
                 </Badge>
                 <Badge variant={btn.visible ? 'default' : 'secondary'}>
                   {btn.visible ? 'Visível' : 'Oculto'}
@@ -348,299 +791,65 @@ export default function SmartHubButtons() {
         </div>
       )}
 
-      <Dialog open={open} onOpenChange={setOpen}>
-        <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-lg">
-          <DialogHeader>
+      <Dialog open={open} onOpenChange={handleDialogOpenChange}>
+        <DialogContent
+          className={cn(
+            'flex max-h-[92vh] flex-col gap-0 overflow-hidden p-0',
+            'w-[calc(100vw-1.5rem)] sm:max-w-3xl lg:max-w-5xl'
+          )}
+        >
+          <DialogHeader className="shrink-0 space-y-1 border-b px-6 py-4 text-left">
             <DialogTitle>{editing ? 'Editar botão' : 'Novo botão'}</DialogTitle>
+            <DialogDescription>
+              Configure o botão com ajuda em cada campo. A prévia ao lado mostra como ele
+              aparecerá na página pública.
+            </DialogDescription>
           </DialogHeader>
-          <div className="space-y-4 py-2">
-            <div className="space-y-2">
-              <Label>Título</Label>
-              <Input
-                value={form.title}
-                onChange={(e) => setForm((f) => ({ ...f, title: e.target.value }))}
-              />
-            </div>
-            <div className="space-y-2">
-              <Label>Subtítulo</Label>
-              <Input
-                value={form.subtitle}
-                onChange={(e) => setForm((f) => ({ ...f, subtitle: e.target.value }))}
-              />
-            </div>
-            <div className="space-y-2">
-              <Label>Tipo</Label>
-              <Select
-                value={form.type}
-                onValueChange={(v) => setForm((f) => ({ ...f, type: v as SmartHubButtonType }))}
-              >
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {BUTTON_TYPES.map((t) => (
-                    <SelectItem key={t} value={t}>
-                      {SMART_HUB_BUTTON_TYPE_LABELS[t]}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="space-y-2">
-              <Label>Ação ao clicar</Label>
-              <Select
-                value={form.click_action}
-                onValueChange={(v) =>
-                  setForm((f) => ({ ...f, click_action: v as SmartHubClickAction }))
-                }
-              >
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {CLICK_ACTIONS.map((a) => (
-                    <SelectItem
-                      key={a}
-                      value={a}
-                      disabled={a === 'form' && !hasCrm}
-                    >
-                      {SMART_HUB_CLICK_ACTION_LABELS[a]}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              {form.click_action === 'whatsapp' && (
-                <p className="text-xs text-muted-foreground">
-                  O clique abre o WhatsApp e é registrado no Analytics. Lead não é criado
-                  automaticamente.
-                </p>
-              )}
-            </div>
-            {(form.click_action === 'form' || form.type === 'form') && hasCrm && (
-              <div className="space-y-3 rounded-md border p-3">
-                <p className="text-xs font-medium">Destino do formulário</p>
-                <div className="space-y-2">
-                  <Label>Serviço / interesse</Label>
-                  <Input
-                    value={form.capture_interest}
-                    onChange={(e) =>
-                      setForm((f) => ({ ...f, capture_interest: e.target.value }))
-                    }
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label>Coluna inicial</Label>
-                  <Select
-                    value={form.capture_stage}
-                    onValueChange={(v) => setForm((f) => ({ ...f, capture_stage: v }))}
-                  >
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {CRM_STAGES.map((s) => (
-                        <SelectItem key={s.id} value={s.id}>
-                          {s.label}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="space-y-2">
-                  <Label>Responsável</Label>
-                  <Select
-                    value={form.capture_owner || '__none__'}
-                    onValueChange={(v) =>
-                      setForm((f) => ({
-                        ...f,
-                        capture_owner: v === '__none__' ? '' : v,
-                      }))
-                    }
-                  >
-                    <SelectTrigger>
-                      <SelectValue placeholder="Padrão do Hub" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="__none__">Padrão do Hub</SelectItem>
-                      {staff.map((s) => (
-                        <SelectItem key={s.id} value={s.id}>
-                          {s.name}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="flex items-center justify-between gap-2">
-                  <Label>WhatsApp após envio</Label>
-                  <Switch
-                    checked={form.capture_redirect_wa}
-                    onCheckedChange={(v) =>
-                      setForm((f) => ({ ...f, capture_redirect_wa: v }))
-                    }
-                  />
-                </div>
-              </div>
-            )}
-            <div className="space-y-2">
-              <Label>URL / destino</Label>
-              <Input
-                value={form.url}
-                onChange={(e) => setForm((f) => ({ ...f, url: e.target.value }))}
-                placeholder={
-                  form.type === 'whatsapp' || form.click_action === 'whatsapp'
-                    ? '5511999999999'
-                    : form.type === 'email'
-                      ? 'contato@clinica.com'
-                      : 'https://...'
-                }
-              />
-            </div>
-            {(form.type === 'whatsapp' || form.click_action === 'whatsapp') && (
-              <div className="space-y-2">
-                <Label>Mensagem pré-preenchida do WhatsApp</Label>
-                <Input
-                  value={form.whatsapp_message}
-                  onChange={(e) =>
-                    setForm((f) => ({ ...f, whatsapp_message: e.target.value }))
-                  }
-                  placeholder="Olá! Gostaria de agendar uma consulta."
-                />
-              </div>
-            )}
-            <div className="space-y-2">
-              <Label>Variante visual</Label>
-              <Select
-                value={form.visual_variant}
-                onValueChange={(v) =>
-                  setForm((f) => ({
-                    ...f,
-                    visual_variant: v as SmartHubButtonVisualVariant,
-                  }))
-                }
-              >
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {VARIANT_KEYS.map((v) => (
-                    <SelectItem key={v} value={v}>
-                      {SMART_HUB_VARIANT_LABELS[v]}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="space-y-2">
-              <Label>Ícone (nome opcional)</Label>
-              <Input
-                value={form.icon}
-                onChange={(e) => setForm((f) => ({ ...f, icon: e.target.value }))}
-                placeholder="message-circle, calendar, phone…"
-              />
-            </div>
 
-            {editing?.id ? (
-              <div className="space-y-2">
-                <Label>Imagem do botão</Label>
-                {clinicId && hub && (
-                  <SmartHubImageUpload
-                    kind="button"
-                    currentUrl={form.image || null}
-                    clinicId={clinicId}
-                    hubId={hub.id}
-                    disabled={uploadingImage || updateButton.isPending}
-                    onUpload={handleButtonImageUpload}
-                    onRemove={handleButtonImageRemove}
-                  />
-                )}
-                <div className="space-y-2">
-                  <Label>Texto alternativo da imagem</Label>
-                  <Input
-                    value={form.image_alt}
-                    onChange={(e) => setForm((f) => ({ ...f, image_alt: e.target.value }))}
-                  />
-                </div>
+          <div className="grid min-h-0 flex-1 lg:grid-cols-[minmax(0,1fr)_340px]">
+            <div className="min-h-0 overflow-y-auto px-6 py-4">{formFields}</div>
+            <aside className="hidden min-h-0 overflow-y-auto border-l bg-muted/20 p-4 lg:block">
+              <div className="sticky top-0">
+                <ButtonEditorPreview model={previewModel} />
               </div>
-            ) : (
-              <div className="space-y-2">
-                <Label>URL da imagem (opcional)</Label>
-                <Input
-                  value={form.image}
-                  onChange={(e) => setForm((f) => ({ ...f, image: e.target.value }))}
-                  placeholder="https://… ou envie após salvar"
-                />
-                <p className="text-xs text-muted-foreground">
-                  Após criar o botão, edite-o para enviar uma imagem pelo upload.
-                </p>
-                <div className="space-y-2">
-                  <Label>Texto alternativo da imagem</Label>
-                  <Input
-                    value={form.image_alt}
-                    onChange={(e) => setForm((f) => ({ ...f, image_alt: e.target.value }))}
-                  />
-                </div>
-              </div>
-            )}
-
-            <div className="grid gap-4 sm:grid-cols-2">
-              <div className="space-y-2">
-                <Label>Ordem</Label>
-                <Input
-                  type="number"
-                  value={form.order_index}
-                  onChange={(e) =>
-                    setForm((f) => ({ ...f, order_index: Number(e.target.value) || 0 }))
-                  }
-                />
-              </div>
-              <div className="flex items-center justify-between gap-2 pt-6">
-                <Label htmlFor="visible">Visível</Label>
-                <Switch
-                  id="visible"
-                  checked={form.visible}
-                  onCheckedChange={(v) => setForm((f) => ({ ...f, visible: v }))}
-                />
-              </div>
-            </div>
-            <div className="flex items-center justify-between gap-2">
-              <Label htmlFor="track">Rastrear cliques</Label>
-              <Switch
-                id="track"
-                checked={form.track_click}
-                onCheckedChange={(v) => setForm((f) => ({ ...f, track_click: v }))}
-              />
-            </div>
-            <div className="grid gap-4 sm:grid-cols-2">
-              <ColorField
-                id="btn_bg"
-                label="Cor de fundo"
-                value={form.background_color || '#0F766E'}
-                fallback="#0F766E"
-                onChange={(v) => setForm((f) => ({ ...f, background_color: v }))}
-              />
-              <ColorField
-                id="btn_text"
-                label="Cor do texto"
-                value={form.text_color || '#FFFFFF'}
-                fallback="#FFFFFF"
-                contrastAgainst={form.background_color || '#0F766E'}
-                onChange={(v) => setForm((f) => ({ ...f, text_color: v }))}
-              />
-            </div>
+            </aside>
           </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setOpen(false)}>
-              Cancelar
-            </Button>
+
+          <DialogFooter className="shrink-0 flex-col gap-2 border-t px-6 py-4 sm:flex-row sm:justify-between">
             <Button
-              disabled={!form.title.trim() || createButton.isPending || updateButton.isPending}
-              onClick={save}
+              type="button"
+              variant="outline"
+              className="w-full lg:hidden sm:w-auto"
+              onClick={() => setPreviewOpen(true)}
             >
-              Salvar
+              <Eye className="mr-2 h-4 w-4" />
+              Ver prévia
             </Button>
+            <div className="flex w-full flex-col-reverse gap-2 sm:ml-auto sm:w-auto sm:flex-row">
+              <Button variant="outline" onClick={() => handleDialogOpenChange(false)}>
+                Cancelar
+              </Button>
+              <Button
+                disabled={!form.title.trim() || createButton.isPending || updateButton.isPending}
+                onClick={save}
+              >
+                Salvar
+              </Button>
+            </div>
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <Sheet open={previewOpen} onOpenChange={setPreviewOpen}>
+        <SheetContent side="bottom" className="max-h-[85vh] overflow-y-auto rounded-t-xl">
+          <SheetHeader className="text-left">
+            <SheetTitle>Prévia do botão</SheetTitle>
+          </SheetHeader>
+          <div className="mt-4 pb-6">
+            <ButtonEditorPreview model={previewModel} />
+          </div>
+        </SheetContent>
+      </Sheet>
     </SmartHubLayout>
   );
 }

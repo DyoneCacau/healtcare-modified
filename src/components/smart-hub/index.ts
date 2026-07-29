@@ -19,3 +19,6 @@ export { SmartHubDevicePreview } from './SmartHubDevicePreview';
 export { HubCaptureForm } from './HubCaptureForm';
 export { ColorField } from './ColorField';
 export { TemplateThumbnail } from './TemplateThumbnail';
+export { FieldHelpLabel, FieldHint, TipCallout, FormSection } from './FieldHelpLabel';
+export { ButtonEditorPreview } from './ButtonEditorPreview';
+export type { ButtonEditorPreviewModel } from './ButtonEditorPreview';
