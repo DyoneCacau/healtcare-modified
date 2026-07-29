@@ -37,13 +37,20 @@ import {
 import {
   SMART_HUB_BUTTON_TYPE_LABELS,
   SMART_HUB_VARIANT_LABELS,
+  SMART_HUB_CLICK_ACTION_LABELS,
   type SmartHubButton,
   type SmartHubButtonType,
   type SmartHubButtonVisualVariant,
+  type SmartHubClickAction,
+  type SmartHubButtonCaptureConfig,
 } from '@/types/smartHub';
+import { CRM_STAGES } from '@/types/crm';
+import { useClinicStaffOptions } from '@/hooks/useClinicStaffOptions';
+import { useSubscription } from '@/hooks/useSubscription';
 
 const BUTTON_TYPES = Object.keys(SMART_HUB_BUTTON_TYPE_LABELS) as SmartHubButtonType[];
 const VARIANT_KEYS = Object.keys(SMART_HUB_VARIANT_LABELS) as SmartHubButtonVisualVariant[];
+const CLICK_ACTIONS = Object.keys(SMART_HUB_CLICK_ACTION_LABELS) as SmartHubClickAction[];
 
 function storagePathFromPublicUrl(url: string | null | undefined): string | null {
   if (!url) return null;
@@ -65,6 +72,7 @@ const emptyForm = {
   url: '',
   whatsapp_message: '',
   visual_variant: 'simple' as SmartHubButtonVisualVariant,
+  click_action: 'auto' as SmartHubClickAction,
   icon: '',
   image: '',
   image_alt: '',
@@ -73,11 +81,18 @@ const emptyForm = {
   track_click: true,
   background_color: '',
   text_color: '',
+  capture_interest: '',
+  capture_stage: 'new' as string,
+  capture_owner: '',
+  capture_redirect_wa: false,
 };
 
 export default function SmartHubButtons() {
   const { clinicId } = useClinic();
   const { user } = useAuth();
+  const { hasFeature } = useSubscription();
+  const hasCrm = hasFeature('crm');
+  const { staff } = useClinicStaffOptions();
   const { hub, isLoading } = useSmartHub();
   const { buttons, isLoading: loadingButtons, createButton, updateButton, deleteButton } =
     useHubButtons(hub?.id);
@@ -97,6 +112,7 @@ export default function SmartHubButtons() {
 
   const openEdit = (btn: SmartHubButton) => {
     setEditing(btn);
+    const cap = (btn.capture_config || {}) as SmartHubButtonCaptureConfig;
     setForm({
       title: btn.title,
       subtitle: btn.subtitle || '',
@@ -104,6 +120,7 @@ export default function SmartHubButtons() {
       url: btn.url || '',
       whatsapp_message: btn.whatsapp_message || '',
       visual_variant: (btn.visual_variant as SmartHubButtonVisualVariant) || 'simple',
+      click_action: (btn.click_action as SmartHubClickAction) || 'auto',
       icon: btn.icon || '',
       image: btn.image || '',
       image_alt: btn.image_alt || '',
@@ -112,6 +129,10 @@ export default function SmartHubButtons() {
       track_click: btn.track_click,
       background_color: btn.background_color || '',
       text_color: btn.text_color || '',
+      capture_interest: cap.interest || '',
+      capture_stage: cap.initial_stage || 'new',
+      capture_owner: cap.owner_user_id || '',
+      capture_redirect_wa: Boolean(cap.redirect_whatsapp_after_submit),
     });
     setOpen(true);
   };
@@ -156,13 +177,31 @@ export default function SmartHubButtons() {
   const save = async () => {
     if (!validateForm()) return;
 
+    if (form.click_action === 'form' && !hasCrm) {
+      toast.error('O formulário de captação exige o módulo CRM no plano.');
+      return;
+    }
+
+    const capture_config: SmartHubButtonCaptureConfig = {
+      interest: form.capture_interest || null,
+      initial_stage: (form.capture_stage as SmartHubButtonCaptureConfig['initial_stage']) || 'new',
+      owner_user_id: form.capture_owner || null,
+      redirect_whatsapp_after_submit: form.capture_redirect_wa,
+      use_hub_form: true,
+    };
+
     const payload = {
       title: form.title.trim(),
       subtitle: form.subtitle || null,
       type: form.type,
       url: form.url || null,
-      whatsapp_message: form.type === 'whatsapp' ? form.whatsapp_message || null : null,
+      whatsapp_message:
+        form.type === 'whatsapp' || form.click_action === 'whatsapp'
+          ? form.whatsapp_message || null
+          : null,
       visual_variant: form.visual_variant,
+      click_action: form.click_action,
+      capture_config,
       icon: form.icon || null,
       image: form.image || null,
       image_alt: form.image_alt || null,
@@ -348,12 +387,107 @@ export default function SmartHubButtons() {
               </Select>
             </div>
             <div className="space-y-2">
+              <Label>Ação ao clicar</Label>
+              <Select
+                value={form.click_action}
+                onValueChange={(v) =>
+                  setForm((f) => ({ ...f, click_action: v as SmartHubClickAction }))
+                }
+              >
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {CLICK_ACTIONS.map((a) => (
+                    <SelectItem
+                      key={a}
+                      value={a}
+                      disabled={a === 'form' && !hasCrm}
+                    >
+                      {SMART_HUB_CLICK_ACTION_LABELS[a]}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              {form.click_action === 'whatsapp' && (
+                <p className="text-xs text-muted-foreground">
+                  O clique abre o WhatsApp e é registrado no Analytics. Lead não é criado
+                  automaticamente.
+                </p>
+              )}
+            </div>
+            {(form.click_action === 'form' || form.type === 'form') && hasCrm && (
+              <div className="space-y-3 rounded-md border p-3">
+                <p className="text-xs font-medium">Destino do formulário</p>
+                <div className="space-y-2">
+                  <Label>Serviço / interesse</Label>
+                  <Input
+                    value={form.capture_interest}
+                    onChange={(e) =>
+                      setForm((f) => ({ ...f, capture_interest: e.target.value }))
+                    }
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label>Coluna inicial</Label>
+                  <Select
+                    value={form.capture_stage}
+                    onValueChange={(v) => setForm((f) => ({ ...f, capture_stage: v }))}
+                  >
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {CRM_STAGES.map((s) => (
+                        <SelectItem key={s.id} value={s.id}>
+                          {s.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-2">
+                  <Label>Responsável</Label>
+                  <Select
+                    value={form.capture_owner || '__none__'}
+                    onValueChange={(v) =>
+                      setForm((f) => ({
+                        ...f,
+                        capture_owner: v === '__none__' ? '' : v,
+                      }))
+                    }
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Padrão do Hub" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="__none__">Padrão do Hub</SelectItem>
+                      {staff.map((s) => (
+                        <SelectItem key={s.id} value={s.id}>
+                          {s.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="flex items-center justify-between gap-2">
+                  <Label>WhatsApp após envio</Label>
+                  <Switch
+                    checked={form.capture_redirect_wa}
+                    onCheckedChange={(v) =>
+                      setForm((f) => ({ ...f, capture_redirect_wa: v }))
+                    }
+                  />
+                </div>
+              </div>
+            )}
+            <div className="space-y-2">
               <Label>URL / destino</Label>
               <Input
                 value={form.url}
                 onChange={(e) => setForm((f) => ({ ...f, url: e.target.value }))}
                 placeholder={
-                  form.type === 'whatsapp'
+                  form.type === 'whatsapp' || form.click_action === 'whatsapp'
                     ? '5511999999999'
                     : form.type === 'email'
                       ? 'contato@clinica.com'
@@ -361,7 +495,7 @@ export default function SmartHubButtons() {
                 }
               />
             </div>
-            {form.type === 'whatsapp' && (
+            {(form.type === 'whatsapp' || form.click_action === 'whatsapp') && (
               <div className="space-y-2">
                 <Label>Mensagem pré-preenchida do WhatsApp</Label>
                 <Input

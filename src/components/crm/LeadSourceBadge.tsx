@@ -61,6 +61,7 @@ export function LeadSourceIcon({
   if (source === 'facebook') return <FacebookGlyph className={className} />;
   if (source === 'referral') return <Share2 className={className} />;
   if (source === 'paid_traffic') return <Megaphone className={className} />;
+  if (source === 'smart_hub') return <Megaphone className={className} />;
   return <HelpCircle className={className} />;
 }
 
@@ -72,6 +73,7 @@ const SOURCE_STYLES: Record<LeadSource, string> = {
   referral: 'border-amber-300/50 bg-amber-50 text-amber-800',
   paid_traffic: 'border-violet-300/50 bg-violet-50 text-violet-800',
   other: 'border-muted-foreground/20 bg-muted text-muted-foreground',
+  smart_hub: 'border-teal-300/50 bg-teal-50 text-teal-800',
 };
 
 export function LeadSourceBadge({

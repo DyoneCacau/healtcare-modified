@@ -17,12 +17,14 @@ import type {
 } from '@/types/smartHub';
 import { mergeVisualConfig } from '@/services/smartHub/imageUtils';
 import { buildDestinationUrl } from '@/services/smartHub/buttonDestinations';
+import { resolveClickAction } from '@/services/smartHub/captureDefaults';
 import { cn } from '@/lib/utils';
 
 interface HubPublicViewProps {
   payload: PublicSmartHubPayload;
   preview?: boolean;
   onButtonClick?: (button: SmartHubButton) => void;
+  onOpenCaptureForm?: (button?: SmartHubButton | null) => void;
   className?: string;
 }
 
@@ -63,6 +65,7 @@ export const HubPublicView = memo(function HubPublicView({
   payload,
   preview = false,
   onButtonClick,
+  onOpenCaptureForm,
   className,
 }: HubPublicViewProps) {
   const hub = payload.hub;
@@ -157,6 +160,13 @@ export const HubPublicView = memo(function HubPublicView({
   })();
 
   const handleClick = (button: SmartHubButton) => {
+    const action = resolveClickAction(button.click_action, button.type);
+    if (action === 'form') {
+      onOpenCaptureForm?.(button);
+      return;
+    }
+    if (action === 'info') return;
+
     if (onButtonClick) {
       onButtonClick(button);
       return;
@@ -289,14 +299,24 @@ export const HubPublicView = memo(function HubPublicView({
 
   return (
     <div
-      className={cn('min-h-screen motion-safe:scroll-smooth', className)}
+      className={cn(
+        'relative',
+        preview ? 'min-h-full' : 'min-h-screen',
+        'motion-safe:scroll-smooth overflow-x-hidden',
+        className
+      )}
       style={{
         ...bgStyle,
         color: textColor,
         fontFamily: theme?.font_family || hub.font_family,
       }}
     >
-      <div className="min-h-screen bg-background/40 backdrop-blur-[1px] supports-[padding:max(0px)]:pb-[max(1rem,env(safe-area-inset-bottom))] px-0 overflow-x-hidden">
+      <div
+        className={cn(
+          'bg-background/40 backdrop-blur-[1px] supports-[padding:max(0px)]:pb-[max(1rem,env(safe-area-inset-bottom))]',
+          preview ? 'min-h-full' : 'min-h-screen'
+        )}
+      >
         {preview && (
           <div className="sticky top-0 z-20 border-b bg-amber-50 px-4 py-2 text-center text-xs font-medium text-amber-900">
             Prévia — as alterações só vão para a página pública após salvar
@@ -327,7 +347,12 @@ export const HubPublicView = memo(function HubPublicView({
               onButtonClick(whatsappPrimary);
             }
           }}
-          className="fixed bottom-[max(1rem,env(safe-area-inset-bottom))] right-4 z-30 flex h-14 w-14 items-center justify-center rounded-full bg-emerald-600 text-white shadow-lg transition hover:bg-emerald-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400"
+          className={cn(
+            'z-30 flex h-14 w-14 items-center justify-center rounded-full bg-emerald-600 text-white shadow-lg transition hover:bg-emerald-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400',
+            preview
+              ? 'absolute bottom-4 right-4'
+              : 'fixed bottom-[max(1rem,env(safe-area-inset-bottom))] right-4'
+          )}
         >
           <MessageCircle className="h-6 w-6" />
         </a>

@@ -78,7 +78,18 @@ export default function SmartHubAnalytics() {
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
             <DashboardStatsCard label="Visualizações" value={metrics?.views ?? 0} />
             <DashboardStatsCard label="Cliques" value={metrics?.clicks ?? 0} />
+            <DashboardStatsCard label="WhatsApp" value={metrics?.whatsappClicks ?? 0} />
+            <DashboardStatsCard label="Formulários enviados" value={metrics?.formsSubmitted ?? 0} />
+            <DashboardStatsCard label="Leads criados" value={metrics?.leads ?? 0} />
+            <DashboardStatsCard
+              label="Leads atualizados"
+              value={metrics?.leadsUpdated ?? 0}
+            />
             <DashboardStatsCard label="CTR" value={`${metrics?.ctr ?? 0}%`} />
+            <DashboardStatsCard
+              label="Conversão"
+              value={`${metrics?.conversionRate ?? 0}%`}
+            />
             <DashboardStatsCard label="Mais clicado" value={metrics?.topButton || '—'} />
           </div>
 

@@ -44,6 +44,10 @@ function normalizeHub(raw: SmartHub | null): SmartHub | null {
     profile_url: raw.profile_url ?? null,
     style_preset: raw.style_preset || 'clean',
     visual_config: visualConfig,
+    capture_config:
+      raw.capture_config && typeof raw.capture_config === 'object' && !Array.isArray(raw.capture_config)
+        ? (raw.capture_config as SmartHub['capture_config'])
+        : {},
   };
 }
 
@@ -276,6 +280,10 @@ function normalizePublicPayload(raw: unknown): PublicSmartHubPayload {
         hub?.visual_config && typeof hub.visual_config === 'object' && !Array.isArray(hub.visual_config)
           ? hub.visual_config
           : {},
+      capture_config:
+        hub?.capture_config && typeof hub.capture_config === 'object' && !Array.isArray(hub.capture_config)
+          ? hub.capture_config
+          : {},
     },
     buttons: Array.isArray(data.buttons)
       ? data.buttons.map((b) => ({
@@ -284,6 +292,11 @@ function normalizePublicPayload(raw: unknown): PublicSmartHubPayload {
           visual_variant: b.visual_variant || 'simple',
           image_position: b.image_position || 'left',
           whatsapp_message: b.whatsapp_message ?? null,
+          click_action: b.click_action || 'auto',
+          capture_config:
+            b.capture_config && typeof b.capture_config === 'object' && !Array.isArray(b.capture_config)
+              ? b.capture_config
+              : {},
         }))
       : [],
     assets: Array.isArray(data.assets) ? data.assets : [],

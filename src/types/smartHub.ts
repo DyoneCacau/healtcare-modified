@@ -32,6 +32,75 @@ export type SmartHubButtonVisualVariant =
   | 'list_item'
   | 'grid';
 
+/** Ação ao clicar no botão (ortogonal ao type visual). */
+export type SmartHubClickAction =
+  | 'auto'
+  | 'form'
+  | 'whatsapp'
+  | 'link'
+  | 'phone'
+  | 'email'
+  | 'map'
+  | 'info';
+
+export type SmartHubCaptureMode = 'form_crm' | 'whatsapp_direct';
+
+export type SmartHubFormFieldKey =
+  | 'name'
+  | 'whatsapp'
+  | 'email'
+  | 'interest'
+  | 'message'
+  | 'preferred_time'
+  | 'preferred_date'
+  | 'privacy';
+
+export interface SmartHubFormFieldConfig {
+  key: SmartHubFormFieldKey;
+  visible: boolean;
+  required: boolean;
+  label: string;
+  placeholder?: string;
+  order: number;
+}
+
+export interface SmartHubCaptureConfig {
+  mode?: SmartHubCaptureMode;
+  /** Etapa inicial do Kanban (stage do CRM) */
+  initial_stage?: 'new' | 'contact' | 'scheduled' | 'won' | 'lost';
+  default_owner_user_id?: string | null;
+  form_title?: string;
+  form_description?: string;
+  submit_label?: string;
+  success_message?: string;
+  redirect_url?: string | null;
+  redirect_whatsapp_after_submit?: boolean;
+  whatsapp_phone?: string | null;
+  whatsapp_message?: string | null;
+  whatsapp_followup_message?: string | null;
+  require_privacy_accept?: boolean;
+  privacy_text?: string;
+  privacy_url?: string | null;
+  privacy_version?: string;
+  fields?: SmartHubFormFieldConfig[];
+  dedupe_mode?: 'update' | 'activity' | 'create' | 'block';
+  manual_copy_message?: string | null;
+}
+
+export interface SmartHubButtonCaptureConfig {
+  use_hub_form?: boolean;
+  initial_stage?: 'new' | 'contact' | 'scheduled' | 'won' | 'lost';
+  owner_user_id?: string | null;
+  interest?: string | null;
+  redirect_whatsapp_after_submit?: boolean;
+  redirect_url?: string | null;
+  whatsapp_phone?: string | null;
+  whatsapp_message?: string | null;
+  include_hub_name?: boolean;
+  include_service_name?: boolean;
+  open_in_new_tab?: boolean;
+}
+
 export type SmartHubStylePreset =
   | 'clean'
   | 'elegant'
@@ -127,6 +196,7 @@ export interface SmartHub {
   layout_blocks: SmartHubLayoutBlock[];
   style_preset: SmartHubStylePreset | string;
   visual_config: SmartHubVisualConfig;
+  capture_config?: SmartHubCaptureConfig;
   created_at: string;
   updated_at: string;
   created_by: string | null;
@@ -164,6 +234,8 @@ export interface SmartHubButton {
   visual_variant: SmartHubButtonVisualVariant | string;
   image_position: 'left' | 'top' | 'right' | 'background' | string;
   whatsapp_message: string | null;
+  click_action?: SmartHubClickAction | string;
+  capture_config?: SmartHubButtonCaptureConfig;
   background_color: string | null;
   text_color: string | null;
   visible: boolean;
@@ -326,6 +398,12 @@ export interface SmartHubDashboardMetrics {
   mainDevice: string | null;
   mainCampaign: string | null;
   lastVisitAt: string | null;
+  whatsappClicks?: number;
+  formsOpened?: number;
+  formsSubmitted?: number;
+  leadsUpdated?: number;
+  submitRate?: number;
+  conversionRate?: number;
 }
 
 export interface ListQueryParams {
@@ -398,6 +476,22 @@ export const SMART_HUB_VARIANT_LABELS: Record<SmartHubButtonVisualVariant, strin
   featured_card: 'Card destacado',
   list_item: 'Item de lista',
   grid: 'Grid',
+};
+
+export const SMART_HUB_CLICK_ACTION_LABELS: Record<SmartHubClickAction, string> = {
+  auto: 'Automático (conforme o tipo)',
+  form: 'Abrir formulário de captação',
+  whatsapp: 'Abrir WhatsApp',
+  link: 'Abrir link externo',
+  phone: 'Fazer ligação',
+  email: 'Enviar e-mail',
+  map: 'Abrir localização',
+  info: 'Exibir informação',
+};
+
+export const SMART_HUB_CAPTURE_MODE_LABELS: Record<SmartHubCaptureMode, string> = {
+  form_crm: 'Formulário integrado ao CRM',
+  whatsapp_direct: 'WhatsApp direto',
 };
 
 export const SMART_HUB_STYLE_PRESET_LABELS: Record<SmartHubStylePreset, string> = {

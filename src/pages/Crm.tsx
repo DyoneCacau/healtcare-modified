@@ -6,6 +6,7 @@ import {
   AlertCircle,
   CalendarPlus,
   KanbanSquare,
+  MessageCircle,
   Phone,
   Plus,
   Search,
@@ -37,11 +38,13 @@ import {
 import { CurrencyInput } from '@/components/ui/currency-input';
 import { DateInput } from '@/components/ui/date-input';
 import { LeadSourceBadge, LeadSourceLabel } from '@/components/crm/LeadSourceBadge';
+import { CrmLeadQuickActions } from '@/components/crm/CrmLeadQuickActions';
 import { usePermissions } from '@/hooks/usePermissions';
 import { useAuth } from '@/hooks/useAuth';
 import { useCrmLeads, useCrmLeadMutations } from '@/hooks/useCrmLeads';
 import { useClinicStaffOptions } from '@/hooks/useClinicStaffOptions';
 import { usePatientMutations } from '@/hooks/usePatients';
+import { useClinic } from '@/hooks/useClinic';
 import { formatCurrencyBRL } from '@/lib/currency';
 import { leadSourceLabels, type LeadSource } from '@/types/agenda';
 import {
@@ -86,6 +89,7 @@ export default function Crm() {
   const { createLead, updateLead, moveLeadStage, deleteLead } = useCrmLeadMutations();
   const { createPatient } = usePatientMutations();
   const { staff } = useClinicStaffOptions();
+  const { clinic } = useClinic();
 
   const canView = can('crm', 'can_view');
   const canCreate = can('crm', 'can_create');
@@ -101,6 +105,7 @@ export default function Crm() {
   const [dragLeadId, setDragLeadId] = useState<string | null>(null);
   const [dragOverStage, setDragOverStage] = useState<CrmLeadStage | null>(null);
   const [formError, setFormError] = useState('');
+  const [whatsappLeadMode, setWhatsappLeadMode] = useState(false);
 
   const today = startOfDay(new Date());
 
@@ -137,9 +142,25 @@ export default function Crm() {
   const openCreate = () => {
     setEditing(null);
     setFormError('');
+    setWhatsappLeadMode(false);
     setForm({
       ...emptyForm,
       owner_user_id: user?.id || '',
+    });
+    setNewAllergy('');
+    setDialogOpen(true);
+  };
+
+  const openWhatsAppLead = () => {
+    setEditing(null);
+    setFormError('');
+    setWhatsappLeadMode(true);
+    setForm({
+      ...emptyForm,
+      lead_source: 'smart_hub',
+      stage: 'new',
+      owner_user_id: user?.id || '',
+      notes: 'Cadastro manual a partir de atendimento WhatsApp (Smart Hub).',
     });
     setNewAllergy('');
     setDialogOpen(true);
@@ -160,6 +181,7 @@ export default function Crm() {
   const openEdit = (lead: CrmLead) => {
     setEditing(lead);
     setFormError('');
+    setWhatsappLeadMode(false);
     setForm({
       name: lead.name,
       cpf: lead.cpf ? formatCPF(lead.cpf) : '',
@@ -306,10 +328,16 @@ export default function Crm() {
             </p>
           </div>
           {canCreate && (
-            <Button onClick={openCreate}>
-              <Plus className="mr-2 h-4 w-4" />
-              Novo lead
-            </Button>
+            <div className="flex flex-wrap gap-2">
+              <Button onClick={openCreate}>
+                <Plus className="mr-2 h-4 w-4" />
+                Novo lead
+              </Button>
+              <Button variant="outline" onClick={openWhatsAppLead}>
+                <MessageCircle className="mr-2 h-4 w-4 text-emerald-600" />
+                Adicionar lead do WhatsApp
+              </Button>
+            </div>
           )}
         </div>
 
@@ -450,6 +478,19 @@ export default function Crm() {
                             </p>
                           )}
                         </div>
+                        <div className="mt-2 flex items-center justify-between gap-1">
+                          <CrmLeadQuickActions
+                            lead={lead}
+                            clinicName={clinic?.name || 'clínica'}
+                            userName={user?.user_metadata?.name || user?.email || 'equipe'}
+                            canEdit={canEdit}
+                            afterContactStage="contact"
+                            onEdit={() => openEdit(lead)}
+                            onMoved={(stage) =>
+                              moveLeadStage.mutate({ id: lead.id, stage })
+                            }
+                          />
+                        </div>
                         {canEdit && (
                           <div className="mt-2 space-y-2" onClick={(e) => e.stopPropagation()}>
                             <Select
@@ -496,7 +537,13 @@ export default function Crm() {
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
         <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle>{editing ? 'Editar lead' : 'Novo lead'}</DialogTitle>
+            <DialogTitle>
+              {editing
+                ? 'Editar lead'
+                : whatsappLeadMode
+                  ? 'Adicionar lead do WhatsApp'
+                  : 'Novo lead'}
+            </DialogTitle>
           </DialogHeader>
           <div className="space-y-4 py-1">
             <div className="space-y-2">

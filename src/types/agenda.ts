@@ -7,7 +7,7 @@ export interface Professional {
   cro: string; // Only CRO for dentistry
 }
 
-export type LeadSource = 'instagram' | 'whatsapp' | 'facebook' | 'referral' | 'paid_traffic' | 'other';
+export type LeadSource = 'instagram' | 'whatsapp' | 'facebook' | 'referral' | 'paid_traffic' | 'other' | 'smart_hub';
 
 export const leadSourceLabels: Record<LeadSource, string> = {
   instagram: 'Instagram',
@@ -16,6 +16,7 @@ export const leadSourceLabels: Record<LeadSource, string> = {
   referral: 'Indicação',
   paid_traffic: 'Tráfego Pago',
   other: 'Outros',
+  smart_hub: 'Smart Hub',
 };
 
 export interface AgendaAppointment {

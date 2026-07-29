@@ -11,3 +11,5 @@ export {
 export * from './slugUtils';
 export * from './imageUtils';
 export * from './buttonDestinations';
+export * from './captureDefaults';
+export { CaptureService } from './CaptureService';

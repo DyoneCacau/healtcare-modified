@@ -66,6 +66,7 @@ const leadSourceIcons: Record<LeadSource, typeof Instagram> = {
   referral: Share2,
   paid_traffic: Megaphone,
   other: HelpCircle,
+  smart_hub: Megaphone,
 };
 
 const SOCIAL_SOURCES: LeadSource[] = ['instagram', 'whatsapp', 'facebook'];

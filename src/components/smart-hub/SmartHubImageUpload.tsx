@@ -32,8 +32,7 @@ export function SmartHubImageUpload({
   const [error, setError] = useState<string | null>(null);
 
   const meta = SMART_HUB_IMAGE_LIMITS[kind];
-  const aspectClass =
-    kind === 'banner' || kind === 'background' ? 'aspect-[16/9]' : 'aspect-square';
+  const isBanner = kind === 'banner' || kind === 'background';
 
   const runUpload = async (file: File) => {
     setError(null);
@@ -78,16 +77,24 @@ export function SmartHubImageUpload({
     if (file) void runUpload(file);
   };
 
+  const openPicker = () => inputRef.current?.click();
+
   return (
-    <div className={cn('space-y-2', className)}>
+    <div
+      className={cn(
+        'space-y-2',
+        isBanner ? 'w-full max-w-xl' : 'w-full max-w-[240px]',
+        className
+      )}
+    >
       <div
         role="button"
         tabIndex={0}
-        aria-label={`Enviar ${meta.label}`}
+        aria-label={currentUrl ? `Visualizar ${meta.label}` : `Enviar ${meta.label}`}
         onKeyDown={(e) => {
           if (e.key === 'Enter' || e.key === ' ') {
             e.preventDefault();
-            inputRef.current?.click();
+            openPicker();
           }
         }}
         onDragOver={(e) => {
@@ -96,66 +103,99 @@ export function SmartHubImageUpload({
         }}
         onDragLeave={() => setDragging(false)}
         onDrop={onDrop}
+        onClick={() => {
+          if (!currentUrl && !uploading && !disabled) openPicker();
+        }}
         className={cn(
-          'relative overflow-hidden rounded-xl border border-dashed bg-muted/30 transition',
-          aspectClass,
+          'relative overflow-hidden rounded-xl border bg-muted/40 transition',
+          isBanner ? 'aspect-[16/9] w-full' : 'aspect-square w-full',
+          !currentUrl && 'border-dashed',
           dragging && 'border-primary bg-primary/5',
           (disabled || uploading) && 'pointer-events-none opacity-70'
         )}
       >
         {currentUrl ? (
-          <img
-            src={currentUrl}
-            alt={meta.label}
-            className="h-full w-full object-cover"
-          />
+          <>
+            <img
+              src={currentUrl}
+              alt={meta.label}
+              className={cn(
+                'h-full w-full',
+                isBanner ? 'object-cover' : 'object-cover'
+              )}
+            />
+            <div className="absolute inset-x-0 bottom-0 flex flex-wrap gap-1.5 bg-gradient-to-t from-black/70 via-black/40 to-transparent p-2 pt-8">
+              <Button
+                type="button"
+                size="sm"
+                variant="secondary"
+                className="h-8 bg-white/95 text-foreground hover:bg-white"
+                disabled={disabled || uploading}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  openPicker();
+                }}
+              >
+                {uploading ? (
+                  <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
+                ) : (
+                  <Replace className="mr-1.5 h-3.5 w-3.5" />
+                )}
+                Substituir
+              </Button>
+              {onRemove && (
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="secondary"
+                  className="h-8 bg-white/95 text-foreground hover:bg-white"
+                  disabled={disabled || uploading}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    void onRemove();
+                  }}
+                >
+                  <Trash2 className="mr-1.5 h-3.5 w-3.5" />
+                  Remover
+                </Button>
+              )}
+            </div>
+          </>
         ) : (
-          <div className="flex h-full flex-col items-center justify-center gap-2 px-4 text-center text-sm text-muted-foreground">
-            <ImagePlus className="h-6 w-6" />
-            <span>Arraste uma imagem ou toque para selecionar</span>
-            <span className="text-xs">
+          <div className="flex h-full flex-col items-center justify-center gap-1.5 px-3 text-center text-xs text-muted-foreground sm:text-sm">
+            <ImagePlus className="h-5 w-5 sm:h-6 sm:w-6" />
+            <span className="font-medium text-foreground/80">Enviar {meta.label.toLowerCase()}</span>
+            <span className="leading-snug">
               {meta.aspectHint} · até {Math.round(meta.maxBytes / (1024 * 1024))} MB
             </span>
+            <span className="hidden text-[11px] sm:inline">Arraste ou toque para selecionar</span>
           </div>
         )}
 
         {uploading && (
-          <div className="absolute inset-x-0 bottom-0 bg-background/80 p-2">
+          <div className="absolute inset-x-0 bottom-0 bg-background/85 p-2">
             <Progress value={progress} className="h-1.5" />
           </div>
         )}
       </div>
 
-      <div className="flex flex-wrap gap-2">
+      {!currentUrl && (
         <Button
           type="button"
           size="sm"
           variant="secondary"
+          className="w-full"
           disabled={disabled || uploading}
-          onClick={() => inputRef.current?.click()}
+          onClick={openPicker}
         >
           {uploading ? (
             <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-          ) : currentUrl ? (
-            <Replace className="mr-2 h-4 w-4" />
           ) : (
             <ImagePlus className="mr-2 h-4 w-4" />
           )}
-          {currentUrl ? 'Substituir' : `Enviar ${meta.label.toLowerCase()}`}
+          Selecionar arquivo
         </Button>
-        {currentUrl && onRemove && (
-          <Button
-            type="button"
-            size="sm"
-            variant="outline"
-            disabled={disabled || uploading}
-            onClick={() => void onRemove()}
-          >
-            <Trash2 className="mr-2 h-4 w-4" />
-            Remover
-          </Button>
-        )}
-      </div>
+      )}
 
       {error && <p className="text-sm text-destructive">{error}</p>}
 

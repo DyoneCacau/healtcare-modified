@@ -16,6 +16,7 @@ export const LEAD_SOURCE_VALUES = [
   'referral',
   'paid_traffic',
   'other',
+  'smart_hub',
 ] as const;
 
 export type LeadSourceValue = (typeof LEAD_SOURCE_VALUES)[number];
@@ -85,6 +86,7 @@ export const LEAD_CAPTURE_PROVIDERS = [
   'n8n',
   'make',
   'zapier',
+  'smart_hub',
 ] as const;
 
 export type LeadCaptureProvider = (typeof LEAD_CAPTURE_PROVIDERS)[number];
@@ -105,6 +107,7 @@ export const PROVIDER_DEFAULT_LEAD_SOURCE: Record<string, LeadSourceValue> = {
   n8n: 'other',
   make: 'other',
   zapier: 'other',
+  smart_hub: 'smart_hub',
 };
 
 const NAME_KEYS = [

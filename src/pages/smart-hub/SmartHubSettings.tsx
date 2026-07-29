@@ -1,10 +1,12 @@
 import { useEffect, useMemo, useState } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import { Eye, Monitor, Smartphone, Tablet } from 'lucide-react';
 import { toast } from 'sonner';
 import {
   SmartHubLayout,
   PublishWorkflowCard,
   SmartHubImageUpload,
+  SmartHubDevicePreview,
   ColorField,
   HubPublicView,
 } from '@/components/smart-hub';
@@ -33,20 +35,27 @@ import {
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
 import {
   AssetService,
+  HubService,
   STYLE_PRESETS,
   mergeVisualConfig,
   generateSlugFromTitle,
+  defaultCaptureConfig,
+  mergeCaptureConfig,
 } from '@/services/smartHub';
 import {
   SMART_HUB_STYLE_PRESET_LABELS,
+  SMART_HUB_CAPTURE_MODE_LABELS,
   type PublicSmartHubPayload,
   type SmartHubAssetKind,
+  type SmartHubCaptureConfig,
+  type SmartHubCaptureMode,
   type SmartHubStylePreset,
   type SmartHubVisualConfig,
 } from '@/types/smartHub';
-
-type PreviewDevice = 'mobile' | 'tablet' | 'desktop';
-
+import type { SmartHubPreviewDevice } from '@/components/smart-hub/SmartHubDevicePreview';
+import { useSubscription } from '@/hooks/useSubscription';
+import { useClinicStaffOptions } from '@/hooks/useClinicStaffOptions';
+import { CRM_STAGES } from '@/types/crm';
 const STYLE_PRESET_KEYS = Object.keys(SMART_HUB_STYLE_PRESET_LABELS) as SmartHubStylePreset[];
 
 function storagePathFromPublicUrl(url: string | null | undefined): string | null {
@@ -62,20 +71,13 @@ function storagePathFromPublicUrl(url: string | null | undefined): string | null
   }
 }
 
-function deviceFrameClass(device: PreviewDevice): string {
-  switch (device) {
-    case 'mobile':
-      return 'mx-auto w-full max-w-[390px]';
-    case 'tablet':
-      return 'mx-auto w-full max-w-[768px]';
-    default:
-      return 'w-full max-w-2xl mx-auto';
-  }
-}
-
 export default function SmartHubSettings() {
+  const queryClient = useQueryClient();
   const { clinicId } = useClinic();
   const { user } = useAuth();
+  const { hasFeature } = useSubscription();
+  const { staff } = useClinicStaffOptions();
+  const hasCrm = hasFeature('crm');
   const {
     hub,
     theme,
@@ -88,6 +90,7 @@ export default function SmartHubSettings() {
     publishHub,
     pauseHub,
     revertToDraft,
+    refetch,
   } = useSmartHub();
   const { buttons } = useHubButtons(hub?.id);
 
@@ -109,8 +112,12 @@ export default function SmartHubSettings() {
   const [contactEmail, setContactEmail] = useState('');
   const [contactAddress, setContactAddress] = useState('');
   const [mapEmbedUrl, setMapEmbedUrl] = useState('');
-  const [previewDevice, setPreviewDevice] = useState<PreviewDevice>('mobile');
+  const [captureConfig, setCaptureConfig] = useState<SmartHubCaptureConfig>(
+    defaultCaptureConfig()
+  );
+  const [previewDevice, setPreviewDevice] = useState<SmartHubPreviewDevice>('mobile');
   const [mobilePreviewOpen, setMobilePreviewOpen] = useState(false);
+  const [imageBusy, setImageBusy] = useState(false);
 
   useEffect(() => {
     if (!hub) return;
@@ -133,6 +140,7 @@ export default function SmartHubSettings() {
     setContactEmail(hub.contact_email || '');
     setContactAddress(hub.contact_address || '');
     setMapEmbedUrl(hub.map_embed_url || '');
+    setCaptureConfig(mergeCaptureConfig(hub.capture_config));
   }, [hub]);
 
   const previewPayload = useMemo((): PublicSmartHubPayload | null => {
@@ -161,6 +169,7 @@ export default function SmartHubSettings() {
         map_embed_url: mapEmbedUrl || null,
         seo_title: seoTitle || null,
         seo_description: seoDescription || null,
+        capture_config: captureConfig,
       },
       theme: theme
         ? {
@@ -198,6 +207,7 @@ export default function SmartHubSettings() {
     mapEmbedUrl,
     seoTitle,
     seoDescription,
+    captureConfig,
   ]);
 
   const patchVisual = (patch: Partial<SmartHubVisualConfig>) => {
@@ -225,6 +235,34 @@ export default function SmartHubSettings() {
     toast.success('Cores do template restauradas na prévia.');
   };
 
+  const refreshHubQueries = async () => {
+    if (clinicId) {
+      await queryClient.invalidateQueries({ queryKey: ['smart-hub', clinicId] });
+      await queryClient.invalidateQueries({ queryKey: ['smart-hub-preview', hub?.id] });
+      await queryClient.invalidateQueries({ queryKey: ['public-smart-hub'] });
+    }
+    await refetch();
+  };
+
+  const persistImageField = async (
+    kind: Extract<SmartHubAssetKind, 'logo' | 'banner' | 'profile'>,
+    url: string | null
+  ) => {
+    if (!clinicId || !hub?.id) throw new Error('Hub não encontrado.');
+    const patch =
+      kind === 'logo'
+        ? { logo_url: url }
+        : kind === 'banner'
+          ? { banner_url: url }
+          : { profile_url: url };
+
+    await HubService.update(hub.id, clinicId, patch, user?.id);
+    if (kind === 'logo') setLogoUrl(url || '');
+    if (kind === 'banner') setBannerUrl(url || '');
+    if (kind === 'profile') setProfileUrl(url || '');
+    await refreshHubQueries();
+  };
+
   const handleImageUpload = async (
     kind: Extract<SmartHubAssetKind, 'logo' | 'banner' | 'profile'>,
     file: File
@@ -233,47 +271,57 @@ export default function SmartHubSettings() {
     const currentUrl =
       kind === 'logo' ? logoUrl : kind === 'banner' ? bannerUrl : profileUrl;
 
-    const asset = await AssetService.upload(clinicId, hub.id, file, {
-      userId: user?.id,
-      kind,
-      previousStoragePath: storagePathFromPublicUrl(currentUrl),
-    });
+    setImageBusy(true);
+    try {
+      const asset = await AssetService.upload(clinicId, hub.id, file, {
+        userId: user?.id,
+        kind,
+        previousStoragePath: storagePathFromPublicUrl(currentUrl),
+      });
 
-    const url = asset.public_url || '';
-    if (kind === 'logo') {
-      setLogoUrl(url);
-      await updateHub.mutateAsync({ logo_url: url || null });
-    } else if (kind === 'banner') {
-      setBannerUrl(url);
-      await updateHub.mutateAsync({ banner_url: url || null });
-    } else {
-      setProfileUrl(url);
-      await updateHub.mutateAsync({ profile_url: url || null });
+      const url = asset.public_url || '';
+      await persistImageField(kind, url || null);
+      toast.success(
+        kind === 'logo'
+          ? 'Logo atualizada.'
+          : kind === 'banner'
+            ? 'Banner atualizado.'
+            : 'Foto de perfil atualizada.'
+      );
+    } finally {
+      setImageBusy(false);
     }
-    toast.success('Imagem enviada com sucesso.');
   };
 
   const handleImageRemove = async (
     kind: Extract<SmartHubAssetKind, 'logo' | 'banner' | 'profile'>
   ) => {
-    if (kind === 'logo') {
-      setLogoUrl('');
-      await updateHub.mutateAsync({ logo_url: null });
-    } else if (kind === 'banner') {
-      setBannerUrl('');
-      await updateHub.mutateAsync({ banner_url: null });
-    } else {
-      setProfileUrl('');
-      await updateHub.mutateAsync({ profile_url: null });
+    setImageBusy(true);
+    try {
+      await persistImageField(kind, null);
+      toast.success(
+        kind === 'logo'
+          ? 'Logo removida.'
+          : kind === 'banner'
+            ? 'Banner removido.'
+            : 'Foto de perfil removida.'
+      );
+    } catch (err) {
+      toast.error(
+        err instanceof Error ? err.message : 'Não foi possível remover a imagem.'
+      );
+    } finally {
+      setImageBusy(false);
     }
   };
 
-  const saveSettings = () => {
-    updateHub.mutate({
-      title,
+  const saveSettings = async () => {
+    // Nome público e slug são enviados em campos separados — nunca sobrescrever um pelo outro.
+    await updateHub.mutateAsync({
+      title: title.trim(),
       subtitle: subtitle || null,
       description: description || null,
-      slug,
+      slug: slug.trim(),
       seo_title: seoTitle || null,
       seo_description: seoDescription || null,
       logo_url: logoUrl || null,
@@ -288,16 +336,47 @@ export default function SmartHubSettings() {
       contact_email: contactEmail || null,
       contact_address: contactAddress || null,
       map_embed_url: mapEmbedUrl || null,
+      capture_config: captureConfig,
     });
+    await refreshHubQueries();
   };
 
-  const previewPane = previewPayload ? (
-    <div className="overflow-hidden rounded-xl border bg-background shadow-sm">
-      <div className={deviceFrameClass(previewDevice)}>
-        <HubPublicView payload={previewPayload} preview />
-      </div>
-    </div>
+  const previewBody = previewPayload ? (
+    <SmartHubDevicePreview device={previewDevice}>
+      <HubPublicView payload={previewPayload} preview className="min-h-0" />
+    </SmartHubDevicePreview>
   ) : null;
+
+  const previewControls = (
+    <div className="mb-3 space-y-2">
+      <div className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900">
+        As alterações da prévia só serão publicadas após salvar.
+      </div>
+      <ToggleGroup
+        type="single"
+        value={previewDevice}
+        onValueChange={(v) => {
+          if (v) setPreviewDevice(v as SmartHubPreviewDevice);
+        }}
+        variant="outline"
+        size="sm"
+        className="justify-start"
+      >
+        <ToggleGroupItem value="mobile" aria-label="Prévia celular">
+          <Smartphone className="mr-1.5 h-3.5 w-3.5" />
+          Celular
+        </ToggleGroupItem>
+        <ToggleGroupItem value="tablet" aria-label="Prévia tablet">
+          <Tablet className="mr-1.5 h-3.5 w-3.5" />
+          Tablet
+        </ToggleGroupItem>
+        <ToggleGroupItem value="desktop" aria-label="Prévia desktop">
+          <Monitor className="mr-1.5 h-3.5 w-3.5" />
+          Desktop
+        </ToggleGroupItem>
+      </ToggleGroup>
+    </div>
+  );
 
   const formSection = hub && clinicId ? (
     <div className="space-y-6">
@@ -313,7 +392,7 @@ export default function SmartHubSettings() {
         onRevertDraft={() => revertToDraft.mutate()}
       />
 
-      <div className="space-y-6 rounded-lg border bg-card p-6">
+      <div className="space-y-6 rounded-lg border bg-card p-4 sm:p-6">
         <div>
           <h3 className="text-sm font-semibold">Identidade</h3>
           <p className="text-xs text-muted-foreground">
@@ -323,9 +402,14 @@ export default function SmartHubSettings() {
 
         <div className="space-y-2">
           <Label htmlFor="title">Nome público da clínica</Label>
-          <Input id="title" value={title} onChange={(e) => setTitle(e.target.value)} />
+          <Input
+            id="title"
+            value={title}
+            onChange={(e) => setTitle(e.target.value)}
+            placeholder="Clínica Sorriso"
+          />
           <p className="text-xs text-muted-foreground">
-            Nome exibido na página pública. Independente do slug da URL.
+            Nome legível exibido no topo da página. Ex.: Clínica Sorriso — não é o endereço da URL.
           </p>
         </div>
         <div className="space-y-2">
@@ -350,6 +434,7 @@ export default function SmartHubSettings() {
               value={slug}
               onChange={(e) => setSlug(e.target.value)}
               className="min-w-[180px] flex-1"
+              placeholder="clinica-sorriso"
             />
             <Button
               type="button"
@@ -372,46 +457,56 @@ export default function SmartHubSettings() {
             </Button>
           </div>
           <p className="text-xs text-muted-foreground">
-            Apenas o caminho da URL (letras minúsculas, números e hífens). Não altera o nome público.
+            Apenas o caminho da URL (ex.: clinica-sorriso). Editar o slug não altera o nome público.
           </p>
           {publicUrl && (
             <p className="break-all text-xs text-muted-foreground">{publicUrl}</p>
           )}
         </div>
 
-        <div className="grid gap-6 sm:grid-cols-3">
-          <div className="space-y-2">
-            <Label>Logo</Label>
-            <SmartHubImageUpload
-              kind="logo"
-              currentUrl={logoUrl || null}
-              clinicId={clinicId}
-              hubId={hub.id}
-              disabled={updateHub.isPending}
-              onUpload={(file) => handleImageUpload('logo', file)}
-              onRemove={() => handleImageRemove('logo')}
-            />
+        <div className="space-y-4">
+          <div>
+            <h4 className="text-sm font-medium">Imagens</h4>
+            <p className="text-xs text-muted-foreground">
+              JPG, PNG ou WebP. A prévia atualiza assim que o envio concluir.
+            </p>
           </div>
-          <div className="space-y-2">
-            <Label>Foto de perfil</Label>
-            <SmartHubImageUpload
-              kind="profile"
-              currentUrl={profileUrl || null}
-              clinicId={clinicId}
-              hubId={hub.id}
-              disabled={updateHub.isPending}
-              onUpload={(file) => handleImageUpload('profile', file)}
-              onRemove={() => handleImageRemove('profile')}
-            />
+
+          <div className="flex flex-wrap gap-4">
+            <div className="space-y-1.5">
+              <Label>Logo</Label>
+              <SmartHubImageUpload
+                kind="logo"
+                currentUrl={logoUrl || null}
+                clinicId={clinicId}
+                hubId={hub.id}
+                disabled={imageBusy || updateHub.isPending}
+                onUpload={(file) => handleImageUpload('logo', file)}
+                onRemove={() => handleImageRemove('logo')}
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label>Foto de perfil</Label>
+              <SmartHubImageUpload
+                kind="profile"
+                currentUrl={profileUrl || null}
+                clinicId={clinicId}
+                hubId={hub.id}
+                disabled={imageBusy || updateHub.isPending}
+                onUpload={(file) => handleImageUpload('profile', file)}
+                onRemove={() => handleImageRemove('profile')}
+              />
+            </div>
           </div>
-          <div className="space-y-2 sm:col-span-1">
+
+          <div className="space-y-1.5">
             <Label>Banner</Label>
             <SmartHubImageUpload
               kind="banner"
               currentUrl={bannerUrl || null}
               clinicId={clinicId}
               hubId={hub.id}
-              disabled={updateHub.isPending}
+              disabled={imageBusy || updateHub.isPending}
               onUpload={(file) => handleImageUpload('banner', file)}
               onRemove={() => handleImageRemove('banner')}
             />
@@ -419,7 +514,7 @@ export default function SmartHubSettings() {
         </div>
       </div>
 
-      <div className="space-y-6 rounded-lg border bg-card p-6">
+      <div className="space-y-6 rounded-lg border bg-card p-4 sm:p-6">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
             <h3 className="text-sm font-semibold">Visual</h3>
@@ -545,7 +640,7 @@ export default function SmartHubSettings() {
         </div>
       </div>
 
-      <div className="space-y-6 rounded-lg border bg-card p-6">
+      <div className="space-y-6 rounded-lg border bg-card p-4 sm:p-6">
         <div>
           <h3 className="text-sm font-semibold">Contatos</h3>
           <p className="text-xs text-muted-foreground">WhatsApp, telefone, e-mail e endereço.</p>
@@ -597,7 +692,209 @@ export default function SmartHubSettings() {
         </div>
       </div>
 
-      <div className="space-y-6 rounded-lg border bg-card p-6">
+      <div className="space-y-6 rounded-lg border bg-card p-4 sm:p-6">
+        <div>
+          <h3 className="text-sm font-semibold">Captação</h3>
+          <p className="text-xs text-muted-foreground">
+            Como a clínica recebe contatos do Smart Hub (formulário + CRM ou WhatsApp direto).
+          </p>
+        </div>
+
+        {!hasCrm && (
+          <div className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">
+            O modo Formulário + CRM exige o módulo CRM no plano. O WhatsApp direto continua disponível.
+          </div>
+        )}
+
+        <div className="space-y-2">
+          <Label>Modo padrão de conversão</Label>
+          <Select
+            value={captureConfig.mode || 'whatsapp_direct'}
+            onValueChange={(v) => {
+              if (v === 'form_crm' && !hasCrm) {
+                toast.error('Inclua o CRM no plano para usar o formulário integrado.');
+                return;
+              }
+              setCaptureConfig((prev) => ({ ...prev, mode: v as SmartHubCaptureMode }));
+            }}
+          >
+            <SelectTrigger>
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {(Object.keys(SMART_HUB_CAPTURE_MODE_LABELS) as SmartHubCaptureMode[]).map(
+                (key) => (
+                  <SelectItem key={key} value={key} disabled={key === 'form_crm' && !hasCrm}>
+                    {SMART_HUB_CAPTURE_MODE_LABELS[key]}
+                  </SelectItem>
+                )
+              )}
+            </SelectContent>
+          </Select>
+        </div>
+
+        {captureConfig.mode === 'whatsapp_direct' && (
+          <div className="space-y-3 rounded-md border border-dashed p-3 text-sm">
+            <p className="text-muted-foreground">
+              Os contatos pelo WhatsApp deverão ser cadastrados manualmente no CRM. O clique é
+              registrado no Analytics, sem criar lead automaticamente.
+            </p>
+            <div className="space-y-2">
+              <Label>Mensagem inicial do WhatsApp</Label>
+              <Textarea
+                value={captureConfig.whatsapp_message || ''}
+                onChange={(e) =>
+                  setCaptureConfig((prev) => ({ ...prev, whatsapp_message: e.target.value }))
+                }
+                rows={2}
+              />
+            </div>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={async () => {
+                const text =
+                  captureConfig.manual_copy_message ||
+                  'Lead WhatsApp — cadastro manual no CRM (origem Smart Hub).';
+                await navigator.clipboard.writeText(text);
+                toast.success('Mensagem copiada para cadastro manual.');
+              }}
+            >
+              Copiar mensagem padrão para cadastro manual
+            </Button>
+          </div>
+        )}
+
+        {captureConfig.mode === 'form_crm' && hasCrm && (
+          <div className="grid gap-4 sm:grid-cols-2">
+            <div className="space-y-2">
+              <Label>Coluna inicial do Kanban</Label>
+              <Select
+                value={captureConfig.initial_stage || 'new'}
+                onValueChange={(v) =>
+                  setCaptureConfig((prev) => ({
+                    ...prev,
+                    initial_stage: v as SmartHubCaptureConfig['initial_stage'],
+                  }))
+                }
+              >
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {CRM_STAGES.map((s) => (
+                    <SelectItem key={s.id} value={s.id}>
+                      {s.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <p className="text-xs text-muted-foreground">
+                O CRM atual usa um funil único com etapas fixas (não há pipelines separados).
+              </p>
+            </div>
+            <div className="space-y-2">
+              <Label>Responsável padrão</Label>
+              <Select
+                value={captureConfig.default_owner_user_id || '__none__'}
+                onValueChange={(v) =>
+                  setCaptureConfig((prev) => ({
+                    ...prev,
+                    default_owner_user_id: v === '__none__' ? null : v,
+                  }))
+                }
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Sem responsável" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="__none__">Sem responsável</SelectItem>
+                  {staff.map((s) => (
+                    <SelectItem key={s.id} value={s.id}>
+                      {s.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2 sm:col-span-2">
+              <Label>Título do formulário</Label>
+              <Input
+                value={captureConfig.form_title || ''}
+                onChange={(e) =>
+                  setCaptureConfig((prev) => ({ ...prev, form_title: e.target.value }))
+                }
+              />
+            </div>
+            <div className="space-y-2 sm:col-span-2">
+              <Label>Descrição do formulário</Label>
+              <Textarea
+                value={captureConfig.form_description || ''}
+                onChange={(e) =>
+                  setCaptureConfig((prev) => ({ ...prev, form_description: e.target.value }))
+                }
+                rows={2}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label>Texto do botão de envio</Label>
+              <Input
+                value={captureConfig.submit_label || ''}
+                onChange={(e) =>
+                  setCaptureConfig((prev) => ({ ...prev, submit_label: e.target.value }))
+                }
+              />
+            </div>
+            <div className="space-y-2">
+              <Label>URL após envio (opcional)</Label>
+              <Input
+                value={captureConfig.redirect_url || ''}
+                onChange={(e) =>
+                  setCaptureConfig((prev) => ({ ...prev, redirect_url: e.target.value || null }))
+                }
+                placeholder="https://..."
+              />
+            </div>
+            <div className="flex items-center justify-between gap-3 rounded-lg border px-3 py-2 sm:col-span-2">
+              <div>
+                <Label>Redirecionar para WhatsApp após criar o lead</Label>
+                <p className="text-xs text-muted-foreground">
+                  Só abre o WhatsApp depois de confirmar o salvamento.
+                </p>
+              </div>
+              <Switch
+                checked={Boolean(captureConfig.redirect_whatsapp_after_submit)}
+                onCheckedChange={(v) =>
+                  setCaptureConfig((prev) => ({ ...prev, redirect_whatsapp_after_submit: v }))
+                }
+              />
+            </div>
+            <div className="flex items-center justify-between gap-3 rounded-lg border px-3 py-2 sm:col-span-2">
+              <div>
+                <Label>Exigir aceite da política de privacidade</Label>
+              </div>
+              <Switch
+                checked={captureConfig.require_privacy_accept !== false}
+                onCheckedChange={(v) =>
+                  setCaptureConfig((prev) => ({ ...prev, require_privacy_accept: v }))
+                }
+              />
+            </div>
+            <div className="space-y-2 sm:col-span-2">
+              <Label>Texto de confirmação</Label>
+              <Input
+                value={captureConfig.success_message || ''}
+                onChange={(e) =>
+                  setCaptureConfig((prev) => ({ ...prev, success_message: e.target.value }))
+                }
+              />
+            </div>
+          </div>
+        )}
+      </div>
+
+      <div className="space-y-6 rounded-lg border bg-card p-4 sm:p-6">
         <div>
           <h3 className="text-sm font-semibold">SEO</h3>
           <p className="text-xs text-muted-foreground">Título e descrição para buscadores.</p>
@@ -622,7 +919,7 @@ export default function SmartHubSettings() {
       </div>
 
       <div className="flex flex-wrap gap-2">
-        <Button disabled={updateHub.isPending} onClick={saveSettings}>
+        <Button disabled={updateHub.isPending || imageBusy} onClick={() => void saveSettings()}>
           Salvar configurações
         </Button>
         <Button
@@ -637,37 +934,6 @@ export default function SmartHubSettings() {
       </div>
     </div>
   ) : null;
-
-  const previewControls = (
-    <div className="mb-3 space-y-2">
-      <div className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900">
-        As alterações da prévia só serão publicadas após salvar.
-      </div>
-      <ToggleGroup
-        type="single"
-        value={previewDevice}
-        onValueChange={(v) => {
-          if (v) setPreviewDevice(v as PreviewDevice);
-        }}
-        variant="outline"
-        size="sm"
-        className="justify-start"
-      >
-        <ToggleGroupItem value="mobile" aria-label="Prévia celular">
-          <Smartphone className="mr-1.5 h-3.5 w-3.5" />
-          Celular
-        </ToggleGroupItem>
-        <ToggleGroupItem value="tablet" aria-label="Prévia tablet">
-          <Tablet className="mr-1.5 h-3.5 w-3.5" />
-          Tablet
-        </ToggleGroupItem>
-        <ToggleGroupItem value="desktop" aria-label="Prévia desktop">
-          <Monitor className="mr-1.5 h-3.5 w-3.5" />
-          Desktop
-        </ToggleGroupItem>
-      </ToggleGroup>
-    </div>
-  );
 
   return (
     <SmartHubLayout
@@ -684,27 +950,31 @@ export default function SmartHubSettings() {
         </div>
       ) : (
         <>
-          <div className="grid gap-6 lg:grid-cols-2">
-            <div className="min-w-0">{formSection}</div>
-            <div className="hidden min-w-0 lg:block">
-              <div className="sticky top-4">
-                <h3 className="mb-2 text-sm font-semibold">Prévia ao vivo</h3>
+          <div className="flex flex-col gap-6 lg:flex-row lg:items-start">
+            <div className="min-w-0 flex-1">{formSection}</div>
+
+            <aside className="hidden w-[min(100%,440px)] shrink-0 lg:block">
+              <div className="sticky top-4 space-y-2">
+                <h3 className="text-sm font-semibold">Prévia ao vivo</h3>
                 {previewControls}
-                <div className="max-h-[calc(100vh-8rem)] overflow-y-auto rounded-xl bg-muted/40 p-3">
-                  {previewPane}
+                <div className="rounded-2xl bg-muted/50 p-3">
+                  {previewBody}
                 </div>
               </div>
-            </div>
+            </aside>
           </div>
 
           <Sheet open={mobilePreviewOpen} onOpenChange={setMobilePreviewOpen}>
-            <SheetContent side="bottom" className="h-[92vh] overflow-y-auto sm:max-w-none">
+            <SheetContent
+              side="bottom"
+              className="h-[92vh] overflow-y-auto px-3 sm:max-w-none"
+            >
               <SheetHeader>
                 <SheetTitle>Prévia</SheetTitle>
               </SheetHeader>
-              <div className="mt-4">
+              <div className="mt-4 space-y-3">
                 {previewControls}
-                {previewPane}
+                {previewBody}
               </div>
             </SheetContent>
           </Sheet>

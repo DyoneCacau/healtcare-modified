@@ -1929,6 +1929,7 @@ export type Database = {
           layout_blocks: Json
           style_preset: string
           visual_config: Json
+          capture_config: Json
           created_at: string
           updated_at: string
           created_by: string | null
@@ -1967,6 +1968,7 @@ export type Database = {
           layout_blocks?: Json
           style_preset?: string
           visual_config?: Json
+          capture_config?: Json
           created_at?: string
           updated_at?: string
           created_by?: string | null
@@ -2005,6 +2007,7 @@ export type Database = {
           layout_blocks?: Json
           style_preset?: string
           visual_config?: Json
+          capture_config?: Json
           created_at?: string
           updated_at?: string
           created_by?: string | null
@@ -2106,6 +2109,8 @@ export type Database = {
           visual_variant: string
           image_position: string
           whatsapp_message: string | null
+          click_action: string
+          capture_config: Json
           background_color: string | null
           text_color: string | null
           visible: boolean
@@ -2132,6 +2137,8 @@ export type Database = {
           visual_variant?: string
           image_position?: string
           whatsapp_message?: string | null
+          click_action?: string
+          capture_config?: Json
           background_color?: string | null
           text_color?: string | null
           visible?: boolean
@@ -2158,6 +2165,8 @@ export type Database = {
           visual_variant?: string
           image_position?: string
           whatsapp_message?: string | null
+          click_action?: string
+          capture_config?: Json
           background_color?: string | null
           text_color?: string | null
           visible?: boolean

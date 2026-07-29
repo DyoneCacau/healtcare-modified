@@ -146,3 +146,64 @@ export async function assertClinicApiAccess(
     throw new HttpError(403, 'Módulo CRM não disponível no plano')
   }
 }
+
+/**
+ * Valida assinatura + módulos do plano para fluxos internos (ex.: Smart Hub).
+ * Não exige o módulo `integracoes`.
+ */
+export async function assertClinicModules(
+  supabase: SupabaseClient,
+  clinicId: string,
+  requiredModules: string[],
+): Promise<void> {
+  const { data, error } = await supabase
+    .from('subscriptions')
+    .select(
+      'status, trial_ends_at, current_period_end, asaas_next_due_date, features_override, feature_grants, plans(features)',
+    )
+    .eq('clinic_id', clinicId)
+    .maybeSingle()
+
+  if (error) throw new HttpError(500, 'Falha ao validar assinatura')
+  if (!data) throw new HttpError(403, 'Clínica sem assinatura ativa')
+
+  const now = new Date()
+  const status = String(data.status || '')
+
+  if (status === 'blocked' || status === 'cancelled') {
+    throw new HttpError(403, 'Assinatura bloqueada ou cancelada')
+  }
+
+  if (status === 'suspended') {
+    const due =
+      (typeof data.asaas_next_due_date === 'string' ? data.asaas_next_due_date : null)
+      ?? (typeof data.current_period_end === 'string' ? data.current_period_end : null)
+    if (!isWithinGrace(status, due, now)) {
+      throw new HttpError(403, 'Assinatura suspensa')
+    }
+  } else if (!['active', 'trial', 'pending'].includes(status)) {
+    throw new HttpError(403, 'Assinatura inativa')
+  }
+
+  if (
+    status === 'trial'
+    && typeof data.trial_ends_at === 'string'
+    && new Date(data.trial_ends_at).getTime() <= now.getTime()
+  ) {
+    throw new HttpError(403, 'Período de trial encerrado')
+  }
+
+  const plan = data.plans as { features?: unknown } | null
+  const features = resolveFeatures({
+    planFeatures: plan?.features,
+    featuresOverride: data.features_override,
+    featureGrants: data.feature_grants,
+    now,
+  })
+
+  for (const mod of requiredModules) {
+    if (!features.has(mod)) {
+      throw new HttpError(403, `Módulo ${mod} não disponível no plano`)
+    }
+  }
+}

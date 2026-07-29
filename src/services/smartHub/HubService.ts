@@ -125,6 +125,7 @@ export const HubService = {
       validation_errors: [],
       style_preset: 'clean',
       visual_config: {},
+      capture_config: {},
       created_by: input.userId ?? null,
       updated_by: input.userId ?? null,
     } as SmartHubInsert);

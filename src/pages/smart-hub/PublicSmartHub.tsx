@@ -1,8 +1,14 @@
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { useParams } from 'react-router-dom';
-import { HubPublicView } from '@/components/smart-hub';
+import { HubPublicView, HubCaptureForm } from '@/components/smart-hub';
 import { usePublicSmartHub } from '@/hooks/useSmartHub';
-import { AnalyticsService, isReservedSlug, buildDestinationUrl } from '@/services/smartHub';
+import {
+  AnalyticsService,
+  isReservedSlug,
+  buildDestinationUrl,
+  resolveClickAction,
+  mergeCaptureConfig,
+} from '@/services/smartHub';
 import type { SmartHubButton } from '@/types/smartHub';
 import NotFound from '@/pages/NotFound';
 
@@ -87,6 +93,8 @@ export default function PublicSmartHub() {
 function PublicSmartHubContent({ slug }: { slug?: string }) {
   const { data, isLoading, error } = usePublicSmartHub(slug);
   const hub = data?.hub;
+  const [formOpen, setFormOpen] = useState(false);
+  const [formButton, setFormButton] = useState<SmartHubButton | null>(null);
 
   const seoTitle = hub?.seo_title || hub?.title;
   const seoDescription = hub?.seo_description || hub?.description;
@@ -112,9 +120,43 @@ function PublicSmartHubContent({ slug }: { slug?: string }) {
     });
   }, [hub?.id]);
 
+  const openForm = (button?: SmartHubButton | null) => {
+    setFormButton(button || null);
+    setFormOpen(true);
+    if (hub?.id) {
+      AnalyticsService.trackClick(hub.id, button?.id?.startsWith('hub-') ? null : button?.id || null, {
+        target_url: 'form:open',
+        button_title: button?.title || 'Formulário',
+        button_type: 'form',
+        visual_variant: button?.visual_variant || 'simple',
+        device_type:
+          window.innerWidth < 768 ? 'mobile' : window.innerWidth < 1024 ? 'tablet' : 'desktop',
+      }).catch(() => undefined);
+    }
+  };
+
   const handleButtonClick = async (button: SmartHubButton) => {
+    const action = resolveClickAction(button.click_action, button.type);
+    if (action === 'form') {
+      openForm(button);
+      return;
+    }
+    if (action === 'info') return;
+
+    const capture = mergeCaptureConfig(hub?.capture_config);
     const destination =
-      buildDestinationUrl(button.type, button.url, button.whatsapp_message) || button.url;
+      buildDestinationUrl(
+        action === 'whatsapp' ? 'whatsapp' : button.type,
+        button.url ||
+          (action === 'whatsapp'
+            ? button.capture_config?.whatsapp_phone ||
+              capture.whatsapp_phone ||
+              hub?.whatsapp_number
+            : null),
+        button.whatsapp_message ||
+          button.capture_config?.whatsapp_message ||
+          capture.whatsapp_message
+      ) || button.url;
 
     if (hub?.id && button.track_click !== false) {
       try {
@@ -124,6 +166,7 @@ function PublicSmartHubContent({ slug }: { slug?: string }) {
             window.innerWidth < 768 ? 'mobile' : window.innerWidth < 1024 ? 'tablet' : 'desktop',
           button_title: button.title,
           button_type: button.type,
+          click_action: action,
           visual_variant: button.visual_variant || 'simple',
           order_index: button.order_index ?? null,
           template_id: hub.template_id,
@@ -133,8 +176,9 @@ function PublicSmartHubContent({ slug }: { slug?: string }) {
         /* ignore */
       }
     }
+
     if (destination) {
-      const self = button.type === 'internal' || button.type === 'phone' || button.type === 'email';
+      const self = action === 'phone' || action === 'email' || button.type === 'internal';
       window.open(destination, self ? '_self' : '_blank', 'noopener,noreferrer');
     }
   };
@@ -151,5 +195,19 @@ function PublicSmartHubContent({ slug }: { slug?: string }) {
     return <NotFound />;
   }
 
-  return <HubPublicView payload={data} onButtonClick={handleButtonClick} />;
+  return (
+    <>
+      <HubPublicView
+        payload={data}
+        onButtonClick={handleButtonClick}
+        onOpenCaptureForm={openForm}
+      />
+      <HubCaptureForm
+        hub={hub}
+        button={formButton}
+        open={formOpen}
+        onOpenChange={setFormOpen}
+      />
+    </>
+  );
 }

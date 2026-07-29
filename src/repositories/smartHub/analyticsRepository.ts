@@ -155,6 +155,65 @@ export const analyticsRepository = {
     const clicks = clicksRes.count ?? 0;
     const ctr = views > 0 ? Number(((clicks / views) * 100).toFixed(2)) : 0;
 
+    const [formEventsRes, waClicksSample] = await Promise.all([
+      supabase
+        .from('smart_hub_events')
+        .select('event_type, event_name, payload')
+        .eq('hub_id', hubId)
+        .eq('clinic_id', clinicId)
+        .is('deleted_at', null)
+        .in('event_type', ['form_submitted', 'form_duplicate', 'form_opened'])
+        .limit(500),
+      supabase
+        .from('smart_hub_clicks')
+        .select('metadata, target_url')
+        .eq('hub_id', hubId)
+        .eq('clinic_id', clinicId)
+        .is('deleted_at', null)
+        .order('created_at', { ascending: false })
+        .limit(200),
+    ]);
+
+    const formEvents = (formEventsRes.data || []) as Array<{
+      event_type: string;
+      event_name: string | null;
+      payload: Record<string, unknown> | null;
+    }>;
+    const formsSubmitted = formEvents.filter((e) => e.event_type === 'form_submitted').length;
+    const formsDuplicate = formEvents.filter((e) => e.event_type === 'form_duplicate').length;
+    const formsOpened = formEvents.filter((e) => e.event_type === 'form_opened').length;
+    const leadsCreated = formsSubmitted;
+    const leadsUpdated = formsDuplicate;
+    const conversions = formsSubmitted + formsDuplicate;
+    const submitRate =
+      formsOpened > 0 ? Number(((formsSubmitted / formsOpened) * 100).toFixed(1)) : 0;
+    const conversionRate =
+      views > 0 ? Number(((conversions / views) * 100).toFixed(1)) : 0;
+
+    const waClicks = ((waClicksSample.data || []) as Array<{
+      metadata: Record<string, unknown> | null;
+      target_url: string | null;
+    }>).filter(
+      (c) =>
+        (c.metadata && c.metadata.click_action === 'whatsapp') ||
+        (c.metadata && c.metadata.button_type === 'whatsapp') ||
+        (c.target_url && /wa\.me|whatsapp/i.test(c.target_url))
+    ).length;
+
+    const leadButtonCounts = new Map<string, number>();
+    for (const ev of formEvents) {
+      const name = ev.event_name || 'Formulário';
+      leadButtonCounts.set(name, (leadButtonCounts.get(name) || 0) + 1);
+    }
+    let topLeadButton: string | null = null;
+    let topLeadCount = 0;
+    for (const [name, count] of leadButtonCounts) {
+      if (count > topLeadCount) {
+        topLeadCount = count;
+        topLeadButton = name;
+      }
+    }
+
     const clickRows = (topClicksRes.data || []) as Array<{
       button_id: string | null;
       target_url: string | null;
@@ -215,15 +274,21 @@ export const analyticsRepository = {
       online: status === 'published',
       views,
       clicks,
-      leads: 0,
+      leads: leadsCreated,
       appointments: 0,
-      conversions: 0,
+      conversions,
       ctr,
-      topButton,
+      topButton: topLeadButton || topButton,
       mainOrigin: mode(visitRows.map((v) => v.utm_source || v.referrer || 'Direto')),
       mainDevice: mode(visitRows.map((v) => v.device_type)),
       mainCampaign: mode(visitRows.map((v) => v.utm_campaign)),
       lastVisitAt: (lastVisitRes.data as { created_at?: string } | null)?.created_at ?? null,
+      whatsappClicks: waClicks,
+      formsOpened,
+      formsSubmitted,
+      leadsUpdated,
+      submitRate,
+      conversionRate,
     };
   },
 

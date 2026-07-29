@@ -32,6 +32,8 @@ export interface IngestLeadInput {
   defaultLeadSource?: LeadSourceValue | null
   /** auto (padrão): id externo e depois contato recente */
   dedupe?: LeadDedupeMode
+  /** Responsável inicial (ex.: Smart Hub capture) */
+  ownerUserId?: string | null
 }
 
 export interface IngestLeadResult {
@@ -224,6 +226,10 @@ export async function ingestLead(
     integration_id: input.integrationId,
     external_lead_id: lead.externalLeadId,
     source_payload: input.payload ?? null,
+  }
+
+  if (input.ownerUserId) {
+    row.owner_user_id = input.ownerUserId
   }
 
   const { data, error } = await supabase
