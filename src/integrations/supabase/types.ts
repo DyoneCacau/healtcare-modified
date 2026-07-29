@@ -1907,6 +1907,7 @@ export type Database = {
           logo_url: string | null
           banner_url: string | null
           background_url: string | null
+          profile_url: string | null
           theme: string
           primary_color: string
           secondary_color: string
@@ -1926,6 +1927,8 @@ export type Database = {
           contact_address: string | null
           map_embed_url: string | null
           layout_blocks: Json
+          style_preset: string
+          visual_config: Json
           created_at: string
           updated_at: string
           created_by: string | null
@@ -1942,6 +1945,7 @@ export type Database = {
           logo_url?: string | null
           banner_url?: string | null
           background_url?: string | null
+          profile_url?: string | null
           theme?: string
           primary_color?: string
           secondary_color?: string
@@ -1961,6 +1965,8 @@ export type Database = {
           contact_address?: string | null
           map_embed_url?: string | null
           layout_blocks?: Json
+          style_preset?: string
+          visual_config?: Json
           created_at?: string
           updated_at?: string
           created_by?: string | null
@@ -1977,6 +1983,7 @@ export type Database = {
           logo_url?: string | null
           banner_url?: string | null
           background_url?: string | null
+          profile_url?: string | null
           theme?: string
           primary_color?: string
           secondary_color?: string
@@ -1996,6 +2003,8 @@ export type Database = {
           contact_address?: string | null
           map_embed_url?: string | null
           layout_blocks?: Json
+          style_preset?: string
+          visual_config?: Json
           created_at?: string
           updated_at?: string
           created_by?: string | null
@@ -2093,6 +2102,10 @@ export type Database = {
           type: string
           url: string | null
           image: string | null
+          image_alt: string | null
+          visual_variant: string
+          image_position: string
+          whatsapp_message: string | null
           background_color: string | null
           text_color: string | null
           visible: boolean
@@ -2115,6 +2128,10 @@ export type Database = {
           type?: string
           url?: string | null
           image?: string | null
+          image_alt?: string | null
+          visual_variant?: string
+          image_position?: string
+          whatsapp_message?: string | null
           background_color?: string | null
           text_color?: string | null
           visible?: boolean
@@ -2137,6 +2154,10 @@ export type Database = {
           type?: string
           url?: string | null
           image?: string | null
+          image_alt?: string | null
+          visual_variant?: string
+          image_position?: string
+          whatsapp_message?: string | null
           background_color?: string | null
           text_color?: string | null
           visible?: boolean
@@ -2301,6 +2322,7 @@ export type Database = {
           file_type: string | null
           storage_path: string
           public_url: string | null
+          asset_kind: string
           status: string
           created_at: string
           updated_at: string
@@ -2316,6 +2338,7 @@ export type Database = {
           file_type?: string | null
           storage_path: string
           public_url?: string | null
+          asset_kind?: string
           status?: string
           created_at?: string
           updated_at?: string
@@ -2331,6 +2354,7 @@ export type Database = {
           file_type?: string | null
           storage_path?: string
           public_url?: string | null
+          asset_kind?: string
           status?: string
           created_at?: string
           updated_at?: string
@@ -2522,6 +2546,7 @@ export type Database = {
           device_type: string | null
           referrer: string | null
           utm_campaign: string | null
+          metadata: Json
           status: string
           created_at: string
           updated_at: string
@@ -2539,6 +2564,7 @@ export type Database = {
           device_type?: string | null
           referrer?: string | null
           utm_campaign?: string | null
+          metadata?: Json
           status?: string
           created_at?: string
           updated_at?: string
@@ -2556,6 +2582,7 @@ export type Database = {
           device_type?: string | null
           referrer?: string | null
           utm_campaign?: string | null
+          metadata?: Json
           status?: string
           created_at?: string
           updated_at?: string

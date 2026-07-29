@@ -207,3 +207,66 @@ SET json_layout = jsonb_build_object(
 ),
 updated_at = now()
 WHERE name = 'WhatsApp First' AND deleted_at IS NULL;
+
+
+-- ---------------------------------------------------------------------------
+-- Metadata de cliques (título amigável, tipo, variante, posição)
+-- ---------------------------------------------------------------------------
+
+ALTER TABLE public.smart_hub_clicks
+  ADD COLUMN IF NOT EXISTS metadata JSONB NOT NULL DEFAULT '{}'::jsonb;
+
+COMMENT ON COLUMN public.smart_hub_clicks.metadata IS 'Metadados não sensíveis do clique (título, tipo, variante, posição, template)';
+
+CREATE OR REPLACE FUNCTION public.track_smart_hub_click(
+  p_hub_id UUID,
+  p_button_id UUID DEFAULT NULL,
+  p_payload JSONB DEFAULT '{}'::jsonb
+)
+RETURNS UUID
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
+  v_clinic_id UUID;
+  v_id UUID;
+  v_meta JSONB;
+BEGIN
+  SELECT clinic_id INTO v_clinic_id
+  FROM public.smart_hubs
+  WHERE id = p_hub_id AND deleted_at IS NULL AND status = 'published';
+
+  IF v_clinic_id IS NULL THEN
+    RAISE EXCEPTION 'Hub não encontrado ou offline';
+  END IF;
+
+  v_meta := jsonb_strip_nulls(jsonb_build_object(
+    'button_title', p_payload->>'button_title',
+    'button_type', p_payload->>'button_type',
+    'visual_variant', p_payload->>'visual_variant',
+    'order_index', p_payload->'order_index',
+    'template_id', p_payload->>'template_id',
+    'style_preset', p_payload->>'style_preset'
+  ));
+
+  INSERT INTO public.smart_hub_clicks (
+    clinic_id, hub_id, button_id, visit_id, target_url, device_type, referrer, utm_campaign, metadata
+  ) VALUES (
+    v_clinic_id,
+    p_hub_id,
+    p_button_id,
+    NULLIF(p_payload->>'visit_id', '')::UUID,
+    p_payload->>'target_url',
+    p_payload->>'device_type',
+    p_payload->>'referrer',
+    p_payload->>'utm_campaign',
+    COALESCE(v_meta, '{}'::jsonb)
+  )
+  RETURNING id INTO v_id;
+
+  RETURN v_id;
+END;
+$$;
+
+GRANT EXECUTE ON FUNCTION public.track_smart_hub_click(UUID, UUID, JSONB) TO anon, authenticated;

@@ -2,7 +2,7 @@ import { useEffect } from 'react';
 import { useParams } from 'react-router-dom';
 import { HubPublicView } from '@/components/smart-hub';
 import { usePublicSmartHub } from '@/hooks/useSmartHub';
-import { AnalyticsService, isReservedSlug } from '@/services/smartHub';
+import { AnalyticsService, isReservedSlug, buildDestinationUrl } from '@/services/smartHub';
 import type { SmartHubButton } from '@/types/smartHub';
 import NotFound from '@/pages/NotFound';
 
@@ -12,6 +12,7 @@ function usePublicSeo(opts: {
   image?: string | null;
   favicon?: string | null;
   url?: string;
+  updatedAt?: string | null;
 }) {
   useEffect(() => {
     const prevTitle = document.title;
@@ -28,30 +29,49 @@ function usePublicSeo(opts: {
       el.content = content;
     };
 
-    if (opts.description) {
-      ensureMeta('name', 'description', opts.description);
-      ensureMeta('property', 'og:description', opts.description);
+    const ensureLink = (rel: string, href: string) => {
+      let el = document.head.querySelector(`link[rel="${rel}"]`) as HTMLLinkElement | null;
+      if (!el) {
+        el = document.createElement('link');
+        el.rel = rel;
+        document.head.appendChild(el);
+      }
+      el.href = href;
+    };
+
+    const description = opts.description || '';
+    if (description) {
+      ensureMeta('name', 'description', description);
+      ensureMeta('property', 'og:description', description);
+      ensureMeta('name', 'twitter:description', description);
     }
+
     ensureMeta('property', 'og:title', title);
     ensureMeta('property', 'og:type', 'website');
-    if (opts.url) ensureMeta('property', 'og:url', opts.url);
-    if (opts.image) ensureMeta('property', 'og:image', opts.image);
+    ensureMeta('name', 'twitter:card', opts.image ? 'summary_large_image' : 'summary');
+    ensureMeta('name', 'twitter:title', title);
     ensureMeta('name', 'robots', 'index,follow');
 
-    let link = document.head.querySelector('link[rel="icon"]') as HTMLLinkElement | null;
+    if (opts.url) {
+      ensureMeta('property', 'og:url', opts.url);
+      ensureLink('canonical', opts.url);
+    }
+
+    if (opts.image) {
+      const bust = opts.updatedAt ? `?v=${encodeURIComponent(opts.updatedAt)}` : '';
+      const imageUrl = opts.image.includes('?') ? opts.image : `${opts.image}${bust}`;
+      ensureMeta('property', 'og:image', imageUrl);
+      ensureMeta('name', 'twitter:image', imageUrl);
+    }
+
     if (opts.favicon) {
-      if (!link) {
-        link = document.createElement('link');
-        link.rel = 'icon';
-        document.head.appendChild(link);
-      }
-      link.href = opts.favicon;
+      ensureLink('icon', opts.favicon);
     }
 
     return () => {
       document.title = prevTitle;
     };
-  }, [opts.title, opts.description, opts.image, opts.favicon, opts.url]);
+  }, [opts.title, opts.description, opts.image, opts.favicon, opts.url, opts.updatedAt]);
 }
 
 export default function PublicSmartHub() {
@@ -68,12 +88,17 @@ function PublicSmartHubContent({ slug }: { slug?: string }) {
   const { data, isLoading, error } = usePublicSmartHub(slug);
   const hub = data?.hub;
 
+  const seoTitle = hub?.seo_title || hub?.title;
+  const seoDescription = hub?.seo_description || hub?.description;
+  const seoImage = hub?.banner_url || hub?.profile_url || hub?.logo_url;
+
   usePublicSeo({
-    title: hub?.seo_title || hub?.title,
-    description: hub?.seo_description || hub?.description,
-    image: hub?.banner_url || hub?.logo_url,
-    favicon: hub?.favicon_url,
-    url: typeof window !== 'undefined' ? window.location.href : undefined,
+    title: seoTitle,
+    description: seoDescription,
+    image: seoImage,
+    favicon: hub?.favicon_url || hub?.logo_url || hub?.profile_url,
+    url: typeof window !== 'undefined' ? window.location.href.split('?')[0] : undefined,
+    updatedAt: hub?.updated_at,
   });
 
   useEffect(() => {
@@ -88,19 +113,29 @@ function PublicSmartHubContent({ slug }: { slug?: string }) {
   }, [hub?.id]);
 
   const handleButtonClick = async (button: SmartHubButton) => {
+    const destination =
+      buildDestinationUrl(button.type, button.url, button.whatsapp_message) || button.url;
+
     if (hub?.id && button.track_click !== false) {
       try {
         await AnalyticsService.trackClick(hub.id, button.id?.startsWith('hub-') ? null : button.id, {
-          target_url: button.url,
+          target_url: destination,
           device_type:
             window.innerWidth < 768 ? 'mobile' : window.innerWidth < 1024 ? 'tablet' : 'desktop',
+          button_title: button.title,
+          button_type: button.type,
+          visual_variant: button.visual_variant || 'simple',
+          order_index: button.order_index ?? null,
+          template_id: hub.template_id,
+          style_preset: hub.style_preset,
         });
       } catch {
         /* ignore */
       }
     }
-    if (button.url) {
-      window.open(button.url, button.type === 'internal' ? '_self' : '_blank');
+    if (destination) {
+      const self = button.type === 'internal' || button.type === 'phone' || button.type === 'email';
+      window.open(destination, self ? '_self' : '_blank', 'noopener,noreferrer');
     }
   };
 

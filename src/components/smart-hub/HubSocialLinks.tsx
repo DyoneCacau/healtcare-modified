@@ -26,7 +26,8 @@ export const HubSocialLinks = memo(function HubSocialLinks({
           href={link.url}
           target="_blank"
           rel="noopener noreferrer"
-          className="rounded-full border px-3 py-1.5 text-sm transition hover:bg-muted"
+          aria-label={`${link.label} (abre em nova aba)`}
+          className="rounded-full border px-3 py-1.5 text-sm transition hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
         >
           {link.label}
         </a>

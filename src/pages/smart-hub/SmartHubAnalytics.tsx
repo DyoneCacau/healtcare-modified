@@ -1,11 +1,42 @@
+import { useMemo } from 'react';
 import { SmartHubLayout, DashboardStatsCard } from '@/components/smart-hub';
 import { useSmartHub } from '@/hooks/useSmartHub';
 import { useHubAnalytics } from '@/hooks/useHubAnalytics';
+import { useHubButtons } from '@/hooks/useHubButtons';
 import { SMART_HUB_STATUS_LABELS } from '@/types/smartHub';
+
+function friendlyClickLabel(
+  click: {
+    button_id: string | null;
+    target_url: string | null;
+    metadata?: Record<string, unknown> | null;
+  },
+  buttonTitles: Map<string, string>
+): { title: string; detail: string | null } {
+  const metaTitle =
+    click.metadata && typeof click.metadata.button_title === 'string'
+      ? click.metadata.button_title
+      : null;
+  const fromButton = click.button_id ? buttonTitles.get(click.button_id) : null;
+  const url = click.target_url || '';
+  const whatsappFallback = /wa\.me|whatsapp/i.test(url) ? 'Falar no WhatsApp' : null;
+  const title = metaTitle || fromButton || whatsappFallback || 'Botão';
+  const detail = url && title !== url ? url : null;
+  return { title, detail };
+}
 
 export default function SmartHubAnalytics() {
   const { hub, isLoading } = useSmartHub();
   const { metrics, visits, clicks, isLoading: loadingMetrics } = useHubAnalytics(hub);
+  const { buttons } = useHubButtons(hub?.id);
+
+  const buttonTitles = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const b of buttons || []) {
+      map.set(b.id, b.title);
+    }
+    return map;
+  }, [buttons]);
 
   const deviceBreakdown = visits.reduce<Record<string, number>>((acc, v) => {
     const key = v.device_type || 'desconhecido';
@@ -44,18 +75,11 @@ export default function SmartHubAnalytics() {
               ' — tracking público só registra eventos com hub publicado.'}
           </div>
 
-          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
             <DashboardStatsCard label="Visualizações" value={metrics?.views ?? 0} />
             <DashboardStatsCard label="Cliques" value={metrics?.clicks ?? 0} />
             <DashboardStatsCard label="CTR" value={`${metrics?.ctr ?? 0}%`} />
-            <DashboardStatsCard
-              label="Última visita"
-              value={
-                metrics?.lastVisitAt
-                  ? new Date(metrics.lastVisitAt).toLocaleString('pt-BR')
-                  : '—'
-              }
-            />
+            <DashboardStatsCard label="Mais clicado" value={metrics?.topButton || '—'} />
           </div>
 
           <div className="grid gap-4 lg:grid-cols-2">
@@ -115,14 +139,24 @@ export default function SmartHubAnalytics() {
                 <p className="text-sm text-muted-foreground">Nenhum clique registrado.</p>
               ) : (
                 <ul className="space-y-2 text-sm">
-                  {clicks.slice(0, 10).map((c) => (
-                    <li key={c.id} className="flex justify-between gap-2 border-b py-2 last:border-0">
-                      <span className="truncate text-muted-foreground">
-                        {c.target_url || c.button_id || 'Botão'}
-                      </span>
-                      <span>{new Date(c.created_at).toLocaleString('pt-BR')}</span>
-                    </li>
-                  ))}
+                  {clicks.slice(0, 10).map((c) => {
+                    const label = friendlyClickLabel(c, buttonTitles);
+                    return (
+                      <li key={c.id} className="border-b py-2 last:border-0">
+                        <div className="flex justify-between gap-2">
+                          <span className="truncate font-medium">{label.title}</span>
+                          <span className="shrink-0 text-muted-foreground">
+                            {new Date(c.created_at).toLocaleString('pt-BR')}
+                          </span>
+                        </div>
+                        {label.detail && (
+                          <p className="mt-0.5 truncate text-xs text-muted-foreground">
+                            {label.detail}
+                          </p>
+                        )}
+                      </li>
+                    );
+                  })}
                 </ul>
               )}
             </div>

@@ -20,7 +20,8 @@ import type {
 function invalidateSmartHubQueries(
   queryClient: ReturnType<typeof useQueryClient>,
   clinicId: string | null | undefined,
-  hubId?: string | null
+  hubId?: string | null,
+  _slug?: string | null
 ) {
   if (clinicId) {
     queryClient.invalidateQueries({ queryKey: ['smart-hub', clinicId] });
@@ -28,10 +29,13 @@ function invalidateSmartHubQueries(
     queryClient.invalidateQueries({ queryKey: ['smart-hub-theme', clinicId] });
     queryClient.invalidateQueries({ queryKey: ['smart-hub-analytics-metrics', clinicId] });
     queryClient.invalidateQueries({ queryKey: ['smart-hub-buttons', clinicId] });
+    queryClient.invalidateQueries({ queryKey: ['smart-hub-visits', clinicId] });
+    queryClient.invalidateQueries({ queryKey: ['smart-hub-clicks', clinicId] });
   }
   if (hubId) {
     queryClient.invalidateQueries({ queryKey: ['smart-hub-preview', hubId] });
   }
+  queryClient.invalidateQueries({ queryKey: ['public-smart-hub'] });
 }
 
 export function useSmartHub() {
@@ -82,7 +86,12 @@ export function useSmartHub() {
   });
 
   const invalidateHub = () => {
-    invalidateSmartHubQueries(queryClient, clinicId, hubQuery.data?.id);
+    invalidateSmartHubQueries(
+      queryClient,
+      clinicId,
+      hubQuery.data?.id,
+      hubQuery.data?.slug
+    );
   };
 
   const createHub = useMutation({
@@ -231,7 +240,8 @@ export function usePublicSmartHub(slug: string | undefined) {
       return HubService.getPublicBySlug(slug);
     },
     enabled: !!slug,
-    staleTime: 60_000,
+    staleTime: 15_000,
+    refetchOnWindowFocus: true,
   });
 }
 

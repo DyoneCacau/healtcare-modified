@@ -102,7 +102,7 @@ export const HubButton = memo(function HubButton({
         onClick={handleClick}
         aria-label={button.title}
         className={cn(
-          'flex w-full items-stretch overflow-hidden border text-left shadow-sm transition hover:opacity-95',
+          'flex w-full items-stretch overflow-hidden border text-left shadow-sm transition hover:opacity-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 min-h-[44px]',
           radiusClass,
           className
         )}
@@ -142,7 +142,7 @@ export const HubButton = memo(function HubButton({
         onClick={handleClick}
         aria-label={button.title}
         className={cn(
-          'flex w-full items-center gap-3 border px-4 py-3 text-left shadow-sm transition hover:opacity-95',
+          'flex w-full items-center gap-3 border px-4 py-3 text-left shadow-sm transition hover:opacity-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 min-h-[44px]',
           variant === 'featured_card' && 'ring-2 ring-primary/30',
           radiusClass,
           className
@@ -178,7 +178,7 @@ export const HubButton = memo(function HubButton({
       onClick={handleClick}
       aria-label={button.title}
       className={cn(
-        'flex w-full items-center justify-between gap-3 border px-4 py-3 text-left shadow-sm transition hover:opacity-90',
+        'flex w-full items-center justify-between gap-3 border px-4 py-3 text-left shadow-sm transition hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 min-h-[44px]',
         radiusClass,
         className
       )}

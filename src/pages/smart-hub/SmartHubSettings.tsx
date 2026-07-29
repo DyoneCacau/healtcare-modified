@@ -324,6 +324,9 @@ export default function SmartHubSettings() {
         <div className="space-y-2">
           <Label htmlFor="title">Nome público da clínica</Label>
           <Input id="title" value={title} onChange={(e) => setTitle(e.target.value)} />
+          <p className="text-xs text-muted-foreground">
+            Nome exibido na página pública. Independente do slug da URL.
+          </p>
         </div>
         <div className="space-y-2">
           <Label htmlFor="subtitle">Subtítulo</Label>
@@ -340,7 +343,7 @@ export default function SmartHubSettings() {
         </div>
 
         <div className="space-y-2">
-          <Label htmlFor="slug">Slug</Label>
+          <Label htmlFor="slug">Slug (endereço da página)</Label>
           <div className="flex flex-wrap gap-2">
             <Input
               id="slug"
@@ -353,7 +356,7 @@ export default function SmartHubSettings() {
               variant="outline"
               onClick={() => setSlug(generateSlugFromTitle(title))}
             >
-              Gerar
+              Gerar do nome
             </Button>
             <Button
               type="button"
@@ -369,7 +372,7 @@ export default function SmartHubSettings() {
             </Button>
           </div>
           <p className="text-xs text-muted-foreground">
-            Endereço público da página (apenas letras minúsculas, números e hífens).
+            Apenas o caminho da URL (letras minúsculas, números e hífens). Não altera o nome público.
           </p>
           {publicUrl && (
             <p className="break-all text-xs text-muted-foreground">{publicUrl}</p>

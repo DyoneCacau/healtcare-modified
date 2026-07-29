@@ -38,7 +38,7 @@ export function SmartHubImageUpload({
   const runUpload = async (file: File) => {
     setError(null);
     const check = validateSmartHubImage(file, kind);
-    if (!check.ok) {
+    if (check.ok === false) {
       setError(check.message);
       return;
     }

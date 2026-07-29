@@ -175,7 +175,7 @@ export const HubPublicView = memo(function HubPublicView({
       case 'banner':
         return hub.banner_url ? (
           <div key={`${block}-${index}`} className="relative">
-            <HubBanner src={hub.banner_url} />
+            <HubBanner src={hub.banner_url} alt={`Banner de ${hub.title || 'clínica'}`} />
             {visual.banner_overlay_color && (
               <div
                 className="pointer-events-none absolute inset-0"
@@ -233,10 +233,11 @@ export const HubPublicView = memo(function HubPublicView({
           />
         );
       case 'whatsapp':
-        return whatsappHref ? (
+        return whatsappPrimary || whatsappHref ? (
           <HubWhatsAppButton
             key={`${block}-${index}`}
-            phone={whatsappHref}
+            phone={whatsappPrimary?.url || hub.whatsapp_number || whatsappHref}
+            message={whatsappPrimary?.whatsapp_message || undefined}
             label={whatsappPrimary?.title || 'Falar no WhatsApp'}
             onClick={(e) => {
               e.preventDefault();
@@ -288,14 +289,14 @@ export const HubPublicView = memo(function HubPublicView({
 
   return (
     <div
-      className={cn('min-h-screen', className)}
+      className={cn('min-h-screen motion-safe:scroll-smooth', className)}
       style={{
         ...bgStyle,
         color: textColor,
         fontFamily: theme?.font_family || hub.font_family,
       }}
     >
-      <div className="min-h-screen bg-background/40 backdrop-blur-[1px] supports-[padding:max(0px)]:pb-[max(1rem,env(safe-area-inset-bottom))]">
+      <div className="min-h-screen bg-background/40 backdrop-blur-[1px] supports-[padding:max(0px)]:pb-[max(1rem,env(safe-area-inset-bottom))] px-0 overflow-x-hidden">
         {preview && (
           <div className="sticky top-0 z-20 border-b bg-amber-50 px-4 py-2 text-center text-xs font-medium text-amber-900">
             Prévia — as alterações só vão para a página pública após salvar

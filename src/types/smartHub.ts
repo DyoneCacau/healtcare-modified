@@ -281,6 +281,7 @@ export interface SmartHubClick {
   device_type: string | null;
   referrer: string | null;
   utm_campaign: string | null;
+  metadata: Record<string, unknown> | null;
   status: string;
   created_at: string;
   updated_at: string;

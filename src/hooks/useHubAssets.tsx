@@ -21,6 +21,7 @@ export function useHubAssets(hubId?: string | null) {
     queryClient.invalidateQueries({ queryKey: ['smart-hub-assets', clinicId, hubId] });
     queryClient.invalidateQueries({ queryKey: ['smart-hub', clinicId] });
     queryClient.invalidateQueries({ queryKey: ['smart-hub-preview', hubId] });
+    queryClient.invalidateQueries({ queryKey: ['public-smart-hub'] });
   };
 
   const query = useQuery({

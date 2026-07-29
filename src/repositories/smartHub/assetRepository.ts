@@ -118,7 +118,7 @@ export const assetRepository = {
     file_type: string;
   }> {
     const check = validateSmartHubImage(file, kind);
-    if (!check.ok) throw new Error(check.message);
+    if (check.ok === false) throw new Error(check.message);
 
     const prepared = await compressImageToWebp(file, {
       maxWidth: kind === 'banner' || kind === 'background' ? 1800 : 1200,

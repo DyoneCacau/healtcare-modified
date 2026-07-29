@@ -107,8 +107,15 @@ function isMenuGroup(entry: MenuEntry): entry is MenuGroup {
   return entry.type === "group";
 }
 
-export function Sidebar() {
-  const [collapsed, setCollapsed] = useState(false);
+interface SidebarProps {
+  /** Modo drawer mobile: largura total, sem colapso, fecha ao navegar */
+  mobile?: boolean;
+  onNavigate?: () => void;
+}
+
+export function Sidebar({ mobile = false, onNavigate }: SidebarProps = {}) {
+  const [collapsedState, setCollapsed] = useState(false);
+  const collapsed = mobile ? false : collapsedState;
   const location = useLocation();
   const navigate = useNavigate();
   const { isSuperAdmin, isAdmin, profile, signOut } = useAuth();
@@ -233,8 +240,9 @@ export function Sidebar() {
     const linkContent = (
       <Link
         to={item.path}
+        onClick={() => onNavigate?.()}
         className={cn(
-          "flex items-center gap-3 rounded-lg px-3 text-sm font-medium transition-all duration-200",
+          "flex items-center gap-3 rounded-lg px-3 text-sm font-medium transition-all duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sidebar-primary",
           nested ? "py-2" : "py-2.5",
           isActive
             ? "bg-sidebar-primary text-sidebar-primary-foreground shadow-md"
@@ -289,7 +297,10 @@ export function Sidebar() {
               <TooltipTrigger asChild>
                 <button
                   type="button"
-                  onClick={() => navigate(opts.collapsedFallbackPath!)}
+                  onClick={() => {
+                    navigate(opts.collapsedFallbackPath!);
+                    onNavigate?.();
+                  }}
                   className={cn(
                     "flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-all duration-200",
                     opts.childActive
@@ -345,8 +356,9 @@ export function Sidebar() {
   return (
     <aside
       className={cn(
-        "gradient-sidebar flex h-screen flex-col border-r border-sidebar-border transition-all duration-300",
-        collapsed ? "w-16" : "w-64",
+        "gradient-sidebar flex flex-col border-r border-sidebar-border transition-all duration-300",
+        mobile ? "h-full w-full" : "h-screen",
+        !mobile && (collapsed ? "w-16" : "w-64"),
       )}
     >
       {/* Logo */}
@@ -503,23 +515,27 @@ export function Sidebar() {
 
         <div className="flex items-center gap-2">
           <NotificationBell collapsed={collapsed} />
-          <Button
-            variant="ghost"
-            size="icon"
-            className="h-9 w-9 text-sidebar-muted hover:bg-sidebar-accent hover:text-sidebar-foreground"
-            onClick={() => setCollapsed(!collapsed)}
-          >
-            {collapsed ? (
-              <ChevronRight className="h-4 w-4" />
-            ) : (
-              <ChevronLeft className="h-4 w-4" />
-            )}
-          </Button>
+          {!mobile && (
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-9 w-9 text-sidebar-muted hover:bg-sidebar-accent hover:text-sidebar-foreground"
+              aria-label={collapsed ? "Expandir menu" : "Recolher menu"}
+              onClick={() => setCollapsed(!collapsed)}
+            >
+              {collapsed ? (
+                <ChevronRight className="h-4 w-4" />
+              ) : (
+                <ChevronLeft className="h-4 w-4" />
+              )}
+            </Button>
+          )}
           {collapsed ? (
             <Button
               variant="ghost"
               size="icon"
               className="h-9 w-9 text-sidebar-muted hover:bg-sidebar-accent hover:text-sidebar-foreground"
+              aria-label="Sair"
               onClick={handleLogout}
             >
               <LogOut className="h-4 w-4" />

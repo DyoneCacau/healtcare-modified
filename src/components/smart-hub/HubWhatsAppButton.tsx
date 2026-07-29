@@ -25,7 +25,7 @@ function buildWhatsAppUrl(phone: string, message?: string): string {
 
 export const HubWhatsAppButton = memo(function HubWhatsAppButton({
   phone,
-  message = 'Olá! Gostaria de mais informações.',
+  message,
   label = 'Falar no WhatsApp',
   className,
   onClick,
@@ -37,13 +37,14 @@ export const HubWhatsAppButton = memo(function HubWhatsAppButton({
       href={buildWhatsAppUrl(phone, message)}
       target="_blank"
       rel="noopener noreferrer"
+      aria-label={label}
       onClick={onClick}
       className={cn(
-        'mx-auto flex w-full max-w-lg items-center justify-center gap-2 rounded-xl bg-emerald-600 px-4 py-3 font-semibold text-white shadow-sm transition hover:bg-emerald-700',
+        'mx-auto flex w-full max-w-lg items-center justify-center gap-2 rounded-xl bg-emerald-600 px-4 py-3.5 font-semibold text-white shadow-sm transition hover:bg-emerald-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400 min-h-[44px]',
         className
       )}
     >
-      <MessageCircle className="h-5 w-5" />
+      <MessageCircle className="h-5 w-5" aria-hidden />
       {label}
     </a>
   );

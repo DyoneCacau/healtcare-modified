@@ -15,6 +15,7 @@ export function useHubButtons(hubId?: string | null) {
     queryClient.invalidateQueries({ queryKey: ['smart-hub-preview', hubId] });
     queryClient.invalidateQueries({ queryKey: ['smart-hub', clinicId] });
     queryClient.invalidateQueries({ queryKey: ['smart-hub-analytics-metrics', clinicId] });
+    queryClient.invalidateQueries({ queryKey: ['public-smart-hub'] });
   };
 
   const query = useQuery({
