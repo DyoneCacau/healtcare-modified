@@ -22,3 +22,10 @@ export { TemplateThumbnail } from './TemplateThumbnail';
 export { FieldHelpLabel, FieldHint, TipCallout, FormSection } from './FieldHelpLabel';
 export { ButtonEditorPreview } from './ButtonEditorPreview';
 export type { ButtonEditorPreviewModel } from './ButtonEditorPreview';
+export { ContrastPairAlert } from './ContrastPairAlert';
+export {
+  TYPE_ACTION_BRIDGE_HINT,
+  getCompatibleActions,
+  getRecommendedAction,
+  isActionCompatible,
+} from './buttonTypeActionMap';

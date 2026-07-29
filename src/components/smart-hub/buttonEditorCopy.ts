@@ -3,24 +3,36 @@ import type { SmartHubClickAction, SmartHubButtonVisualVariant } from '@/types/s
 export const BUTTON_FIELD_HELP = {
   title: 'Nome que aparece no botão da página pública.',
   subtitle: 'Texto de apoio opcional, abaixo do título.',
-  type: 'Define a categoria do botão, como agendamento, contato ou link.',
+  info_content: 'Texto explicativo mostrado ao visitante sem sair da página.',
+  type: 'Define o que este botão representa, como WhatsApp, Instagram, agendamento, procedimentos ou informação.',
+  type_tooltip:
+    'O tipo define a finalidade visual do botão e ajuda o sistema a sugerir ícone, ação e campos adequados.',
+  type_internal: 'Abre uma página ou seção dentro do próprio Smart Hub.',
   click_action: 'Escolha o que acontece quando o visitante tocar neste botão.',
+  action_suggested: 'Ação sugerida com base no tipo selecionado.',
+  action_custom: 'Permite escolher qualquer ação, mesmo fora das recomendações do tipo.',
   capture_interest: 'Ajuda a identificar no CRM o assunto ou interesse do lead.',
-  capture_stage: 'É a etapa do CRM onde o lead entrará após preencher o formulário.',
-  capture_owner: 'Define quem receberá esse lead no CRM.',
-  capture_redirect_wa:
-    'Depois de enviar o formulário, o visitante será direcionado ao WhatsApp da clínica.',
-  url: 'Informe o endereço que será aberto, como site, mapa, link externo ou WhatsApp.',
-  whatsapp_message: 'Mensagem que já aparece pronta quando a conversa do WhatsApp abre.',
+  capture_stage: 'Etapa do funil em que o lead entra após o formulário.',
+  capture_owner: 'Pessoa da clínica que receberá este lead.',
+  capture_redirect_wa: 'Após o envio, o visitante pode ser enviado ao WhatsApp.',
+  capture_wa_phone: 'Número usado no redirecionamento após o formulário.',
+  capture_wa_message: 'Mensagem pronta na conversa do WhatsApp após o envio.',
+  url: 'Endereço que será aberto (site, mapa, link externo…).',
+  phone: 'Número com DDD (ex.: 5511999999999).',
+  email: 'Endereço de e-mail que será aberto no aplicativo do visitante.',
+  email_subject: 'Assunto sugerido no e-mail (opcional).',
+  map_url: 'Link do Google Maps ou endereço da clínica.',
+  whatsapp_message: 'Mensagem que já aparece pronta quando o WhatsApp abre.',
+  open_in_new_tab: 'Se ativo, o destino abre em outra aba do navegador.',
   visual_variant: 'Escolha como este botão aparecerá na página pública.',
   icon: 'Nome do ícone opcional para reforçar a ação do botão.',
   image: 'Imagem exibida no card. Ideal para procedimentos e campanhas.',
-  image_alt: 'Descrição da imagem para acessibilidade e busca.',
+  image_alt: 'Descrição da imagem para acessibilidade.',
   background_color: 'Cor de fundo do botão na página pública.',
-  text_color: 'Cor do texto do botão. Prefira contraste bom para leitura.',
+  text_color: 'Cor do texto do botão.',
   visible: 'Se desativado, o botão não aparece na página pública.',
   track_click: 'Registra quantas pessoas clicaram neste botão.',
-  order_index: 'Ordem de aparição na página (números menores aparecem primeiro).',
+  order_index: 'Ordem na página (números menores aparecem primeiro).',
 } as const;
 
 export const CLICK_ACTION_HELP: Record<
@@ -85,23 +97,44 @@ export const VARIANT_HELP: Record<
   },
 };
 
-export function previewActionHint(action: SmartHubClickAction): string {
+export function previewBehaviorTitle(): string {
+  return 'O que acontecerá ao clicar';
+}
+
+/** Texto único da prévia lateral (não repetir no formulário). */
+export function previewBehaviorDescription(
+  action: SmartHubClickAction,
+  opts?: { redirectWhatsapp?: boolean }
+): string {
   switch (action) {
     case 'form':
-      return 'Ao clicar, o visitante abrirá um formulário de contato.';
+      return opts?.redirectWhatsapp
+        ? 'O lead será salvo no CRM e, depois, o WhatsApp será aberto.'
+        : 'O visitante preencherá seus dados e o lead será enviado para o CRM.';
     case 'whatsapp':
-      return 'Ao clicar, o visitante abrirá o WhatsApp.';
+      return 'O visitante irá diretamente para o WhatsApp. Nenhum lead será criado automaticamente.';
     case 'link':
-      return 'Ao clicar, o visitante será levado para outro link.';
+      return 'O visitante será levado para outro site.';
     case 'phone':
-      return 'Ao clicar, o visitante poderá iniciar uma ligação.';
+      return 'O visitante poderá iniciar uma ligação para o número informado.';
     case 'email':
-      return 'Ao clicar, o visitante abrirá o e-mail.';
+      return 'O aplicativo de e-mail do visitante será aberto.';
     case 'map':
-      return 'Ao clicar, o visitante verá a localização no mapa.';
+      return 'O mapa ou endereço da clínica será aberto.';
     case 'info':
-      return 'Ao clicar, apenas a informação é exibida (sem sair da página).';
+      return 'A informação será exibida na própria página, sem redirecionar.';
     default:
       return 'O comportamento segue o tipo escolhido para este botão.';
   }
+}
+
+export function formFlowSteps(redirectWhatsapp: boolean): string[] {
+  const steps = [
+    'O visitante preenche o formulário',
+    'O lead entra no CRM',
+  ];
+  if (redirectWhatsapp) {
+    steps.push('O visitante é direcionado ao WhatsApp');
+  }
+  return steps;
 }

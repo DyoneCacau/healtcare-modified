@@ -1,3 +1,4 @@
+import { useEffect, useState } from 'react';
 import { HelpCircle, Lightbulb } from 'lucide-react';
 import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
@@ -7,6 +8,7 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from '@/components/ui/tooltip';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { cn } from '@/lib/utils';
 
 interface FieldHelpLabelProps {
@@ -16,27 +18,62 @@ interface FieldHelpLabelProps {
   className?: string;
 }
 
-/** Label com ícone de ajuda e tooltip (linguagem simples). */
+function useCoarsePointer() {
+  const [coarse, setCoarse] = useState(false);
+  useEffect(() => {
+    const mq = window.matchMedia('(hover: none), (pointer: coarse)');
+    const sync = () => setCoarse(mq.matches);
+    sync();
+    mq.addEventListener?.('change', sync);
+    return () => mq.removeEventListener?.('change', sync);
+  }, []);
+  return coarse;
+}
+
+/** Label com ícone de ajuda (tooltip no desktop / popover no toque). */
 export function FieldHelpLabel({ htmlFor, label, help, className }: FieldHelpLabelProps) {
+  const coarse = useCoarsePointer();
+
+  const triggerBtn = (
+    <button
+      type="button"
+      className="inline-flex shrink-0 rounded-full text-muted-foreground hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+      aria-label={`Ajuda: ${label}`}
+    >
+      <HelpCircle className="h-3.5 w-3.5" />
+    </button>
+  );
+
   return (
     <div className={cn('flex items-center gap-1.5', className)}>
       <Label htmlFor={htmlFor}>{label}</Label>
-      <TooltipProvider delayDuration={200}>
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <button
-              type="button"
-              className="inline-flex rounded-full text-muted-foreground hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-              aria-label={`Ajuda: ${label}`}
-            >
-              <HelpCircle className="h-3.5 w-3.5" />
-            </button>
-          </TooltipTrigger>
-          <TooltipContent side="top" className="max-w-xs text-xs leading-relaxed">
+      {coarse ? (
+        <Popover>
+          <PopoverTrigger asChild>{triggerBtn}</PopoverTrigger>
+          <PopoverContent
+            side="top"
+            sideOffset={8}
+            collisionPadding={16}
+            className="z-[200] w-auto max-w-[min(20rem,calc(100vw-2rem))] p-3 text-xs leading-relaxed whitespace-normal break-words"
+          >
             {help}
-          </TooltipContent>
-        </Tooltip>
-      </TooltipProvider>
+          </PopoverContent>
+        </Popover>
+      ) : (
+        <TooltipProvider delayDuration={200}>
+          <Tooltip>
+            <TooltipTrigger asChild>{triggerBtn}</TooltipTrigger>
+            <TooltipContent
+              side="top"
+              sideOffset={8}
+              collisionPadding={16}
+              className="z-[200] max-w-[min(20rem,calc(100vw-2rem))] text-xs leading-relaxed whitespace-normal break-words"
+            >
+              {help}
+            </TooltipContent>
+          </Tooltip>
+        </TooltipProvider>
+      )}
     </div>
   );
 }

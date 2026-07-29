@@ -99,6 +99,8 @@ export interface SmartHubButtonCaptureConfig {
   include_hub_name?: boolean;
   include_service_name?: boolean;
   open_in_new_tab?: boolean;
+  /** Assunto opcional para ação e-mail (mailto). */
+  email_subject?: string | null;
 }
 
 export type SmartHubStylePreset =
@@ -449,14 +451,14 @@ export const SMART_HUB_STATUS_LABELS: Record<SmartHubStatus, string> = {
 };
 
 export const SMART_HUB_BUTTON_TYPE_LABELS: Record<SmartHubButtonType, string> = {
-  link: 'Link externo',
+  link: 'Link ou site',
   whatsapp: 'WhatsApp',
-  phone: 'Ligação',
+  phone: 'Telefone',
   email: 'E-mail',
-  map: 'Google Maps',
+  map: 'Localização',
   video: 'Vídeo',
   form: 'Formulário',
-  internal: 'Interno',
+  internal: 'Página interna',
   social: 'Rede social',
   instagram: 'Instagram',
   facebook: 'Facebook',

@@ -1,8 +1,11 @@
 import { HubButton } from './HubButton';
-import { Badge } from '@/components/ui/badge';
-import { previewActionHint, CLICK_ACTION_HELP, VARIANT_HELP } from './buttonEditorCopy';
+import {
+  previewBehaviorDescription,
+  previewBehaviorTitle,
+} from './buttonEditorCopy';
 import { resolveClickAction } from '@/services/smartHub/captureDefaults';
 import {
+  SMART_HUB_BUTTON_TYPE_LABELS,
   SMART_HUB_CLICK_ACTION_LABELS,
   SMART_HUB_VARIANT_LABELS,
   type SmartHubButton,
@@ -25,14 +28,23 @@ export interface ButtonEditorPreviewModel {
   image_alt: string;
   background_color: string;
   text_color: string;
+  redirect_whatsapp?: boolean;
+  email_subject?: string;
+  open_in_new_tab?: boolean;
 }
 
 interface ButtonEditorPreviewProps {
   model: ButtonEditorPreviewModel;
   className?: string;
+  /** Na edição, mostra as cores escolhidas (mesmo com contraste ruim). */
+  showActualColors?: boolean;
 }
 
-export function ButtonEditorPreview({ model, className }: ButtonEditorPreviewProps) {
+export function ButtonEditorPreview({
+  model,
+  className,
+  showActualColors = true,
+}: ButtonEditorPreviewProps) {
   const action = resolveClickAction(model.click_action, model.type);
   const previewButton = {
     id: 'preview-button',
@@ -49,7 +61,10 @@ export function ButtonEditorPreview({ model, className }: ButtonEditorPreviewPro
     image_position: 'left',
     whatsapp_message: model.whatsapp_message || null,
     click_action: model.click_action,
-    capture_config: {},
+    capture_config: {
+      email_subject: model.email_subject || null,
+      open_in_new_tab: model.open_in_new_tab,
+    },
     background_color: model.background_color || '#0F766E',
     text_color: model.text_color || '#FFFFFF',
     visible: true,
@@ -63,16 +78,11 @@ export function ButtonEditorPreview({ model, className }: ButtonEditorPreviewPro
     deleted_at: null,
   } as SmartHubButton;
 
-  const actionMeta = CLICK_ACTION_HELP[action] || CLICK_ACTION_HELP.auto;
-  const variantMeta = VARIANT_HELP[model.visual_variant] || VARIANT_HELP.simple;
-
   return (
     <div className={cn('space-y-4', className)}>
       <div>
         <p className="text-sm font-semibold">Prévia do botão</p>
-        <p className="text-xs text-muted-foreground">
-          Atualiza conforme você edita. Ação real só ocorre na página pública.
-        </p>
+        <p className="text-xs text-muted-foreground">Atualiza conforme você edita.</p>
       </div>
 
       <div className="rounded-2xl border bg-muted/40 p-4">
@@ -82,26 +92,39 @@ export function ButtonEditorPreview({ model, className }: ButtonEditorPreviewPro
             onClick={() => undefined}
             defaultBg={model.background_color || '#0F766E'}
             defaultFg={model.text_color || '#FFFFFF'}
+            autoFixContrast={!showActualColors}
           />
-          <div className="rounded-lg border border-dashed bg-background/80 px-3 py-2 text-center text-xs text-muted-foreground">
-            {previewActionHint(action)}
-          </div>
         </div>
       </div>
 
-      <div className="space-y-2 text-xs">
-        <div className="flex flex-wrap gap-1.5">
-          <Badge variant="secondary">
-            {SMART_HUB_CLICK_ACTION_LABELS[action] || action}
-          </Badge>
-          <Badge variant="outline">
-            {SMART_HUB_VARIANT_LABELS[model.visual_variant] || model.visual_variant}
-          </Badge>
-          {actionMeta.badge && <Badge>{actionMeta.badge}</Badge>}
-          {variantMeta.badge && <Badge variant="outline">{variantMeta.badge}</Badge>}
+      <div className="space-y-3 rounded-lg border bg-background px-3 py-3 text-sm">
+        <div className="space-y-1">
+          <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+            Tipo
+          </p>
+          <p className="font-medium">{SMART_HUB_BUTTON_TYPE_LABELS[model.type] || model.type}</p>
         </div>
-        <p className="text-muted-foreground leading-relaxed">{actionMeta.description}</p>
-        <p className="text-muted-foreground leading-relaxed">{variantMeta.description}</p>
+        <div className="space-y-1">
+          <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+            Ação
+          </p>
+          <p className="font-medium">
+            {SMART_HUB_CLICK_ACTION_LABELS[action] || action}
+          </p>
+        </div>
+        <div className="space-y-1 border-t pt-3">
+          <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+            {previewBehaviorTitle()}
+          </p>
+          <p className="leading-relaxed text-muted-foreground">
+            {previewBehaviorDescription(action, {
+              redirectWhatsapp: Boolean(model.redirect_whatsapp),
+            })}
+          </p>
+        </div>
+        <p className="text-xs text-muted-foreground">
+          Aparência: {SMART_HUB_VARIANT_LABELS[model.visual_variant] || model.visual_variant}
+        </p>
       </div>
     </div>
   );
