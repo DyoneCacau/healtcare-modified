@@ -1,7 +1,7 @@
 import { useState, useMemo, useEffect } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { format, parseISO } from 'date-fns';
-import { Plus } from 'lucide-react';
+import { Plus, Clock } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { MainLayout } from '@/components/layout/MainLayout';
 import { AgendaFilters } from '@/components/agenda/AgendaFilters';
@@ -13,6 +13,7 @@ import { AppointmentFormDialog } from '@/components/agenda/AppointmentFormDialog
 import { CompleteAppointmentDialog } from '@/components/agenda/CompleteAppointmentDialog';
 import { NoShowFeeDialog } from '@/components/agenda/NoShowFeeDialog';
 import { EditAppointmentMaterialsDialog } from '@/components/agenda/EditAppointmentMaterialsDialog';
+import { AgendaScheduleSettingsDialog } from '@/components/agenda/AgendaScheduleSettingsDialog';
 import { AgendaAppointment, AgendaView, Professional, LeadSource } from '@/types/agenda';
 import { PaymentMethod } from '@/types/financial';
 import { useAppointments, useAppointmentMutations } from '@/hooks/useAppointments';
@@ -56,6 +57,7 @@ export default function Agenda() {
   const [noShowAppointment, setNoShowAppointment] = useState<AgendaAppointment | null>(null);
   const [editMaterialsOpen, setEditMaterialsOpen] = useState(false);
   const [editingMaterialsAppointment, setEditingMaterialsAppointment] = useState<AgendaAppointment | null>(null);
+  const [scheduleSettingsOpen, setScheduleSettingsOpen] = useState(false);
 
   const { clinic } = useClinic();
   const { clinics: userClinics } = useClinics();
@@ -657,10 +659,20 @@ export default function Agenda() {
               Gerencie os agendamentos da clínica
             </p>
           </div>
-          <Button onClick={handleNewAppointment}>
-            <Plus className="mr-2 h-4 w-4" />
-            Novo Agendamento
-          </Button>
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setScheduleSettingsOpen(true)}
+            >
+              <Clock className="mr-2 h-4 w-4" />
+              Horários e bloqueios
+            </Button>
+            <Button onClick={handleNewAppointment}>
+              <Plus className="mr-2 h-4 w-4" />
+              Novo Agendamento
+            </Button>
+          </div>
         </div>
 
         {/* Stats */}
@@ -785,6 +797,16 @@ export default function Agenda() {
           if (!open) setEditingMaterialsAppointment(null);
         }}
         appointment={editingMaterialsAppointment}
+      />
+
+      <AgendaScheduleSettingsDialog
+        open={scheduleSettingsOpen}
+        onOpenChange={setScheduleSettingsOpen}
+        clinicId={clinic?.id}
+        professionals={activeProfessionals.map((p: { id: string; name: string }) => ({
+          id: p.id,
+          name: p.name,
+        }))}
       />
     </MainLayout>
   );

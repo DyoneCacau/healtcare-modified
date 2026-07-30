@@ -25,6 +25,10 @@ import { useClinics } from '@/hooks/useClinic';
 import { supabase } from '@/integrations/supabase/client';
 import { ClinicMultiSelect } from '@/components/common/ClinicMultiSelect';
 import { SPECIALTIES } from '@/lib/specialties';
+import { WorkScheduleEditor } from '@/components/agenda/WorkScheduleEditor';
+import { useWorkSchedules, useWorkScheduleMutations } from '@/hooks/useWorkSchedules';
+import type { WorkSchedulePeriodInput } from '@/types/schedule';
+import { validateWorkSchedulePeriods } from '@/lib/scheduleValidation';
 
 interface Professional {
   id?: string;
@@ -68,10 +72,34 @@ export function ProfessionalFormDialog({
   /** Clínicas onde já existe um profissional com o mesmo CRO (não removíveis por aqui) */
   const [existingClinicIds, setExistingClinicIds] = useState<string[]>([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [schedulePeriods, setSchedulePeriods] = useState<WorkSchedulePeriodInput[]>([]);
   const { clinics } = useClinics();
 
   const isEditing = !!professional;
   const otherClinics = clinics.filter((c: { id: string }) => c.id !== currentClinicId);
+
+  const { schedules, isLoading: isLoadingSchedules } = useWorkSchedules({
+    clinicId: currentClinicId,
+    professionalId: professional?.id || null,
+    activeOnly: false,
+    enabled: open && isEditing && !!professional?.id && !!currentClinicId,
+  });
+  const { replaceSchedules } = useWorkScheduleMutations();
+
+  useEffect(() => {
+    if (!open || !isEditing) {
+      setSchedulePeriods([]);
+      return;
+    }
+    setSchedulePeriods(
+      schedules.map((schedule) => ({
+        weekday: schedule.weekday,
+        start_time: schedule.start_time,
+        end_time: schedule.end_time,
+        is_active: schedule.is_active,
+      })),
+    );
+  }, [open, isEditing, schedules]);
 
   useEffect(() => {
     if (!open) return;
@@ -144,7 +172,7 @@ export function ProfessionalFormDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-md">
+      <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <Stethoscope className="h-5 w-5 text-primary" />
@@ -258,6 +286,47 @@ export function ProfessionalFormDialog({
                   : 'Marque em quais outras unidades este profissional também atende — o cadastro é replicado automaticamente, sem repetir os dados manualmente. Unidades criadas no futuro aparecem aqui sem precisar de nada.'
               }
             />
+          )}
+
+          {isEditing && professional?.id && currentClinicId && (
+            <div className="space-y-3 border-t pt-4">
+              <div>
+                <h3 className="text-sm font-semibold">Horários de atendimento</h3>
+                <p className="text-xs text-muted-foreground">
+                  Jornada deste profissional nesta clínica (mesma fonte da Agenda).
+                </p>
+              </div>
+              {isLoadingSchedules ? (
+                <p className="text-sm text-muted-foreground">Carregando horários…</p>
+              ) : (
+                <WorkScheduleEditor
+                  periods={schedulePeriods}
+                  onChange={setSchedulePeriods}
+                />
+              )}
+              <Button
+                type="button"
+                variant="secondary"
+                disabled={
+                  !!validateWorkSchedulePeriods(schedulePeriods) ||
+                  replaceSchedules.isPending
+                }
+                onClick={async () => {
+                  const error = validateWorkSchedulePeriods(schedulePeriods);
+                  if (error) {
+                    toast.error(error);
+                    return;
+                  }
+                  await replaceSchedules.mutateAsync({
+                    clinicId: currentClinicId,
+                    professionalId: professional.id!,
+                    periods: schedulePeriods,
+                  });
+                }}
+              >
+                Salvar horários
+              </Button>
+            </div>
           )}
 
           <DialogFooter>

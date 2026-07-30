@@ -496,12 +496,24 @@ export default function Professionals() {
             </div>
           )}
 
-          <DialogFooter className="gap-2">
+          <DialogFooter className="gap-2 flex-wrap">
             <Button
               variant="outline"
               onClick={() => selectedProfessional && handleToggleStatus(selectedProfessional)}
             >
               {selectedProfessional?.is_active ? 'Desativar' : 'Ativar'}
+            </Button>
+            <Button
+              type="button"
+              variant="secondary"
+              onClick={() => {
+                if (!selectedProfessional) return;
+                setEditingProfessional(selectedProfessional);
+                setFormOpen(true);
+                setDetailsOpen(false);
+              }}
+            >
+              Horários de atendimento
             </Button>
             <Button onClick={() => selectedProfessional && handleEdit(selectedProfessional)}>
               <Edit className="mr-2 h-4 w-4" />
