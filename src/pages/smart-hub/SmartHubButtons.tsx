@@ -7,7 +7,6 @@ import {
   ColorField,
   FieldHelpLabel,
   FieldHint,
-  TipCallout,
   FormSection,
   ButtonEditorPreview,
   ContrastPairAlert,
@@ -16,14 +15,28 @@ import {
   BUTTON_FIELD_HELP,
   CLICK_ACTION_HELP,
   VARIANT_HELP,
+  OWNER_OPTION_HINTS,
   formFlowSteps,
+  ownerFieldGuidance,
+  recommendVariantForButton,
 } from '@/components/smart-hub/buttonEditorCopy';
 import {
-  TYPE_ACTION_BRIDGE_HINT,
   getCompatibleActions,
   getRecommendedAction,
   isActionCompatible,
 } from '@/components/smart-hub/buttonTypeActionMap';
+import {
+  applyButtonIntent,
+  inferButtonIntent,
+  intentOptionById,
+  listContactMethods,
+  listVisibleIntents,
+  previewIntentHeadline,
+  SOCIAL_NETWORK_OPTIONS,
+  type ButtonIntentId,
+  type ContactMethodId,
+  type SocialNetworkId,
+} from '@/components/smart-hub/buttonIntentOptions';
 import { useSmartHub } from '@/hooks/useSmartHub';
 import { useHubButtons } from '@/hooks/useHubButtons';
 import { useClinic } from '@/hooks/useClinic';
@@ -33,6 +46,11 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Switch } from '@/components/ui/switch';
 import { Textarea } from '@/components/ui/textarea';
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from '@/components/ui/collapsible';
 import {
   Dialog,
   DialogContent,
@@ -97,11 +115,11 @@ function storagePathFromPublicUrl(url: string | null | undefined): string | null
 const emptyForm = {
   title: '',
   subtitle: '',
-  type: 'link' as SmartHubButtonType,
+  type: 'form' as SmartHubButtonType,
   url: '',
   whatsapp_message: '',
   visual_variant: 'simple' as SmartHubButtonVisualVariant,
-  click_action: 'link' as SmartHubClickAction,
+  click_action: 'form' as SmartHubClickAction,
   icon: '',
   image: '',
   image_alt: '',
@@ -142,12 +160,22 @@ export default function SmartHubButtons() {
   const [actionManuallySet, setActionManuallySet] = useState(false);
   /** Libera todas as ações (combinações avançadas). */
   const [customActions, setCustomActions] = useState(false);
+  /** Intenção amigável (UI); type/click_action permanecem o contrato interno. */
+  const [buttonIntent, setButtonIntent] = useState<ButtonIntentId>('capture_form');
+  const [socialNetwork, setSocialNetwork] = useState<SocialNetworkId>('instagram');
+  const [contactMethod, setContactMethod] = useState<ContactMethodId>('form');
+  const [advancedOpen, setAdvancedOpen] = useState(false);
 
   const effectiveAction = resolveClickAction(form.click_action, form.type);
   const availableActions = useMemo(() => {
     const list = getCompatibleActions(form.type, customActions);
     return hasCrm ? list : list.filter((a) => a !== 'form');
   }, [form.type, customActions, hasCrm]);
+  const visibleIntents = useMemo(() => listVisibleIntents(hasCrm), [hasCrm]);
+  const contactMethodOptions = useMemo(() => listContactMethods(hasCrm), [hasCrm]);
+  const intentMeta = intentOptionById(
+    buttonIntent === 'advanced' ? 'website' : buttonIntent
+  );
   const actionIsSuggested =
     !actionManuallySet &&
     !customActions &&
@@ -161,8 +189,32 @@ export default function SmartHubButtons() {
   const isEmail = effectiveAction === 'email';
   const isMap = effectiveAction === 'map';
   const isInfo = effectiveAction === 'info';
+  const isSocialIntent = buttonIntent === 'social';
+  const isAppointmentOrProcedure =
+    buttonIntent === 'appointment' || buttonIntent === 'procedure';
   const showFallbackDestination =
     !isFormAction && !isWhatsApp && !isLink && !isPhone && !isEmail && !isMap && !isInfo;
+
+  const applyIntentToForm = (
+    intent: ButtonIntentId,
+    nextSocial: SocialNetworkId = socialNetwork,
+    nextMethod: ContactMethodId = contactMethod
+  ) => {
+    const applied = applyButtonIntent(intent, {
+      socialNetwork: nextSocial,
+      contactMethod: nextMethod,
+      hasCrm,
+    });
+    setButtonIntent(intent);
+    setActionManuallySet(false);
+    setCustomActions(false);
+    setAdvancedOpen(intent === 'advanced');
+    setForm((f) => ({
+      ...f,
+      type: applied.type,
+      click_action: applied.click_action,
+    }));
+  };
 
   const hubResolvedCapture = useMemo(
     () =>
@@ -192,6 +244,21 @@ export default function SmartHubButtons() {
     return staff.find((s) => s.id === hubResolvedCapture.owner_user_id)?.name || 'Responsável definido';
   }, [hubResolvedCapture.owner_user_id, staff]);
 
+  const selectedCustomOwnerName = useMemo(() => {
+    if (!form.capture_owner) return null;
+    return staff.find((s) => s.id === form.capture_owner)?.name || null;
+  }, [form.capture_owner, staff]);
+
+  const ownerGuidance = ownerFieldGuidance({ ownerName: selectedCustomOwnerName });
+
+  const variantRecommendation = recommendVariantForButton({
+    type: form.type,
+    action: effectiveAction,
+    hasImage: Boolean(form.image?.trim()),
+    title: form.title,
+    interest: form.capture_interest || null,
+  });
+
   const stageLabel =
     CRM_STAGES.find((s) => s.id === hubResolvedCapture.initial_stage)?.label ||
     hubResolvedCapture.initial_stage;
@@ -200,11 +267,22 @@ export default function SmartHubButtons() {
     setEditing(null);
     setActionManuallySet(false);
     setCustomActions(false);
+    const defaultIntent: ButtonIntentId = hasCrm ? 'capture_form' : 'whatsapp';
+    const defaultMethod: ContactMethodId = hasCrm ? 'form' : 'whatsapp';
+    const applied = applyButtonIntent(defaultIntent, {
+      hasCrm,
+      contactMethod: defaultMethod,
+      socialNetwork: 'instagram',
+    });
+    setButtonIntent(defaultIntent);
+    setSocialNetwork('instagram');
+    setContactMethod(defaultMethod);
+    setAdvancedOpen(false);
     setForm({
       ...emptyForm,
       order_index: buttons.length,
-      type: 'link',
-      click_action: getRecommendedAction('link'),
+      type: applied.type,
+      click_action: applied.click_action,
     });
     setPreviewOpen(false);
     setSummaryOpen(false);
@@ -220,10 +298,15 @@ export default function SmartHubButtons() {
       rawAction === 'auto' ? getRecommendedAction(type) : rawAction;
     const unlocked =
       rawAction !== 'auto' && !isActionCompatible(type, concrete);
-    setCustomActions(unlocked);
+    const inferred = inferButtonIntent(type, concrete, { hasCrm });
+    setCustomActions(unlocked || inferred.needsAdvanced);
     setActionManuallySet(
       rawAction !== 'auto' && concrete !== getRecommendedAction(type)
     );
+    setButtonIntent(inferred.intent);
+    setSocialNetwork(inferred.socialNetwork || 'instagram');
+    setContactMethod(inferred.contactMethod || (hasCrm ? 'form' : 'link'));
+    setAdvancedOpen(inferred.needsAdvanced || unlocked);
     setForm({
       title: btn.title,
       subtitle: btn.subtitle || '',
@@ -468,6 +551,13 @@ export default function SmartHubButtons() {
     redirect_whatsapp: isFormAction && hubResolvedCapture.redirect_whatsapp_after_submit,
     email_subject: form.email_subject,
     open_in_new_tab: form.open_in_new_tab,
+    interest: isFormAction ? form.capture_interest || null : null,
+    stage_label: isFormAction ? stageLabel : null,
+    owner_label: isFormAction ? ownerLabel : null,
+    has_owner: isFormAction ? Boolean(hubResolvedCapture.owner_user_id) : false,
+    show_crm_summary: isFormAction,
+    intent: buttonIntent,
+    social_network: isSocialIntent ? socialNetwork : null,
   };
 
   const destinationSummary = (() => {
@@ -515,107 +605,261 @@ export default function SmartHubButtons() {
         ) : null}
 
         <div className="space-y-2">
-          <FieldHelpLabel label="Tipo" help={BUTTON_FIELD_HELP.type_tooltip} />
-          <Select
-            value={form.type}
-            onValueChange={(v) => {
-              const nextType = v as SmartHubButtonType;
-              const keepAction =
-                customActions ||
-                (actionManuallySet && isActionCompatible(nextType, form.click_action));
-              const nextAction = keepAction
-                ? form.click_action
-                : getRecommendedAction(nextType);
-              if (!keepAction && actionManuallySet) {
-                setActionManuallySet(false);
-              }
-              setForm((f) => ({ ...f, type: nextType, click_action: nextAction }));
-            }}
-          >
-            <SelectTrigger>
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent position="popper" className="max-h-72">
-              {BUTTON_TYPES.map((t) => (
-                <SelectItem key={t} value={t}>
-                  {SMART_HUB_BUTTON_TYPE_LABELS[t]}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-          <FieldHint>{BUTTON_FIELD_HELP.type}</FieldHint>
-          {form.type === 'internal' ? (
-            <FieldHint>{BUTTON_FIELD_HELP.type_internal}</FieldHint>
-          ) : null}
-        </div>
-
-        <p className="rounded-md border border-dashed bg-muted/20 px-3 py-2 text-xs leading-relaxed text-muted-foreground">
-          {TYPE_ACTION_BRIDGE_HINT}
-        </p>
-
-        <div className="space-y-2">
-          <FieldHelpLabel label="Ação ao clicar" help={BUTTON_FIELD_HELP.click_action} />
+          <FieldHelpLabel
+            label="O que este botão fará?"
+            help={BUTTON_FIELD_HELP.intent}
+          />
           <Select
             value={
-              availableActions.includes(form.click_action)
-                ? form.click_action
-                : availableActions[0] || form.click_action
+              visibleIntents.some((opt) => opt.id === buttonIntent)
+                ? buttonIntent
+                : ''
             }
             onValueChange={(v) => {
-              setActionManuallySet(true);
-              setForm((f) => ({ ...f, click_action: v as SmartHubClickAction }));
+              const next = v as ButtonIntentId;
+              const nextMethod =
+                next === 'appointment' || next === 'procedure'
+                  ? contactMethod
+                  : hasCrm
+                    ? 'form'
+                    : 'link';
+              if (next === 'appointment' || next === 'procedure') {
+                setContactMethod(nextMethod);
+              }
+              applyIntentToForm(next, socialNetwork, nextMethod);
             }}
           >
             <SelectTrigger>
-              <SelectValue />
+              <SelectValue
+                placeholder={
+                  buttonIntent === 'advanced'
+                    ? 'Configuração personalizada (avançado)'
+                    : 'Escolha o resultado do botão'
+                }
+              />
             </SelectTrigger>
-            <SelectContent position="popper" className="max-h-72">
-              {availableActions.map((a) => (
-                <SelectItem key={a} value={a} disabled={a === 'form' && !hasCrm}>
-                  {SMART_HUB_CLICK_ACTION_LABELS[a]}
+            <SelectContent position="popper" className="max-h-80">
+              {visibleIntents.map((opt) => (
+                <SelectItem key={opt.id} value={opt.id}>
+                  <span className="flex flex-col items-start gap-0.5 py-0.5 text-left">
+                    <span>{opt.label}</span>
+                    <span className="text-[11px] font-normal leading-snug text-muted-foreground">
+                      {opt.description}
+                    </span>
+                  </span>
                 </SelectItem>
               ))}
             </SelectContent>
           </Select>
-          {actionIsSuggested ? (
-            <FieldHint>{BUTTON_FIELD_HELP.action_suggested}</FieldHint>
-          ) : (
-            <FieldHint>{actionHelp.description}</FieldHint>
-          )}
-          <div className="flex items-center justify-between gap-2 rounded-md border px-3 py-2">
-            <div className="min-w-0 space-y-0.5">
-              <p className="text-sm font-medium">Configuração personalizada</p>
-              <p className="text-xs text-muted-foreground">{BUTTON_FIELD_HELP.action_custom}</p>
-            </div>
-            <Switch
-              checked={customActions}
-              onCheckedChange={(v) => {
-                setCustomActions(v);
-                if (!v && !isActionCompatible(form.type, form.click_action)) {
-                  setActionManuallySet(false);
-                  setForm((f) => ({
-                    ...f,
-                    click_action: getRecommendedAction(f.type),
-                  }));
-                }
-              }}
-            />
-          </div>
-          {actionHelp.badge && !customActions ? (
-            <TipCallout badge={actionHelp.badge}>
-              {effectiveAction === 'form'
-                ? 'Use quando quiser captar nome e telefone no CRM.'
-                : effectiveAction === 'whatsapp'
-                  ? 'Melhor opção para resposta imediata da clínica.'
-                  : actionHelp.description}
-            </TipCallout>
+          {intentMeta && buttonIntent !== 'advanced' ? (
+            <FieldHint>{intentMeta.description}</FieldHint>
+          ) : buttonIntent === 'advanced' ? (
+            <FieldHint>
+              Este botão usa uma configuração avançada. Ajuste tipo e ação abaixo se necessário.
+            </FieldHint>
           ) : null}
         </div>
+
+        {isSocialIntent ? (
+          <div className="space-y-2">
+            <FieldHelpLabel
+              label="Qual rede social?"
+              help={BUTTON_FIELD_HELP.intent_social}
+            />
+            <Select
+              value={socialNetwork}
+              onValueChange={(v) => {
+                const next = v as SocialNetworkId;
+                setSocialNetwork(next);
+                applyIntentToForm('social', next, contactMethod);
+              }}
+            >
+              <SelectTrigger>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent position="popper">
+                {SOCIAL_NETWORK_OPTIONS.map((net) => (
+                  <SelectItem key={net.id} value={net.id}>
+                    {net.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+        ) : null}
+
+        {isAppointmentOrProcedure ? (
+          <div className="space-y-2">
+            <FieldHelpLabel
+              label={
+                buttonIntent === 'appointment'
+                  ? 'Como o visitante vai agendar?'
+                  : 'Como o visitante entrará em contato?'
+              }
+              help={BUTTON_FIELD_HELP.intent_contact_method}
+            />
+            <Select
+              value={
+                contactMethodOptions.some((o) => o.id === contactMethod)
+                  ? contactMethod
+                  : contactMethodOptions[0]?.id || 'link'
+              }
+              onValueChange={(v) => {
+                const next = v as ContactMethodId;
+                setContactMethod(next);
+                applyIntentToForm(buttonIntent, socialNetwork, next);
+              }}
+            >
+              <SelectTrigger>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent position="popper">
+                {contactMethodOptions.map((opt) => (
+                  <SelectItem key={opt.id} value={opt.id}>
+                    <span className="flex flex-col items-start gap-0.5 py-0.5 text-left">
+                      <span>{opt.label}</span>
+                      <span className="text-[11px] font-normal leading-snug text-muted-foreground">
+                        {opt.description}
+                      </span>
+                    </span>
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+        ) : null}
+
+        <Collapsible open={advancedOpen} onOpenChange={setAdvancedOpen}>
+          <div className="rounded-md border px-3 py-2">
+            <CollapsibleTrigger asChild>
+              <button
+                type="button"
+                className="flex w-full items-center justify-between gap-2 text-left text-sm font-medium"
+              >
+                Configuração avançada
+                {advancedOpen ? (
+                  <ChevronUp className="h-4 w-4 shrink-0" />
+                ) : (
+                  <ChevronDown className="h-4 w-4 shrink-0" />
+                )}
+              </button>
+            </CollapsibleTrigger>
+            <p className="mt-1 text-xs text-muted-foreground">
+              {BUTTON_FIELD_HELP.advanced_type}
+            </p>
+            <CollapsibleContent className="mt-3 space-y-4 border-t pt-3">
+              <div className="space-y-2">
+                <FieldHelpLabel label="Tipo técnico" help={BUTTON_FIELD_HELP.type_tooltip} />
+                <Select
+                  value={form.type}
+                  onValueChange={(v) => {
+                    const nextType = v as SmartHubButtonType;
+                    const keepAction =
+                      customActions ||
+                      (actionManuallySet && isActionCompatible(nextType, form.click_action));
+                    const nextAction = keepAction
+                      ? form.click_action
+                      : getRecommendedAction(nextType);
+                    if (!keepAction && actionManuallySet) {
+                      setActionManuallySet(false);
+                    }
+                    const inferred = inferButtonIntent(nextType, nextAction, { hasCrm });
+                    setButtonIntent(inferred.intent);
+                    if (inferred.socialNetwork) setSocialNetwork(inferred.socialNetwork);
+                    if (inferred.contactMethod) setContactMethod(inferred.contactMethod);
+                    setForm((f) => ({ ...f, type: nextType, click_action: nextAction }));
+                  }}
+                >
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent position="popper" className="max-h-72">
+                    {BUTTON_TYPES.map((t) => (
+                      <SelectItem key={t} value={t}>
+                        {SMART_HUB_BUTTON_TYPE_LABELS[t]}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                {form.type === 'internal' ? (
+                  <FieldHint>{BUTTON_FIELD_HELP.type_internal}</FieldHint>
+                ) : null}
+              </div>
+
+              <div className="space-y-2">
+                <FieldHelpLabel
+                  label="Ação ao clicar (técnica)"
+                  help={BUTTON_FIELD_HELP.click_action}
+                />
+                <Select
+                  value={
+                    availableActions.includes(form.click_action)
+                      ? form.click_action
+                      : availableActions[0] || form.click_action
+                  }
+                  onValueChange={(v) => {
+                    const nextAction = v as SmartHubClickAction;
+                    setActionManuallySet(true);
+                    setForm((f) => ({ ...f, click_action: nextAction }));
+                    const inferred = inferButtonIntent(form.type, nextAction, { hasCrm });
+                    setButtonIntent(inferred.intent);
+                    if (inferred.contactMethod) setContactMethod(inferred.contactMethod);
+                  }}
+                >
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent position="popper" className="max-h-72">
+                    {availableActions.map((a) => (
+                      <SelectItem key={a} value={a} disabled={a === 'form' && !hasCrm}>
+                        {SMART_HUB_CLICK_ACTION_LABELS[a]}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                {actionIsSuggested ? (
+                  <FieldHint>{BUTTON_FIELD_HELP.action_suggested}</FieldHint>
+                ) : (
+                  <FieldHint>{actionHelp.description}</FieldHint>
+                )}
+                <div className="flex items-center justify-between gap-2 rounded-md border px-3 py-2">
+                  <div className="min-w-0 space-y-0.5">
+                    <p className="text-sm font-medium">Configuração personalizada</p>
+                    <p className="text-xs text-muted-foreground">
+                      {BUTTON_FIELD_HELP.action_custom}
+                    </p>
+                  </div>
+                  <Switch
+                    checked={customActions}
+                    onCheckedChange={(v) => {
+                      setCustomActions(v);
+                      if (!v && !isActionCompatible(form.type, form.click_action)) {
+                        setActionManuallySet(false);
+                        setForm((f) => ({
+                          ...f,
+                          click_action: getRecommendedAction(f.type),
+                        }));
+                      }
+                    }}
+                  />
+                </div>
+              </div>
+            </CollapsibleContent>
+          </div>
+        </Collapsible>
       </FormSection>
 
       <FormSection
         title="Destino e comportamento"
-        description="Campos conforme a ação escolhida."
+        description={
+          isFormAction
+            ? 'Campos do formulário e CRM para este botão.'
+            : isSocialIntent
+              ? 'Link da rede social escolhida.'
+              : isWhatsApp
+                ? 'Número e mensagem inicial do WhatsApp.'
+                : 'Campos necessários para esta escolha.'
+        }
       >
         {isFormAction ? (
           <div className="space-y-4">
@@ -724,15 +968,34 @@ export default function SmartHubButtons() {
                       <SelectTrigger>
                         <SelectValue placeholder="Sem responsável" />
                       </SelectTrigger>
-                      <SelectContent position="popper">
-                        <SelectItem value="__none__">Sem responsável</SelectItem>
+                      <SelectContent position="popper" className="max-h-72">
+                        <SelectItem value="__none__">
+                          <span className="flex flex-col items-start gap-0.5 py-0.5 text-left">
+                            <span>Sem responsável</span>
+                            <span className="text-[11px] font-normal leading-snug text-muted-foreground">
+                              {OWNER_OPTION_HINTS.none}
+                            </span>
+                          </span>
+                        </SelectItem>
                         {staff.map((s) => (
                           <SelectItem key={s.id} value={s.id}>
-                            {s.name}
+                            <span className="flex flex-col items-start gap-0.5 py-0.5 text-left">
+                              <span>{s.name}</span>
+                              <span className="text-[11px] font-normal leading-snug text-muted-foreground">
+                                {OWNER_OPTION_HINTS.user}
+                              </span>
+                            </span>
                           </SelectItem>
                         ))}
                       </SelectContent>
                     </Select>
+                    <FieldHint>{ownerGuidance.primary}</FieldHint>
+                    <details className="group text-xs text-muted-foreground">
+                      <summary className="cursor-pointer list-none text-xs font-medium text-foreground/80 underline-offset-2 hover:underline [&::-webkit-details-marker]:hidden">
+                        Saiba mais
+                      </summary>
+                      <p className="mt-1.5 leading-relaxed">{ownerGuidance.secondary}</p>
+                    </details>
                   </div>
                   <div className="flex items-center justify-between gap-2">
                     <FieldHelpLabel
@@ -833,12 +1096,20 @@ export default function SmartHubButtons() {
         {isLink ? (
           <div className="space-y-4">
             <div className="space-y-2">
-              <FieldHelpLabel htmlFor="btn-url" label="URL" help={BUTTON_FIELD_HELP.url} />
+              <FieldHelpLabel
+                htmlFor="btn-url"
+                label={isSocialIntent ? 'URL do perfil ou conteúdo' : 'URL'}
+                help={BUTTON_FIELD_HELP.url}
+              />
               <Input
                 id="btn-url"
                 value={form.url}
                 onChange={(e) => setForm((f) => ({ ...f, url: e.target.value }))}
-                placeholder="https://..."
+                placeholder={
+                  isSocialIntent
+                    ? 'https://instagram.com/sua-clinica'
+                    : 'https://...'
+                }
               />
             </div>
             <div className="flex items-center justify-between gap-2">
@@ -1018,21 +1289,33 @@ export default function SmartHubButtons() {
             <SelectContent position="popper" className="max-h-72">
               {VARIANT_KEYS.map((v) => (
                 <SelectItem key={v} value={v}>
-                  {SMART_HUB_VARIANT_LABELS[v]}
-                  {VARIANT_HELP[v].badge ? ` · ${VARIANT_HELP[v].badge}` : ''}
+                  <span className="flex flex-col items-start gap-0.5 py-0.5 text-left">
+                    <span className="flex flex-wrap items-center gap-1.5">
+                      {SMART_HUB_VARIANT_LABELS[v]}
+                      <Badge variant="outline" className="text-[10px] font-normal">
+                        {VARIANT_HELP[v].badge}
+                      </Badge>
+                    </span>
+                  </span>
                 </SelectItem>
               ))}
             </SelectContent>
           </Select>
-          <FieldHint>{variantHelp.description}</FieldHint>
-          {variantHelp.badge &&
-          (form.visual_variant === 'featured_card' || form.visual_variant === 'simple') ? (
-            <TipCallout badge={variantHelp.badge}>
-              {form.visual_variant === 'featured_card'
-                ? 'Reserve para a ação principal da página.'
-                : 'Formato limpo e direto para a maioria dos botões.'}
-            </TipCallout>
-          ) : null}
+          <div className="space-y-1.5 rounded-md border bg-muted/20 px-3 py-2">
+            <div className="flex flex-wrap items-center gap-1.5">
+              <span className="text-xs font-medium">
+                {SMART_HUB_VARIANT_LABELS[form.visual_variant]}
+              </span>
+              <Badge variant="secondary" className="text-[10px]">
+                {variantHelp.badge}
+              </Badge>
+            </div>
+            <FieldHint>{variantHelp.description}</FieldHint>
+          </div>
+          <div className="rounded-md border border-dashed px-3 py-2 text-xs leading-relaxed">
+            <p className="font-medium text-foreground">Recomendação para este botão</p>
+            <p className="mt-1 text-muted-foreground">{variantRecommendation}</p>
+          </div>
         </div>
 
         <div className="grid gap-4 sm:grid-cols-2">
@@ -1130,8 +1413,14 @@ export default function SmartHubButtons() {
       {summaryOpen ? (
         <dl className="mt-2 grid gap-1.5 sm:grid-cols-2">
           <div>
-            <dt className="text-[11px] uppercase tracking-wide opacity-70">Ação</dt>
-            <dd>{SMART_HUB_CLICK_ACTION_LABELS[effectiveAction]}</dd>
+            <dt className="text-[11px] uppercase tracking-wide opacity-70">Este botão irá</dt>
+            <dd>
+              {previewIntentHeadline({
+                intent: buttonIntent,
+                socialNetwork: isSocialIntent ? socialNetwork : null,
+                type: form.type,
+              })}
+            </dd>
           </div>
           <div>
             <dt className="text-[11px] uppercase tracking-wide opacity-70">Destino</dt>

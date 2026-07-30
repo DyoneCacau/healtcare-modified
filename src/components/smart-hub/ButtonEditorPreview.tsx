@@ -2,11 +2,16 @@ import { HubButton } from './HubButton';
 import {
   previewBehaviorDescription,
   previewBehaviorTitle,
+  previewIntentTitle,
 } from './buttonEditorCopy';
+import {
+  inferButtonIntent,
+  previewIntentHeadline,
+  type ButtonIntentId,
+  type SocialNetworkId,
+} from './buttonIntentOptions';
 import { resolveClickAction } from '@/services/smartHub/captureDefaults';
 import {
-  SMART_HUB_BUTTON_TYPE_LABELS,
-  SMART_HUB_CLICK_ACTION_LABELS,
   SMART_HUB_VARIANT_LABELS,
   type SmartHubButton,
   type SmartHubButtonType,
@@ -31,6 +36,15 @@ export interface ButtonEditorPreviewModel {
   redirect_whatsapp?: boolean;
   email_subject?: string;
   open_in_new_tab?: boolean;
+  /** Resumo amigável (formulário / CRM) */
+  interest?: string | null;
+  stage_label?: string | null;
+  owner_label?: string | null;
+  has_owner?: boolean;
+  show_crm_summary?: boolean;
+  /** Intenção amigável (opcional; inferida se ausente) */
+  intent?: ButtonIntentId;
+  social_network?: SocialNetworkId | null;
 }
 
 interface ButtonEditorPreviewProps {
@@ -40,12 +54,32 @@ interface ButtonEditorPreviewProps {
   showActualColors?: boolean;
 }
 
+function SummaryRow({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="space-y-0.5">
+      <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+        {label}
+      </p>
+      <p className="text-sm font-medium leading-snug text-foreground">{value}</p>
+    </div>
+  );
+}
+
 export function ButtonEditorPreview({
   model,
   className,
   showActualColors = true,
 }: ButtonEditorPreviewProps) {
   const action = resolveClickAction(model.click_action, model.type);
+  const inferred = inferButtonIntent(model.type, model.click_action);
+  const intent = model.intent || inferred.intent;
+  const socialNetwork = model.social_network ?? inferred.socialNetwork;
+  const intentHeadline = previewIntentHeadline({
+    intent,
+    socialNetwork,
+    type: model.type,
+  });
+
   const previewButton = {
     id: 'preview-button',
     clinic_id: '',
@@ -78,6 +112,10 @@ export function ButtonEditorPreview({
     deleted_at: null,
   } as SmartHubButton;
 
+  const ownerDisplay = model.has_owner
+    ? model.owner_label || 'Responsável definido'
+    : 'Sem responsável — disponível para a equipe';
+
   return (
     <div className={cn('space-y-4', className)}>
       <div>
@@ -97,34 +135,38 @@ export function ButtonEditorPreview({
         </div>
       </div>
 
-      <div className="space-y-3 rounded-lg border bg-background px-3 py-3 text-sm">
-        <div className="space-y-1">
-          <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
-            Tipo
-          </p>
-          <p className="font-medium">{SMART_HUB_BUTTON_TYPE_LABELS[model.type] || model.type}</p>
-        </div>
-        <div className="space-y-1">
-          <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
-            Ação
-          </p>
-          <p className="font-medium">
-            {SMART_HUB_CLICK_ACTION_LABELS[action] || action}
-          </p>
-        </div>
+      <div className="space-y-3 rounded-lg border bg-background px-3 py-3">
+        <p className="text-sm font-semibold">Configuração deste botão</p>
+
+        <SummaryRow label={previewIntentTitle()} value={intentHeadline} />
+
+        {model.show_crm_summary ? (
+          <>
+            {model.interest?.trim() ? (
+              <SummaryRow label="Interesse registrado" value={model.interest.trim()} />
+            ) : null}
+            <SummaryRow label="Etapa no CRM" value={model.stage_label || 'Novo'} />
+            <SummaryRow label="Responsável" value={ownerDisplay} />
+          </>
+        ) : null}
+
+        <SummaryRow
+          label="Aparência"
+          value={SMART_HUB_VARIANT_LABELS[model.visual_variant] || model.visual_variant}
+        />
+
         <div className="space-y-1 border-t pt-3">
           <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
             {previewBehaviorTitle()}
           </p>
-          <p className="leading-relaxed text-muted-foreground">
+          <p className="text-sm leading-relaxed text-muted-foreground">
             {previewBehaviorDescription(action, {
               redirectWhatsapp: Boolean(model.redirect_whatsapp),
+              stageLabel: model.stage_label || 'Novo',
+              ownerName: model.has_owner ? model.owner_label || null : null,
             })}
           </p>
         </div>
-        <p className="text-xs text-muted-foreground">
-          Aparência: {SMART_HUB_VARIANT_LABELS[model.visual_variant] || model.visual_variant}
-        </p>
       </div>
     </div>
   );

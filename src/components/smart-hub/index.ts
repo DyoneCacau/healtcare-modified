@@ -29,3 +29,14 @@ export {
   getRecommendedAction,
   isActionCompatible,
 } from './buttonTypeActionMap';
+export {
+  applyButtonIntent,
+  inferButtonIntent,
+  previewIntentHeadline,
+  BUTTON_INTENT_OPTIONS,
+} from './buttonIntentOptions';
+export type {
+  ButtonIntentId,
+  SocialNetworkId,
+  ContactMethodId,
+} from './buttonIntentOptions';

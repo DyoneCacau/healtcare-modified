@@ -34,6 +34,11 @@ export interface IngestLeadInput {
   dedupe?: LeadDedupeMode
   /** Responsável inicial (ex.: Smart Hub capture) */
   ownerUserId?: string | null
+  /**
+   * Teste administrativo: não mascara falhas de schema e não usa fallback
+   * silencioso que omite colunas de origem.
+   */
+  diagnosticMode?: boolean
 }
 
 export interface IngestLeadResult {
@@ -61,9 +66,44 @@ interface ExistingLead {
 const EXISTING_COLUMNS =
   'id, name, phone, email, cpf, interest, notes, estimated_value, lead_source, referral_name'
 
+/** Mensagem segura ao visitante — nunca inclui nomes de coluna/tabela. */
+const SAFE_CREATE_ERROR = 'Falha ao criar lead no CRM'
+const SCHEMA_OUTDATED_CODE = 'crm_schema_outdated'
+const SCHEMA_OUTDATED_ADMIN_MSG =
+  'Schema do CRM desatualizado (colunas de origem ausentes). Execute PRODUCAO_34_CRM_LEADS_SCHEMA_SYNC.sql no SQL Editor e confirme NOTIFY pgrst.'
+
 function isMissingColumnError(error: { code?: string; message?: string } | null): boolean {
-  // 42703 = undefined_column → PRODUCAO_26 ainda não executado
-  return error?.code === '42703'
+  // 42703 = undefined_column (Postgres)
+  // PGRST204 = coluna ausente no schema cache do PostgREST (caso típico em produção)
+  if (!error) return false
+  if (error.code === '42703' || error.code === 'PGRST204') return true
+  const msg = (error.message || '').toLowerCase()
+  return (
+    msg.includes('schema cache') ||
+    (msg.includes('could not find') && msg.includes('column'))
+  )
+}
+
+function logLeadDbError(
+  context: string,
+  error: { code?: string; message?: string; details?: string; hint?: string } | null,
+): void {
+  console.error(`[leads] ${context}`, {
+    code: error?.code ?? null,
+    message: error?.message ?? null,
+    details: error?.details ?? null,
+    hint: error?.hint ?? null,
+  })
+}
+
+function throwCreateFailure(
+  error: { code?: string; message?: string } | null,
+  diagnosticMode: boolean,
+): never {
+  if (diagnosticMode && isMissingColumnError(error)) {
+    throw new HttpError(500, SCHEMA_OUTDATED_ADMIN_MSG, SCHEMA_OUTDATED_CODE)
+  }
+  throw new HttpError(500, SAFE_CREATE_ERROR, 'lead_create_failed')
 }
 
 async function findByExternalId(
@@ -85,7 +125,8 @@ async function findByExternalId(
 
   const { data, error } = await query.maybeSingle()
   if (error && !isMissingColumnError(error)) {
-    throw new HttpError(500, 'Falha ao verificar lead existente')
+    logLeadDbError('falha ao verificar lead existente', error)
+    throw new HttpError(500, 'Falha ao verificar lead existente', 'lead_lookup_failed')
   }
   return (data as ExistingLead | null) ?? null
 }
@@ -112,9 +153,10 @@ async function findByContact(
       .limit(1)
       .maybeSingle()
 
-    // Sem PRODUCAO_26 a deduplicação por contato fica desligada, mas o lead entra
+    // Sem PRODUCAO_26/34 a deduplicação por contato fica desligada, mas o lead entra
     if (error && !isMissingColumnError(error)) {
-      throw new HttpError(500, `Falha ao verificar lead por ${column}`)
+      logLeadDbError(`falha ao verificar lead por ${column}`, error)
+      throw new HttpError(500, 'Falha ao verificar lead existente', 'lead_lookup_failed')
     }
     return (data as ExistingLead | null) ?? null
   }
@@ -232,6 +274,8 @@ export async function ingestLead(
     row.owner_user_id = input.ownerUserId
   }
 
+  const diagnosticMode = Boolean(input.diagnosticMode)
+
   const { data, error } = await supabase
     .from('crm_leads')
     .insert(row)
@@ -239,6 +283,8 @@ export async function ingestLead(
     .maybeSingle()
 
   if (error) {
+    logLeadDbError('falha ao criar lead', error)
+
     // Corrida entre dois eventos do mesmo lead: o índice único resolve
     if (error.code === '23505' && lead.externalLeadId) {
       const existing = await findByExternalId(
@@ -258,8 +304,13 @@ export async function ingestLead(
       }
     }
 
-    // PRODUCAO_26 pendente: grava o lead sem os campos de origem
+    // Schema desatualizado (PRODUCAO_26/34): em teste admin não esconde a causa
     if (isMissingColumnError(error)) {
+      if (diagnosticMode) {
+        throwCreateFailure(error, true)
+      }
+
+      // Visitante: tenta gravar sem campos de origem (resiliência transitória)
       const fallback = { ...row }
       delete fallback.integration_id
       delete fallback.external_lead_id
@@ -267,8 +318,8 @@ export async function ingestLead(
 
       const retry = await supabase.from('crm_leads').insert(fallback).select('id').maybeSingle()
       if (retry.error) {
-        console.error('[leads] falha ao criar lead (fallback):', retry.error)
-        throw new HttpError(500, 'Falha ao criar lead no CRM')
+        logLeadDbError('falha ao criar lead (fallback)', retry.error)
+        throwCreateFailure(retry.error, false)
       }
       return {
         leadId: String(retry.data?.id),
@@ -279,8 +330,7 @@ export async function ingestLead(
       }
     }
 
-    console.error('[leads] falha ao criar lead:', error)
-    throw new HttpError(500, 'Falha ao criar lead no CRM')
+    throwCreateFailure(error, diagnosticMode)
   }
 
   return {

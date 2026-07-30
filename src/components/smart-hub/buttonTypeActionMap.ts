@@ -42,7 +42,7 @@ export const COMPATIBLE_ACTIONS_BY_TYPE: Record<SmartHubButtonType, SmartHubClic
   link: ['link'],
   social: ['link'],
   appointment: ['form', 'whatsapp', 'link'],
-  procedure: ['form', 'link', 'info'],
+  procedure: ['form', 'whatsapp', 'link', 'info'],
   info: ['info', 'link'],
   video: ['link'],
   form: ['form', 'whatsapp', 'link'],

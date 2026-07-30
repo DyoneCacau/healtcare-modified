@@ -351,6 +351,8 @@ Deno.serve(async (req) => {
       defaultLeadSource: 'smart_hub',
       dedupe: isTest ? 'none' : 'auto',
       ownerUserId: ownerUserId || undefined,
+      // Teste admin: não mascara falha de schema (ex.: PGRST204 / PRODUCAO_34)
+      diagnosticMode: isTest,
       payload: {
         name,
         phone,

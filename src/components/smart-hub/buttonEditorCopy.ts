@@ -1,9 +1,20 @@
-import type { SmartHubClickAction, SmartHubButtonVisualVariant } from '@/types/smartHub';
+import type {
+  SmartHubClickAction,
+  SmartHubButtonVisualVariant,
+  SmartHubButtonType,
+} from '@/types/smartHub';
 
 export const BUTTON_FIELD_HELP = {
   title: 'Nome que aparece no botão da página pública.',
   subtitle: 'Texto de apoio opcional, abaixo do título.',
   info_content: 'Texto explicativo mostrado ao visitante sem sair da página.',
+  intent:
+    'Escolha o resultado que o visitante terá ao tocar neste botão. O sistema configura o tipo e a ação automaticamente.',
+  intent_social: 'Selecione a rede social que será aberta.',
+  intent_contact_method:
+    'Defina se o visitante preencherá um formulário, abrirá o WhatsApp ou um link externo.',
+  advanced_type:
+    'O sistema define automaticamente o tipo mais adequado. Altere somente se necessário.',
   type: 'Define o que este botão representa, como WhatsApp, Instagram, agendamento, procedimentos ou informação.',
   type_tooltip:
     'O tipo define a finalidade visual do botão e ajuda o sistema a sugerir ícone, ação e campos adequados.',
@@ -70,47 +81,146 @@ export const CLICK_ACTION_HELP: Record<
 
 export const VARIANT_HELP: Record<
   SmartHubButtonVisualVariant,
-  { description: string; badge?: string }
+  { description: string; badge: string }
 > = {
   simple: {
-    description: 'Formato tradicional, ideal para ações diretas.',
+    description:
+      'Formato tradicional e compacto. Indicado para ações secundárias ou páginas com muitos links.',
     badge: 'Mais usado',
   },
   icon_card: {
-    description: 'Formato visual com ícone, ótimo para destacar serviços.',
+    description:
+      'Usa um ícone para facilitar a identificação. Ideal para WhatsApp, telefone, localização e redes sociais.',
+    badge: 'Ideal para contatos',
   },
   image_card: {
-    description: 'Exibe imagem e texto, ideal para procedimentos ou campanhas.',
+    description:
+      'Exibe uma imagem junto ao texto. Recomendado para procedimentos, tratamentos, serviços ou campanhas.',
+    badge: 'Ideal para procedimentos',
   },
   horizontal_card: {
-    description: 'Formato em faixa horizontal.',
+    description:
+      'Combina imagem, título e subtítulo em uma faixa horizontal. Ideal quando a imagem faz parte da comunicação.',
+    badge: 'Bom com imagem',
   },
   featured_card: {
-    description: 'Mais chamativo, ideal para ação principal.',
-    badge: 'Bom para CTA principal',
+    description:
+      'Formato mais chamativo. Recomendado para a principal ação da página, como agendar uma avaliação.',
+    badge: 'Recomendado para CTA principal',
   },
   list_item: {
-    description: 'Formato compacto para múltiplas opções.',
+    description: 'Formato compacto para organizar várias opções em sequência.',
+    badge: 'Compacto',
   },
   grid: {
-    description: 'Organiza vários botões em formato de grade.',
+    description:
+      'Organiza vários serviços lado a lado. Indicado quando as opções possuem importância semelhante.',
+    badge: 'Bom para vários serviços',
   },
 };
 
+export const OWNER_OPTION_HINTS = {
+  none: 'O lead ficará disponível para a equipe.',
+  user: 'O lead será atribuído automaticamente a este usuário.',
+} as const;
+
+export function ownerFieldGuidance(opts: {
+  ownerName: string | null;
+}): { primary: string; secondary: string } {
+  if (!opts.ownerName) {
+    return {
+      primary:
+        'O lead entrará na etapa Novo sem um responsável definido. Qualquer usuário autorizado da equipe poderá assumir o atendimento.',
+      secondary:
+        'Para evitar contatos esquecidos, confirme se sua equipe recebe notificações de novos leads sem responsável.',
+    };
+  }
+  return {
+    primary: `O lead será atribuído automaticamente a ${opts.ownerName} assim que o formulário for enviado.`,
+    secondary:
+      'Use esta opção quando essa pessoa for responsável por acompanhar os contatos recebidos pelo Smart Hub.',
+  };
+}
+
+export function recommendVariantForButton(opts: {
+  type: SmartHubButtonType;
+  action: SmartHubClickAction;
+  hasImage: boolean;
+  title: string;
+  interest?: string | null;
+}): string {
+  const { type, action, hasImage, interest } = opts;
+  const interestHint = interest?.trim()
+    ? ` como ${interest.trim()}`
+    : ' como Facetas, Harmonização ou Clareamento';
+
+  if (type === 'procedure' || (interest && interest.trim())) {
+    if (hasImage) {
+      return 'Card horizontal ou Card com imagem destacam melhor o procedimento.';
+    }
+    return `Card com imagem é uma boa opção para apresentar tratamentos${interestHint}.`;
+  }
+
+  if (action === 'form' || type === 'appointment' || type === 'form') {
+    if (hasImage) {
+      return 'Card horizontal ou Card com imagem destacam melhor o procedimento.';
+    }
+    return 'Recomendamos Card destacado quando esta for a principal ação da página.';
+  }
+
+  if (action === 'whatsapp' || type === 'whatsapp' || type === 'phone' || type === 'map') {
+    return 'Card com ícone ou Botão simples deixam o contato rápido e fácil de identificar.';
+  }
+
+  if (
+    type === 'instagram' ||
+    type === 'facebook' ||
+    type === 'tiktok' ||
+    type === 'youtube' ||
+    type === 'social'
+  ) {
+    return 'Card com ícone ou Botão simples deixam o contato rápido e fácil de identificar.';
+  }
+
+  if (hasImage) {
+    return 'Card horizontal ou Card com imagem destacam melhor o procedimento.';
+  }
+
+  if (action === 'link' || type === 'link' || type === 'site') {
+    return 'Use Grid para organizar as opções de forma equilibrada.';
+  }
+
+  return 'Botão simples funciona bem para a maioria das ações secundárias.';
+}
+
 export function previewBehaviorTitle(): string {
-  return 'O que acontecerá ao clicar';
+  return 'Comportamento';
+}
+
+export function previewIntentTitle(): string {
+  return 'Este botão irá';
 }
 
 /** Texto único da prévia lateral (não repetir no formulário). */
 export function previewBehaviorDescription(
   action: SmartHubClickAction,
-  opts?: { redirectWhatsapp?: boolean }
+  opts?: {
+    redirectWhatsapp?: boolean;
+    stageLabel?: string;
+    ownerName?: string | null;
+  }
 ): string {
   switch (action) {
-    case 'form':
-      return opts?.redirectWhatsapp
-        ? 'O lead será salvo no CRM e, depois, o WhatsApp será aberto.'
-        : 'O visitante preencherá seus dados e o lead será enviado para o CRM.';
+    case 'form': {
+      if (opts?.redirectWhatsapp) {
+        return 'O visitante preencherá o formulário, o lead será salvo no CRM e, depois, o WhatsApp será aberto.';
+      }
+      const stage = opts?.stageLabel || 'Novo';
+      if (opts?.ownerName) {
+        return `O visitante preencherá o formulário, o lead entrará no CRM na etapa ${stage} e será atribuído a ${opts.ownerName}.`;
+      }
+      return `O visitante preencherá o formulário, o lead entrará no CRM na etapa ${stage} e ficará disponível para a equipe.`;
+    }
     case 'whatsapp':
       return 'O visitante irá diretamente para o WhatsApp. Nenhum lead será criado automaticamente.';
     case 'link':
@@ -129,10 +239,7 @@ export function previewBehaviorDescription(
 }
 
 export function formFlowSteps(redirectWhatsapp: boolean): string[] {
-  const steps = [
-    'O visitante preenche o formulário',
-    'O lead entra no CRM',
-  ];
+  const steps = ['O visitante preenche o formulário', 'O lead entra no CRM'];
   if (redirectWhatsapp) {
     steps.push('O visitante é direcionado ao WhatsApp');
   }

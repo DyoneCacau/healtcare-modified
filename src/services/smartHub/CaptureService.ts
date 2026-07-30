@@ -105,6 +105,8 @@ export const CaptureService = {
         },
       });
 
+      const isAdminTest = input.action === 'test';
+
       if (error) {
         const parsed = await parseFunctionError(error);
         // Corpo às vezes também vem em data
@@ -117,20 +119,25 @@ export const CaptureService = {
           (fromData && typeof fromData.request_id === 'string'
             ? fromData.request_id
             : undefined);
-        const message = mapPublicMessage(
-          code,
+        const serverMessage =
           parsed.message ||
-            (fromData && typeof fromData.message === 'string' ? fromData.message : undefined)
-        );
+          (fromData && typeof fromData.message === 'string' ? fromData.message : undefined);
+        // Visitante: mensagem genérica. Teste admin: preserva diagnóstico do servidor.
+        const message = isAdminTest
+          ? serverMessage || mapPublicMessage(code)
+          : mapPublicMessage(code, serverMessage);
         return { ok: false, error: message, code, request_id };
       }
 
       const result = (data || {}) as SmartHubCaptureSubmitResult;
       if (!result.ok) {
         const code = result.code;
+        const serverMessage = result.message || result.error;
         return {
           ok: false,
-          error: mapPublicMessage(code, result.message || result.error),
+          error: isAdminTest
+            ? serverMessage || mapPublicMessage(code)
+            : mapPublicMessage(code, serverMessage),
           code,
           request_id: result.request_id,
           issues: result.issues,
