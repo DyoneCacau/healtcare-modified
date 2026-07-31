@@ -13,8 +13,6 @@ import type {
   WorkSchedulePeriodInput,
 } from '@/types/schedule';
 
-const db = supabase as any;
-
 function displayTime(value: string | null | undefined): string {
   if (!value) return '';
   return String(value).slice(0, 5);
@@ -27,36 +25,61 @@ function normalizeTimeForDb(value: string): string {
   return trimmed;
 }
 
-function mapWorkSchedule(row: Record<string, unknown>): ProfessionalWorkSchedule {
+function mapWorkSchedule(row: {
+  id: string;
+  clinic_id: string;
+  professional_id: string;
+  weekday: number;
+  start_time: string;
+  end_time: string;
+  is_active: boolean;
+  created_at: string;
+  updated_at: string;
+  created_by: string | null;
+}): ProfessionalWorkSchedule {
   return {
-    id: String(row.id),
-    clinic_id: String(row.clinic_id),
-    professional_id: String(row.professional_id),
+    id: row.id,
+    clinic_id: row.clinic_id,
+    professional_id: row.professional_id,
     weekday: Number(row.weekday) as Weekday,
-    start_time: displayTime(String(row.start_time)),
-    end_time: displayTime(String(row.end_time)),
+    start_time: displayTime(row.start_time),
+    end_time: displayTime(row.end_time),
     is_active: row.is_active !== false,
-    created_at: String(row.created_at),
-    updated_at: String(row.updated_at),
-    created_by: row.created_by ? String(row.created_by) : null,
+    created_at: row.created_at,
+    updated_at: row.updated_at,
+    created_by: row.created_by,
   };
 }
 
-function mapBlock(row: Record<string, unknown>): ScheduleBlock {
+function mapBlock(row: {
+  id: string;
+  clinic_id: string;
+  professional_id: string | null;
+  block_date: string;
+  start_time: string | null;
+  end_time: string | null;
+  all_day: boolean;
+  reason: string | null;
+  block_type: string;
+  is_active: boolean;
+  created_at: string;
+  updated_at: string;
+  created_by: string | null;
+}): ScheduleBlock {
   return {
-    id: String(row.id),
-    clinic_id: String(row.clinic_id),
-    professional_id: row.professional_id ? String(row.professional_id) : null,
-    block_date: String(row.block_date),
-    start_time: row.start_time ? displayTime(String(row.start_time)) : null,
-    end_time: row.end_time ? displayTime(String(row.end_time)) : null,
+    id: row.id,
+    clinic_id: row.clinic_id,
+    professional_id: row.professional_id,
+    block_date: row.block_date,
+    start_time: row.start_time ? displayTime(row.start_time) : null,
+    end_time: row.end_time ? displayTime(row.end_time) : null,
     all_day: row.all_day === true,
-    reason: row.reason ? String(row.reason) : null,
+    reason: row.reason,
     block_type: (row.block_type || 'other') as ScheduleBlockType,
     is_active: row.is_active !== false,
-    created_at: String(row.created_at),
-    updated_at: String(row.updated_at),
-    created_by: row.created_by ? String(row.created_by) : null,
+    created_at: row.created_at,
+    updated_at: row.updated_at,
+    created_by: row.created_by,
   };
 }
 
@@ -69,7 +92,7 @@ export async function listWorkSchedules(options: {
   professionalId?: string | null;
   activeOnly?: boolean;
 }) {
-  let query = db
+  let query = supabase
     .from('professional_work_schedules')
     .select('*')
     .eq('clinic_id', options.clinicId)
@@ -85,7 +108,7 @@ export async function listWorkSchedules(options: {
 
   const { data, error } = await query;
   if (error) throwFriendly(error);
-  return ((data || []) as Record<string, unknown>[]).map(mapWorkSchedule);
+  return (data || []).map(mapWorkSchedule);
 }
 
 export async function createWorkSchedule(input: {
@@ -107,7 +130,7 @@ export async function createWorkSchedule(input: {
   ]);
   if (validationError) throw new Error(validationError);
 
-  const { data, error } = await db
+  const { data, error } = await supabase
     .from('professional_work_schedules')
     .insert({
       clinic_id: input.clinicId,
@@ -122,7 +145,7 @@ export async function createWorkSchedule(input: {
     .single();
 
   if (error) throwFriendly(error);
-  return mapWorkSchedule(data as Record<string, unknown>);
+  return mapWorkSchedule(data);
 }
 
 export async function updateWorkSchedule(
@@ -134,13 +157,18 @@ export async function updateWorkSchedule(
     isActive: boolean;
   }>,
 ) {
-  const payload: Record<string, unknown> = {};
+  const payload: {
+    weekday?: number;
+    start_time?: string;
+    end_time?: string;
+    is_active?: boolean;
+  } = {};
   if (patch.weekday !== undefined) payload.weekday = patch.weekday;
   if (patch.startTime !== undefined) payload.start_time = normalizeTimeForDb(patch.startTime);
   if (patch.endTime !== undefined) payload.end_time = normalizeTimeForDb(patch.endTime);
   if (patch.isActive !== undefined) payload.is_active = patch.isActive;
 
-  const { data, error } = await db
+  const { data, error } = await supabase
     .from('professional_work_schedules')
     .update(payload)
     .eq('id', id)
@@ -148,11 +176,11 @@ export async function updateWorkSchedule(
     .single();
 
   if (error) throwFriendly(error);
-  return mapWorkSchedule(data as Record<string, unknown>);
+  return mapWorkSchedule(data);
 }
 
 export async function deleteWorkSchedule(id: string) {
-  const { error } = await db.from('professional_work_schedules').delete().eq('id', id);
+  const { error } = await supabase.from('professional_work_schedules').delete().eq('id', id);
   if (error) throwFriendly(error);
 }
 
@@ -170,7 +198,7 @@ export async function replaceProfessionalWorkSchedules(options: {
   const validationError = validateWorkSchedulePeriods(options.periods);
   if (validationError) throw new Error(validationError);
 
-  const { error: delError } = await db
+  const { error: delError } = await supabase
     .from('professional_work_schedules')
     .delete()
     .eq('clinic_id', options.clinicId)
@@ -190,12 +218,12 @@ export async function replaceProfessionalWorkSchedules(options: {
     created_by: options.createdBy || null,
   }));
 
-  const { data, error } = await db
+  const { data, error } = await supabase
     .from('professional_work_schedules')
     .insert(rows)
     .select('*');
   if (error) throwFriendly(error);
-  return ((data || []) as Record<string, unknown>[]).map(mapWorkSchedule);
+  return (data || []).map(mapWorkSchedule);
 }
 
 export async function listScheduleBlocks(options: {
@@ -205,7 +233,7 @@ export async function listScheduleBlocks(options: {
   activeOnly?: boolean;
   futureOnly?: boolean;
 }) {
-  let query = db
+  let query = supabase
     .from('schedule_blocks')
     .select('*')
     .eq('clinic_id', options.clinicId)
@@ -231,7 +259,7 @@ export async function listScheduleBlocks(options: {
 
   const { data, error } = await query;
   if (error) throwFriendly(error);
-  return ((data || []) as Record<string, unknown>[]).map(mapBlock);
+  return (data || []).map(mapBlock);
 }
 
 export async function createScheduleBlock(input: ScheduleBlockInput) {
@@ -252,13 +280,13 @@ export async function createScheduleBlock(input: ScheduleBlockInput) {
     created_by: input.created_by || null,
   };
 
-  const { data, error } = await db
+  const { data, error } = await supabase
     .from('schedule_blocks')
     .insert(payload)
     .select('*')
     .single();
   if (error) throwFriendly(error);
-  return mapBlock(data as Record<string, unknown>);
+  return mapBlock(data);
 }
 
 export async function updateScheduleBlock(
@@ -293,7 +321,16 @@ export async function updateScheduleBlock(
     }
   }
 
-  const payload: Record<string, unknown> = {};
+  const payload: {
+    professional_id?: string | null;
+    block_date?: string;
+    all_day?: boolean;
+    reason?: string | null;
+    block_type?: string;
+    is_active?: boolean;
+    start_time?: string | null;
+    end_time?: string | null;
+  } = {};
   if (input.professional_id !== undefined) payload.professional_id = input.professional_id;
   if (input.block_date !== undefined) payload.block_date = input.block_date;
   if (input.all_day !== undefined) payload.all_day = input.all_day;
@@ -315,14 +352,14 @@ export async function updateScheduleBlock(
     }
   }
 
-  const { data, error } = await db
+  const { data, error } = await supabase
     .from('schedule_blocks')
     .update(payload)
     .eq('id', id)
     .select('*')
     .single();
   if (error) throwFriendly(error);
-  return mapBlock(data as Record<string, unknown>);
+  return mapBlock(data);
 }
 
 export async function deactivateScheduleBlock(id: string) {
@@ -330,6 +367,6 @@ export async function deactivateScheduleBlock(id: string) {
 }
 
 export async function deleteScheduleBlock(id: string) {
-  const { error } = await db.from('schedule_blocks').delete().eq('id', id);
+  const { error } = await supabase.from('schedule_blocks').delete().eq('id', id);
   if (error) throwFriendly(error);
 }

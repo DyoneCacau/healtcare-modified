@@ -9,20 +9,33 @@ const EMPTY_PROCEDURES: ClinicProcedure[] = [];
 
 const QUERY_KEY = 'clinic-procedures';
 
-function normalizeProcedure(row: Record<string, unknown>): ClinicProcedure {
+function normalizeProcedure(row: {
+  id: string;
+  clinic_id: string;
+  name: string;
+  category: string;
+  description: string | null;
+  default_price: number;
+  duration_minutes: number;
+  billing_unit: string;
+  default_commission: number | null;
+  is_active: boolean;
+  created_at: string;
+  updated_at: string;
+}): ClinicProcedure {
   return {
-    id: String(row.id),
-    clinic_id: String(row.clinic_id),
-    name: String(row.name),
-    category: String(row.category || 'Odontologia'),
-    description: row.description ? String(row.description) : null,
+    id: row.id,
+    clinic_id: row.clinic_id,
+    name: row.name,
+    category: row.category || 'Odontologia',
+    description: row.description,
     default_price: Number(row.default_price || 0),
     duration_minutes: Number(row.duration_minutes || 30),
     billing_unit: (row.billing_unit || 'appointment') as ClinicProcedure['billing_unit'],
     default_commission: row.default_commission == null ? null : Number(row.default_commission),
     is_active: row.is_active !== false,
-    created_at: String(row.created_at),
-    updated_at: String(row.updated_at),
+    created_at: row.created_at,
+    updated_at: row.updated_at,
   };
 }
 
@@ -34,16 +47,14 @@ export function useClinicProcedures(clinicIdOverride?: string | null) {
     queryKey: [QUERY_KEY, clinicId],
     queryFn: async () => {
       if (!clinicId) return [];
-      // Os tipos gerados serão atualizados após executar o SQL e regenerar
-      // o schema. O cast mantém esta branch visualizável antes disso.
-      const { data, error } = await (supabase as any)
+      const { data, error } = await supabase
         .from('clinic_procedures')
         .select('*')
         .eq('clinic_id', clinicId)
         .order('category')
         .order('name');
       if (error) throw error;
-      return ((data || []) as Record<string, unknown>[]).map(normalizeProcedure);
+      return (data || []).map(normalizeProcedure);
     },
     enabled: !!clinicId,
     retry: false,
@@ -69,13 +80,13 @@ export function useClinicProcedureMutations() {
   const createProcedure = useMutation({
     mutationFn: async (input: ClinicProcedureInput) => {
       if (!clinicId) throw new Error('Selecione uma clínica');
-      const { data, error } = await (supabase as any)
+      const { data, error } = await supabase
         .from('clinic_procedures')
         .insert({ ...input, clinic_id: clinicId })
         .select()
         .single();
       if (error) throw error;
-      return normalizeProcedure(data as Record<string, unknown>);
+      return normalizeProcedure(data);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: [QUERY_KEY, clinicId] });
@@ -90,14 +101,14 @@ export function useClinicProcedureMutations() {
 
   const updateProcedure = useMutation({
     mutationFn: async ({ id, ...input }: Partial<ClinicProcedureInput> & { id: string }) => {
-      const { data, error } = await (supabase as any)
+      const { data, error } = await supabase
         .from('clinic_procedures')
         .update(input)
         .eq('id', id)
         .select()
         .single();
       if (error) throw error;
-      return normalizeProcedure(data as Record<string, unknown>);
+      return normalizeProcedure(data);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: [QUERY_KEY, clinicId] });
