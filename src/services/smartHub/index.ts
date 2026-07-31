@@ -14,3 +14,6 @@ export * from './buttonDestinations';
 export * from './captureDefaults';
 export * from './resolveCaptureConfig';
 export { CaptureService } from './CaptureService';
+export * from './buttonUtils';
+export { validatePublishReadiness } from './PublishService';
+export type { PublishValidationResult, PublishReadinessItem } from './PublishService';

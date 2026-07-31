@@ -23,6 +23,8 @@ export { FieldHelpLabel, FieldHint, TipCallout, FormSection } from './FieldHelpL
 export { ButtonEditorPreview } from './ButtonEditorPreview';
 export type { ButtonEditorPreviewModel } from './ButtonEditorPreview';
 export { ContrastPairAlert } from './ContrastPairAlert';
+export { HubPublicRenderer } from './HubPublicRenderer';
+export type { PreviewDevice } from './HubPublicRenderer';
 export {
   TYPE_ACTION_BRIDGE_HINT,
   getCompatibleActions,

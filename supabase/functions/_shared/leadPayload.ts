@@ -68,14 +68,15 @@ export interface NormalizeLeadOptions {
 }
 
 /**
- * Provedores cujo webhook cria lead no CRM por padrão.
+ * Provedores externos cujo webhook de integração cria lead no CRM por padrão.
  *
- * `whatsapp_business` fica fora de propósito: cada mensagem recebida viraria
- * um card no Kanban. `external_api` é de saída. Ambos podem ativar a captação
- * marcando `config.lead_capture = true` na conexão.
+ * Não inclui fontes internas (ex.: Smart Hub via `smart-hub-capture`) — ver
+ * `INTERNAL_LEAD_SOURCES`. `whatsapp_business` fica fora de propósito: cada
+ * mensagem recebida viraria um card no Kanban. `external_api` é de saída.
+ * Ambos podem ativar a captação marcando `config.lead_capture = true`.
  *
- * Fonte única da verdade: o registro de handlers (Edge Functions) e o
- * catálogo exibido no app derivam desta lista.
+ * Fonte única da verdade para integrações de webhook: o registro de handlers
+ * (Edge Functions) e o catálogo do app (`createsLeads`) derivam desta lista.
  */
 export const LEAD_CAPTURE_PROVIDERS = [
   'meta',
@@ -86,10 +87,22 @@ export const LEAD_CAPTURE_PROVIDERS = [
   'n8n',
   'make',
   'zapier',
-  'smart_hub',
 ] as const;
 
 export type LeadCaptureProvider = (typeof LEAD_CAPTURE_PROVIDERS)[number];
+
+/**
+ * Fontes internas de captura de lead (produto próprio, sem integração/webhook
+ * configurável pelo cliente). Continuam válidas em `LEAD_SOURCE_VALUES` /
+ * `crm_leads.source` e no `ingestLead` (ex.: Edge Function `smart-hub-capture`).
+ */
+export const INTERNAL_LEAD_SOURCES = ['smart_hub'] as const;
+
+export type InternalLeadSource = (typeof INTERNAL_LEAD_SOURCES)[number];
+
+export function isInternalLeadSource(value: string): value is InternalLeadSource {
+  return (INTERNAL_LEAD_SOURCES as readonly string[]).includes(value);
+}
 
 export function providerCreatesLeads(provider: string): boolean {
   return (LEAD_CAPTURE_PROVIDERS as readonly string[]).includes(provider);

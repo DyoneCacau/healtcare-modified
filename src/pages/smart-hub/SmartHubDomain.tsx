@@ -1,56 +1,56 @@
+import { Copy } from 'lucide-react';
+import { toast } from 'sonner';
 import { SmartHubLayout } from '@/components/smart-hub';
 import { useSmartHub } from '@/hooks/useSmartHub';
-import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
 
-/** Domínio customizado — estrutura pronta; verificação DNS na próxima fase. */
 export default function SmartHubDomain() {
-  const { hub, domains, isLoading, publicUrl } = useSmartHub();
+  const { hub, isLoading, publicUrl } = useSmartHub();
 
-  return (
-    <SmartHubLayout
-      title="Domínio"
-      description="Configure domínio personalizado para o Smart Hub."
-    >
-      {isLoading ? (
+  if (isLoading) {
+    return (
+      <SmartHubLayout title="Domínio" description="Link padrão da sua página">
         <div className="flex justify-center py-16">
           <div className="h-8 w-8 animate-spin rounded-full border-b-2 border-primary" />
         </div>
-      ) : !hub ? (
+      </SmartHubLayout>
+    );
+  }
+
+  if (!hub) {
+    return (
+      <SmartHubLayout title="Domínio">
         <div className="rounded-lg border border-dashed p-10 text-center text-muted-foreground">
-          Crie um Smart Hub no Dashboard para configurar domínio.
+          Crie um Smart Hub no Dashboard para ver o link da página.
         </div>
-      ) : (
-        <div className="space-y-4">
-          <div className="rounded-lg border bg-card p-4">
-            <p className="text-sm text-muted-foreground">URL padrão</p>
-            <p className="font-mono text-sm">{publicUrl}</p>
-          </div>
+      </SmartHubLayout>
+    );
+  }
 
-          {domains.map((d) => (
-            <div
-              key={d.id}
-              className="flex items-center justify-between rounded-lg border bg-card p-4"
-            >
-              <div>
-                <p className="font-medium">{d.domain}</p>
-                <p className="text-sm text-muted-foreground">SSL: {d.ssl_status}</p>
-              </div>
-              <div className="flex gap-2">
-                {d.is_primary && <Badge>Primário</Badge>}
-                <Badge variant={d.is_verified ? 'default' : 'secondary'}>
-                  {d.is_verified ? 'Verificado' : d.status}
-                </Badge>
-              </div>
-            </div>
-          ))}
-
-          {!domains.length && (
-            <div className="rounded-lg border border-dashed p-10 text-center text-muted-foreground">
-              Nenhum domínio customizado. A verificação DNS/SSL será implementada na próxima fase.
-            </div>
-          )}
+  return (
+    <SmartHubLayout title="Domínio" description="Compartilhe o link padrão com seus pacientes">
+      <div className="mx-auto max-w-xl space-y-4">
+        <div className="rounded-lg border bg-card p-4">
+          <p className="text-sm text-muted-foreground">Link da sua página</p>
+          <p className="mt-1 break-all font-mono text-sm">{publicUrl}</p>
+          <Button
+            className="mt-4"
+            variant="outline"
+            onClick={async () => {
+              if (!publicUrl) return;
+              await navigator.clipboard.writeText(publicUrl);
+              toast.success('Link copiado.');
+            }}
+          >
+            <Copy className="mr-2 h-4 w-4" />
+            Copiar link
+          </Button>
         </div>
-      )}
+        <div className="rounded-lg border border-dashed p-6 text-sm text-muted-foreground">
+          Em breve você poderá conectar um domínio próprio (ex.: links.suaclinica.com.br). Por
+          enquanto, use o link padrão do Healthcare.
+        </div>
+      </div>
     </SmartHubLayout>
   );
 }

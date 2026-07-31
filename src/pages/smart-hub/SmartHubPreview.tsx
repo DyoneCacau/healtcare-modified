@@ -1,3 +1,4 @@
+import { useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { SmartHubLayout, HubPublicView, PublishWorkflowCard } from '@/components/smart-hub';
 import { usePreviewSmartHub, useSmartHub } from '@/hooks/useSmartHub';
@@ -16,6 +17,21 @@ export default function SmartHubPreview() {
     revertToDraft,
   } = useSmartHub();
   const { data, isLoading: loadingPreview, error, refetch } = usePreviewSmartHub(hub?.id);
+
+  // Prévia interna não deve ser indexada por buscadores (melhoria do WIP).
+  useEffect(() => {
+    let el = document.head.querySelector('meta[name="robots"]') as HTMLMetaElement | null;
+    if (!el) {
+      el = document.createElement('meta');
+      el.setAttribute('name', 'robots');
+      document.head.appendChild(el);
+    }
+    const prev = el.content;
+    el.content = 'noindex,nofollow';
+    return () => {
+      el!.content = prev || 'index,follow';
+    };
+  }, []);
 
   return (
     <SmartHubLayout
