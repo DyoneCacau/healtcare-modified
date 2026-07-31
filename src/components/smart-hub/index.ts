@@ -35,10 +35,16 @@ export {
   applyButtonIntent,
   inferButtonIntent,
   previewIntentHeadline,
+  contactMethodLabel,
   BUTTON_INTENT_OPTIONS,
+  CONTACT_METHOD_OPTIONS,
+  CONTACT_METHOD_COMING_SOON,
+  SUGGESTED_APPOINTMENT_FORM_TITLE,
+  shouldSuggestAppointmentFormTitle,
 } from './buttonIntentOptions';
 export type {
   ButtonIntentId,
   SocialNetworkId,
   ContactMethodId,
 } from './buttonIntentOptions';
+

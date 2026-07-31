@@ -1,13 +1,16 @@
 import { HubButton } from './HubButton';
 import {
-  previewBehaviorDescription,
+  previewAttendanceTitle,
+  previewBehaviorLines,
   previewBehaviorTitle,
   previewIntentTitle,
 } from './buttonEditorCopy';
 import {
+  contactMethodLabel,
   inferButtonIntent,
   previewIntentHeadline,
   type ButtonIntentId,
+  type ContactMethodId,
   type SocialNetworkId,
 } from './buttonIntentOptions';
 import { resolveClickAction } from '@/services/smartHub/captureDefaults';
@@ -45,6 +48,10 @@ export interface ButtonEditorPreviewModel {
   /** Intenção amigável (opcional; inferida se ausente) */
   intent?: ButtonIntentId;
   social_network?: SocialNetworkId | null;
+  contact_method?: ContactMethodId | null;
+  /** Resumo do formulário padrão do Hub */
+  form_source_label?: string | null;
+  using_hub_form?: boolean;
 }
 
 interface ButtonEditorPreviewProps {
@@ -74,10 +81,13 @@ export function ButtonEditorPreview({
   const inferred = inferButtonIntent(model.type, model.click_action);
   const intent = model.intent || inferred.intent;
   const socialNetwork = model.social_network ?? inferred.socialNetwork;
+  const contactMethod = model.contact_method ?? inferred.contactMethod;
+  const isAppointmentFlow = intent === 'appointment' || intent === 'procedure';
   const intentHeadline = previewIntentHeadline({
     intent,
     socialNetwork,
     type: model.type,
+    contactMethod,
   });
 
   const previewButton = {
@@ -114,7 +124,15 @@ export function ButtonEditorPreview({
 
   const ownerDisplay = model.has_owner
     ? model.owner_label || 'Responsável definido'
-    : 'Sem responsável — disponível para a equipe';
+    : 'Equipe da clínica';
+
+  const behaviorLines = previewBehaviorLines(action, {
+    redirectWhatsapp: Boolean(model.redirect_whatsapp),
+    stageLabel: model.stage_label || 'Novo',
+    ownerName: model.has_owner ? model.owner_label || null : null,
+    contactMethod,
+    isAppointmentFlow,
+  });
 
   return (
     <div className={cn('space-y-4', className)}>
@@ -140,13 +158,31 @@ export function ButtonEditorPreview({
 
         <SummaryRow label={previewIntentTitle()} value={intentHeadline} />
 
+        {isAppointmentFlow && contactMethod ? (
+          <SummaryRow label={previewAttendanceTitle()} value={contactMethodLabel(contactMethod)} />
+        ) : null}
+
         {model.show_crm_summary ? (
           <>
+            <SummaryRow label="Responsável" value={ownerDisplay} />
+            <SummaryRow label="Etapa no CRM" value={model.stage_label || 'Novo'} />
             {model.interest?.trim() ? (
               <SummaryRow label="Interesse registrado" value={model.interest.trim()} />
             ) : null}
-            <SummaryRow label="Etapa no CRM" value={model.stage_label || 'Novo'} />
-            <SummaryRow label="Responsável" value={ownerDisplay} />
+            {model.using_hub_form ? (
+              <div className="space-y-1 rounded-md border bg-muted/20 px-2.5 py-2">
+                <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+                  Formulário utilizado
+                </p>
+                <p className="text-sm font-medium">
+                  {model.form_source_label || 'Padrão do Smart Hub'}
+                </p>
+                <p className="text-xs text-muted-foreground">Responsável: {ownerDisplay}</p>
+                <p className="text-xs text-muted-foreground">
+                  Etapa inicial: {model.stage_label || 'Novo'}
+                </p>
+              </div>
+            ) : null}
           </>
         ) : null}
 
@@ -155,17 +191,18 @@ export function ButtonEditorPreview({
           value={SMART_HUB_VARIANT_LABELS[model.visual_variant] || model.visual_variant}
         />
 
-        <div className="space-y-1 border-t pt-3">
+        <div className="space-y-1.5 border-t pt-3">
           <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
             {previewBehaviorTitle()}
           </p>
-          <p className="text-sm leading-relaxed text-muted-foreground">
-            {previewBehaviorDescription(action, {
-              redirectWhatsapp: Boolean(model.redirect_whatsapp),
-              stageLabel: model.stage_label || 'Novo',
-              ownerName: model.has_owner ? model.owner_label || null : null,
-            })}
-          </p>
+          <ul className="space-y-1 text-sm leading-relaxed text-muted-foreground">
+            {behaviorLines.map((line) => (
+              <li key={line} className="flex gap-2">
+                <span className="mt-2 h-1 w-1 shrink-0 rounded-full bg-muted-foreground/70" />
+                <span>{line}</span>
+              </li>
+            ))}
+          </ul>
         </div>
       </div>
     </div>

@@ -12,9 +12,9 @@ export const BUTTON_FIELD_HELP = {
     'Escolha o resultado que o visitante terá ao tocar neste botão. O sistema configura o tipo e a ação automaticamente.',
   intent_social: 'Selecione a rede social que será aberta.',
   intent_contact_method:
-    'Defina se o visitante preencherá um formulário, abrirá o WhatsApp ou um link externo.',
+    'Defina como o pedido de agendamento ou contato será recebido pela clínica.',
   advanced_type:
-    'O sistema define automaticamente o tipo mais adequado. Altere somente se necessário.',
+    'Configurações técnicas definidas automaticamente. Altere somente quando houver uma necessidade específica.',
   type: 'Define o que este botão representa, como WhatsApp, Instagram, agendamento, procedimentos ou informação.',
   type_tooltip:
     'O tipo define a finalidade visual do botão e ajuda o sistema a sugerir ícone, ação e campos adequados.',
@@ -28,6 +28,12 @@ export const BUTTON_FIELD_HELP = {
   capture_redirect_wa: 'Após o envio, o visitante pode ser enviado ao WhatsApp.',
   capture_wa_phone: 'Número usado no redirecionamento após o formulário.',
   capture_wa_message: 'Mensagem pronta na conversa do WhatsApp após o envio.',
+  capture_use_hub_defaults:
+    'Utiliza os campos, responsável e etapa definidos nas Configurações do Smart Hub.',
+  capture_customize_button:
+    'Ative para utilizar campos, responsável, etapa ou mensagem diferentes somente neste botão.',
+  title_form_appointment:
+    "Para formulários de contato, recomendamos 'Solicitar agendamento', pois o horário ainda será confirmado pela equipe.",
   url: 'Endereço que será aberto (site, mapa, link externo…).',
   phone: 'Número com DDD (ex.: 5511999999999).',
   email: 'Endereço de e-mail que será aberto no aplicativo do visitante.',
@@ -45,6 +51,10 @@ export const BUTTON_FIELD_HELP = {
   track_click: 'Registra quantas pessoas clicaram neste botão.',
   order_index: 'Ordem na página (números menores aparecem primeiro).',
 } as const;
+
+export const APPOINTMENT_FORM_HOW_IT_WORKS =
+  'O visitante preencherá os dados e será criado ou atualizado como lead no CRM. A equipe da clínica deverá entrar em contato para escolher e confirmar o horário. Nenhum horário será reservado automaticamente.';
+
 
 export const CLICK_ACTION_HELP: Record<
   SmartHubClickAction,
@@ -201,47 +211,83 @@ export function previewIntentTitle(): string {
   return 'Este botão irá';
 }
 
-/** Texto único da prévia lateral (não repetir no formulário). */
+export function previewAttendanceTitle(): string {
+  return 'Atendimento';
+}
+
+/** Linhas do resumo lateral (evita ambiguidade com agendamento automático). */
+export function previewBehaviorLines(
+  action: SmartHubClickAction,
+  opts?: {
+    redirectWhatsapp?: boolean;
+    stageLabel?: string;
+    ownerName?: string | null;
+    contactMethod?: 'form' | 'whatsapp' | 'link' | null;
+    isAppointmentFlow?: boolean;
+  }
+): string[] {
+  switch (action) {
+    case 'form': {
+      const lines = [
+        'Abre um formulário de solicitação.',
+        'Cria ou atualiza o lead no CRM.',
+        opts?.isAppointmentFlow
+          ? 'A equipe confirma o horário.'
+          : 'A equipe da clínica entra em contato.',
+        'Não reserva horário automaticamente.',
+      ];
+      if (opts?.redirectWhatsapp) {
+        lines.push('Depois do envio, o WhatsApp pode ser aberto.');
+      }
+      return lines;
+    }
+    case 'whatsapp':
+      return [
+        'Abre a conversa no WhatsApp.',
+        'Nenhum lead é criado automaticamente.',
+      ];
+    case 'link':
+      return opts?.isAppointmentFlow
+        ? [
+            'Abre o link de agenda externa informado.',
+            'O agendamento ocorre fora do Healthcare.',
+          ]
+        : ['O visitante será levado para outro site.'];
+    case 'phone':
+      return ['O visitante poderá iniciar uma ligação para o número informado.'];
+    case 'email':
+      return ['O aplicativo de e-mail do visitante será aberto.'];
+    case 'map':
+      return ['O mapa ou endereço da clínica será aberto.'];
+    case 'info':
+      return ['A informação será exibida na própria página, sem redirecionar.'];
+    default:
+      return ['O comportamento segue o tipo escolhido para este botão.'];
+  }
+}
+
+/** Texto único da prévia lateral (compatível com usos legados). */
 export function previewBehaviorDescription(
   action: SmartHubClickAction,
   opts?: {
     redirectWhatsapp?: boolean;
     stageLabel?: string;
     ownerName?: string | null;
+    contactMethod?: 'form' | 'whatsapp' | 'link' | null;
+    isAppointmentFlow?: boolean;
   }
 ): string {
-  switch (action) {
-    case 'form': {
-      if (opts?.redirectWhatsapp) {
-        return 'O visitante preencherá o formulário, o lead será salvo no CRM e, depois, o WhatsApp será aberto.';
-      }
-      const stage = opts?.stageLabel || 'Novo';
-      if (opts?.ownerName) {
-        return `O visitante preencherá o formulário, o lead entrará no CRM na etapa ${stage} e será atribuído a ${opts.ownerName}.`;
-      }
-      return `O visitante preencherá o formulário, o lead entrará no CRM na etapa ${stage} e ficará disponível para a equipe.`;
-    }
-    case 'whatsapp':
-      return 'O visitante irá diretamente para o WhatsApp. Nenhum lead será criado automaticamente.';
-    case 'link':
-      return 'O visitante será levado para outro site.';
-    case 'phone':
-      return 'O visitante poderá iniciar uma ligação para o número informado.';
-    case 'email':
-      return 'O aplicativo de e-mail do visitante será aberto.';
-    case 'map':
-      return 'O mapa ou endereço da clínica será aberto.';
-    case 'info':
-      return 'A informação será exibida na própria página, sem redirecionar.';
-    default:
-      return 'O comportamento segue o tipo escolhido para este botão.';
-  }
+  return previewBehaviorLines(action, opts).join(' ');
 }
 
 export function formFlowSteps(redirectWhatsapp: boolean): string[] {
-  const steps = ['O visitante preenche o formulário', 'O lead entra no CRM'];
+  const steps = [
+    'cria ou atualiza o lead',
+    'registra o interesse',
+    'a equipe entra em contato',
+  ];
   if (redirectWhatsapp) {
-    steps.push('O visitante é direcionado ao WhatsApp');
+    steps.push('o visitante pode ser direcionado ao WhatsApp');
   }
   return steps;
 }

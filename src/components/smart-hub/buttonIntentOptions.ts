@@ -99,22 +99,39 @@ export const CONTACT_METHOD_OPTIONS: {
 }[] = [
   {
     id: 'form',
-    label: 'Formulário interno',
-    description: 'O visitante preenche o formulário e o contato entra no CRM.',
+    label: 'Formulário para a clínica retornar',
+    description:
+      'O visitante preenche os dados. A clínica entra em contato para confirmar o horário.',
     requiresCrm: true,
   },
   {
     id: 'whatsapp',
     label: 'WhatsApp',
-    description: 'Abre a conversa no WhatsApp.',
+    description: 'Abre a conversa no WhatsApp para falar sobre o agendamento.',
   },
   {
     id: 'link',
-    label: 'Link externo',
-    description: 'Abre uma página ou sistema de agendamento externo.',
+    label: 'Link para agenda externa',
+    description: 'Abre uma página ou sistema de agendamento fora do Healthcare.',
   },
 ];
 
+/** Opção visual futura — não é valor técnico persistido. */
+export const CONTACT_METHOD_COMING_SOON = {
+  id: 'online_booking' as const,
+  label: 'Agendamento online pelo sistema',
+  description: 'O visitante escolhe e confirma o horário automaticamente.',
+  badge: 'Em breve',
+};
+
+export const SUGGESTED_APPOINTMENT_FORM_TITLE = 'Solicitar agendamento';
+export const DEFAULT_APPOINTMENT_TITLE_HINTS = ['Agendar consulta', 'Agendar avaliação'] as const;
+
+export function shouldSuggestAppointmentFormTitle(title: string): boolean {
+  const trimmed = title.trim();
+  if (!trimmed) return true;
+  return (DEFAULT_APPOINTMENT_TITLE_HINTS as readonly string[]).includes(trimmed);
+}
 export interface IntentApplyResult {
   type: SmartHubButtonType;
   click_action: SmartHubClickAction;
@@ -310,6 +327,7 @@ export function previewIntentHeadline(opts: {
   intent: ButtonIntentId;
   socialNetwork?: SocialNetworkId | null;
   type?: SmartHubButtonType;
+  contactMethod?: ContactMethodId | null;
 }): string {
   if (opts.intent === 'social') {
     const network =
@@ -325,8 +343,29 @@ export function previewIntentHeadline(opts: {
     return 'Configuração personalizada';
   }
 
+  if (opts.intent === 'appointment') {
+    if (opts.contactMethod === 'whatsapp') return 'Conversar sobre agendamento no WhatsApp';
+    if (opts.contactMethod === 'link') return 'Abrir agenda externa';
+    return 'Solicitar agendamento';
+  }
+
+  if (opts.intent === 'procedure') {
+    if (opts.contactMethod === 'whatsapp') return 'Falar sobre o procedimento no WhatsApp';
+    if (opts.contactMethod === 'link') return 'Abrir link do procedimento';
+    return 'Solicitar contato sobre o procedimento';
+  }
+
+  if (opts.intent === 'capture_form') {
+    return 'Captar contato pelo formulário';
+  }
+
   const option = BUTTON_INTENT_OPTIONS.find((o) => o.id === opts.intent);
   return option?.label || 'Continuar no hub';
+}
+
+export function contactMethodLabel(method: ContactMethodId | null | undefined): string {
+  if (!method) return '—';
+  return CONTACT_METHOD_OPTIONS.find((o) => o.id === method)?.label || method;
 }
 
 export function intentOptionById(id: ButtonIntentId): ButtonIntentOption | undefined {
