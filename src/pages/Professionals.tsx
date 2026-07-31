@@ -122,6 +122,7 @@ export default function Professionals() {
     is_active: boolean;
     hire_date: string;
     additionalClinicIds?: string[];
+    suppressSuccessToast?: boolean;
   }) => {
     const replicateToAdditionalClinics = async (excludeClinicId: string | null): Promise<string | null> => {
       const additionalClinicIds = (data.additionalClinicIds || []).filter((id) => id !== excludeClinicId);
@@ -162,22 +163,27 @@ export default function Professionals() {
 
       if (error) {
         toast.error('Erro ao atualizar profissional');
-        return;
+        throw error;
       }
 
       const replicationError = await replicateToAdditionalClinics(clinicId);
       if (replicationError) {
-        toast.error(`Profissional atualizado, mas ${replicationError.toLowerCase()}`);
-      } else if (data.additionalClinicIds && data.additionalClinicIds.length > 0) {
-        toast.success('Profissional atualizado e vinculado às novas unidades selecionadas!');
-      } else {
-        toast.success('Profissional atualizado com sucesso!');
+        toast.error(replicationError);
+        throw new Error(replicationError);
+      }
+
+      if (!data.suppressSuccessToast) {
+        if (data.additionalClinicIds && data.additionalClinicIds.length > 0) {
+          toast.success('Profissional atualizado e vinculado às novas unidades selecionadas!');
+        } else {
+          toast.success('Profissional atualizado com sucesso!');
+        }
       }
       fetchProfessionals();
     } else {
       if (!clinicId) {
         toast.error('Clinica nao encontrada');
-        return;
+        throw new Error('Clínica não encontrada');
       }
 
       const { error } = await supabase.from('professionals').insert({
@@ -194,7 +200,7 @@ export default function Professionals() {
       if (error) {
         toast.error('Erro ao cadastrar profissional');
         console.error(error);
-        return;
+        throw error;
       }
 
       // Replica o cadastro nas demais unidades marcadas, sem precisar repetir manualmente

@@ -41,6 +41,8 @@ interface Professional {
   hire_date: string;
   /** Ao cadastrar, cria o mesmo profissional também nestas outras clínicas */
   additionalClinicIds?: string[];
+  /** Quando true, o caller exibe o toast final (evita sucesso parcial/duplicado). */
+  suppressSuccessToast?: boolean;
 }
 
 interface ProfessionalFormDialogProps {
@@ -149,6 +151,23 @@ export function ProfessionalFormDialog({
     }
   }, [open, professional, currentClinicId]);
 
+  const persistWorkSchedules = async (options?: { silent?: boolean }) => {
+    if (!isEditing || !professional?.id || !currentClinicId) return;
+
+    const scheduleError = validateWorkSchedulePeriods(schedulePeriods);
+    if (scheduleError) {
+      toast.error(scheduleError);
+      throw new Error(scheduleError);
+    }
+
+    await replaceSchedules.mutateAsync({
+      clinicId: currentClinicId,
+      professionalId: professional.id,
+      periods: schedulePeriods,
+      silent: options?.silent === true,
+    });
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
@@ -157,13 +176,36 @@ export function ProfessionalFormDialog({
       return;
     }
 
+    if (isEditing && professional?.id && currentClinicId) {
+      const scheduleError = validateWorkSchedulePeriods(schedulePeriods);
+      if (scheduleError) {
+        toast.error(scheduleError);
+        return;
+      }
+    }
+
     setIsSubmitting(true);
     try {
       // Só as clínicas marcadas agora que ainda não tinham este profissional
       const additionalClinicIds = selectedClinicIds.filter((id) => !existingClinicIds.includes(id));
-      await onSave({ ...formData, additionalClinicIds });
+      const isCombinedScheduleSave = isEditing && !!professional?.id && !!currentClinicId;
+
+      await onSave({
+        ...formData,
+        additionalClinicIds,
+        suppressSuccessToast: isCombinedScheduleSave,
+      });
+
+      if (isCombinedScheduleSave) {
+        await persistWorkSchedules({ silent: true });
+        toast.success('Profissional e horários atualizados com sucesso.');
+      } else {
+        await persistWorkSchedules();
+      }
+
       onOpenChange(false);
     } catch (error) {
+      // Erros já tostados por onSave / replaceSchedules / validação — sem sucesso parcial.
       console.error('Error saving professional:', error);
     } finally {
       setIsSubmitting(false);
@@ -299,29 +341,34 @@ export function ProfessionalFormDialog({
               {isLoadingSchedules ? (
                 <p className="text-sm text-muted-foreground">Carregando horários…</p>
               ) : (
-                <WorkScheduleEditor
-                  periods={schedulePeriods}
-                  onChange={setSchedulePeriods}
-                />
+                <>
+                  {schedules.length === 0 && schedulePeriods.length === 0 && (
+                    <p className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-md px-3 py-2">
+                      Nenhum horário salvo no banco ainda. Marque os dias e use
+                      &quot;Salvar Alterações&quot; (ou &quot;Salvar horários&quot;) para
+                      gravar a jornada.
+                    </p>
+                  )}
+                  <WorkScheduleEditor
+                    periods={schedulePeriods}
+                    onChange={setSchedulePeriods}
+                  />
+                </>
               )}
               <Button
                 type="button"
                 variant="secondary"
                 disabled={
                   !!validateWorkSchedulePeriods(schedulePeriods) ||
-                  replaceSchedules.isPending
+                  replaceSchedules.isPending ||
+                  isSubmitting
                 }
                 onClick={async () => {
-                  const error = validateWorkSchedulePeriods(schedulePeriods);
-                  if (error) {
-                    toast.error(error);
-                    return;
+                  try {
+                    await persistWorkSchedules();
+                  } catch {
+                    // toast já tratado em persistWorkSchedules / onError
                   }
-                  await replaceSchedules.mutateAsync({
-                    clinicId: currentClinicId,
-                    professionalId: professional.id!,
-                    periods: schedulePeriods,
-                  });
                 }}
               >
                 Salvar horários

@@ -50,10 +50,19 @@ export function useWorkScheduleMutations() {
       professionalId: string;
       periods: WorkSchedulePeriodInput[];
       createdBy?: string | null;
-    }) => scheduleService.replaceProfessionalWorkSchedules(input),
-    onSuccess: () => {
+      silent?: boolean;
+    }) =>
+      scheduleService.replaceProfessionalWorkSchedules({
+        clinicId: input.clinicId,
+        professionalId: input.professionalId,
+        periods: input.periods,
+        createdBy: input.createdBy,
+      }),
+    onSuccess: (_data, variables) => {
       invalidate();
-      toast.success('Horários salvos');
+      if (!variables.silent) {
+        toast.success('Horários salvos');
+      }
     },
     onError: (error: unknown) => {
       toast.error(friendlyScheduleError(error));

@@ -205,16 +205,15 @@ export async function replaceProfessionalWorkSchedules(options: {
     .eq('professional_id', options.professionalId);
   if (delError) throwFriendly(delError);
 
-  const activePeriods = options.periods.filter((p) => p.is_active !== false);
-  if (activePeriods.length === 0) return [] as ProfessionalWorkSchedule[];
+  if (options.periods.length === 0) return [] as ProfessionalWorkSchedule[];
 
-  const rows = activePeriods.map((period) => ({
+  const rows = options.periods.map((period) => ({
     clinic_id: options.clinicId,
     professional_id: options.professionalId,
     weekday: period.weekday,
     start_time: normalizeTimeForDb(period.start_time),
     end_time: normalizeTimeForDb(period.end_time),
-    is_active: true,
+    is_active: period.is_active !== false,
     created_by: options.createdBy || null,
   }));
 
