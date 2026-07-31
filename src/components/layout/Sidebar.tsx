@@ -69,7 +69,6 @@ const menuEntries: MenuEntry[] = [
   { icon: Users, label: "Pacientes", path: "/pacientes", feature: "pacientes" },
   { icon: Stethoscope, label: "Profissionais", path: "/profissionais", feature: "profissionais" },
   { icon: ListPlus, label: "Procedimentos", path: "/procedimentos", feature: "procedimentos" },
-  { icon: KanbanSquare, label: "CRM", path: "/crm", feature: "crm" },
   {
     type: "group",
     id: "financeiro",
@@ -88,15 +87,16 @@ const menuEntries: MenuEntry[] = [
     icon: Megaphone,
     label: "Marketing",
     children: [
-      // Placeholders (CRM Marketing, Campanhas, Landing Pages, Analytics) ocultos no menu —
+      // Placeholders (Campanhas, Landing Pages, Analytics) ocultos no menu —
       // rotas/componentes permanecem em App.tsx para fases futuras.
       { icon: Link2, label: "Smart Hub", path: "/smart-hub", feature: "smart_hub" },
+      { icon: KanbanSquare, label: "CRM", path: "/crm", feature: "crm" },
+      { icon: Plug, label: "Central de integrações", path: "/integracoes", feature: "integracoes" },
     ],
   },
   { icon: Clock, label: "Ponto", path: "/ponto", feature: "ponto" },
   { icon: FileText, label: "Meus Termos", path: "/termos", feature: "termos" },
   { icon: Package, label: "Estoque", path: "/estoque", feature: "estoque" },
-  { icon: Plug, label: "Central Integrações", path: "/integracoes", feature: "integracoes" },
   // TODO(go-live): descomentar item Atendimento ao concluir integração Meta WhatsApp
   // { icon: MessageSquare, label: "Atendimento", path: "/atendimento", feature: "atendimento" },
   { icon: Shield, label: "Administração", path: "/administracao", feature: "administracao" },
@@ -151,6 +151,8 @@ export function Sidebar({ mobile = false, onNavigate }: SidebarProps = {}) {
   const marketingChildActive = useMemo(
     () =>
       location.pathname.startsWith("/smart-hub") ||
+      location.pathname.startsWith("/crm") ||
+      location.pathname.startsWith("/integracoes") ||
       location.pathname.startsWith("/marketing"),
     [location.pathname],
   );
