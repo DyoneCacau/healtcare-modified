@@ -41,8 +41,8 @@ export const COMPATIBLE_ACTIONS_BY_TYPE: Record<SmartHubButtonType, SmartHubClic
   site: ['link'],
   link: ['link'],
   social: ['link'],
-  appointment: ['form', 'whatsapp', 'link'],
-  procedure: ['form', 'whatsapp', 'link', 'info'],
+  appointment: ['form', 'whatsapp', 'link', 'booking'],
+  procedure: ['form', 'whatsapp', 'link', 'info', 'booking'],
   info: ['info', 'link'],
   video: ['link'],
   form: ['form', 'whatsapp', 'link'],
@@ -58,6 +58,7 @@ export const ALL_CLICK_ACTIONS: SmartHubClickAction[] = [
   'email',
   'map',
   'info',
+  'booking',
 ];
 
 export function getCompatibleActions(

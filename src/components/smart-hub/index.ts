@@ -17,6 +17,7 @@ export { PublishWorkflowCard } from './PublishWorkflowCard';
 export { SmartHubImageUpload } from './SmartHubImageUpload';
 export { SmartHubDevicePreview } from './SmartHubDevicePreview';
 export { HubCaptureForm } from './HubCaptureForm';
+export { HubBookingWizard } from './HubBookingWizard';
 export { ColorField } from './ColorField';
 export { TemplateThumbnail } from './TemplateThumbnail';
 export { FieldHelpLabel, FieldHint, TipCallout, FormSection } from './FieldHelpLabel';
@@ -36,9 +37,11 @@ export {
   inferButtonIntent,
   previewIntentHeadline,
   contactMethodLabel,
+  isPublicBookingEnabled,
   BUTTON_INTENT_OPTIONS,
   CONTACT_METHOD_OPTIONS,
   CONTACT_METHOD_COMING_SOON,
+  CONTACT_METHOD_ONLINE_BOOKING,
   SUGGESTED_APPOINTMENT_FORM_TITLE,
   shouldSuggestAppointmentFormTitle,
 } from './buttonIntentOptions';

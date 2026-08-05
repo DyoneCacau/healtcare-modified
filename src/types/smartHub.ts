@@ -41,7 +41,8 @@ export type SmartHubClickAction =
   | 'phone'
   | 'email'
   | 'map'
-  | 'info';
+  | 'info'
+  | 'booking';
 
 export type SmartHubCaptureMode = 'form_crm' | 'whatsapp_direct';
 
@@ -201,6 +202,8 @@ export interface SmartHub {
   style_preset: SmartHubStylePreset | string;
   visual_config: SmartHubVisualConfig;
   capture_config?: SmartHubCaptureConfig;
+  /** Gate do agendamento online (Fase B). Ausente/false = wizard e opção do editor desligados. */
+  public_booking_enabled?: boolean;
   created_at: string;
   updated_at: string;
   created_by: string | null;
@@ -491,6 +494,7 @@ export const SMART_HUB_CLICK_ACTION_LABELS: Record<SmartHubClickAction, string> 
   email: 'Enviar e-mail',
   map: 'Abrir localização',
   info: 'Exibir informação',
+  booking: 'Agendamento online pelo sistema',
 };
 
 export const SMART_HUB_CAPTURE_MODE_LABELS: Record<SmartHubCaptureMode, string> = {

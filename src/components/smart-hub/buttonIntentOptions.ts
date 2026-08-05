@@ -20,7 +20,7 @@ export type ButtonIntentId =
 export type SocialNetworkId = 'instagram' | 'facebook' | 'tiktok' | 'youtube';
 
 /** Como o visitante entra em contato (agendamento / procedimento). */
-export type ContactMethodId = 'form' | 'whatsapp' | 'link';
+export type ContactMethodId = 'form' | 'whatsapp' | 'link' | 'online_booking';
 
 export interface ButtonIntentOption {
   id: ButtonIntentId;
@@ -116,12 +116,22 @@ export const CONTACT_METHOD_OPTIONS: {
   },
 ];
 
-/** Opção visual futura — não é valor técnico persistido. */
-export const CONTACT_METHOD_COMING_SOON = {
+/** Agendamento online — habilitado só com public_booking_enabled. */
+export const CONTACT_METHOD_ONLINE_BOOKING = {
   id: 'online_booking' as const,
   label: 'Agendamento online pelo sistema',
-  description: 'O visitante escolhe e confirma o horário automaticamente.',
-  badge: 'Em breve',
+  description:
+    'Permite que o visitante escolha procedimento, profissional, data e horário disponíveis e confirme o agendamento diretamente na agenda da clínica.',
+  badgeEnabled: null as string | null,
+  badgeDisabled: 'Em breve',
+};
+
+/** @deprecated Use CONTACT_METHOD_ONLINE_BOOKING — mantido para imports existentes. */
+export const CONTACT_METHOD_COMING_SOON = {
+  id: CONTACT_METHOD_ONLINE_BOOKING.id,
+  label: CONTACT_METHOD_ONLINE_BOOKING.label,
+  description: CONTACT_METHOD_ONLINE_BOOKING.description,
+  badge: CONTACT_METHOD_ONLINE_BOOKING.badgeDisabled,
 };
 
 export const SUGGESTED_APPOINTMENT_FORM_TITLE = 'Solicitar agendamento';
@@ -154,6 +164,7 @@ const SOCIAL_TYPES = new Set<SmartHubButtonType>([
 ]);
 
 function asContactMethod(action: SmartHubClickAction, hasCrm: boolean): ContactMethodId {
+  if (action === 'booking') return 'online_booking';
   if (action === 'form' && hasCrm) return 'form';
   if (action === 'whatsapp') return 'whatsapp';
   if (action === 'link') return 'link';
@@ -180,11 +191,17 @@ export function applyButtonIntent(
     case 'whatsapp':
       return { type: 'whatsapp', click_action: 'whatsapp' };
     case 'appointment': {
+      if (method === 'online_booking') {
+        return { type: 'appointment', click_action: 'booking' };
+      }
       const action: SmartHubClickAction =
         method === 'form' && hasCrm ? 'form' : method === 'whatsapp' ? 'whatsapp' : 'link';
       return { type: 'appointment', click_action: action };
     }
     case 'procedure': {
+      if (method === 'online_booking') {
+        return { type: 'procedure', click_action: 'booking' };
+      }
       const action: SmartHubClickAction =
         method === 'form' && hasCrm ? 'form' : method === 'whatsapp' ? 'whatsapp' : 'link';
       return { type: 'procedure', click_action: action };
@@ -243,7 +260,7 @@ export function inferButtonIntent(
       intent: 'appointment',
       socialNetwork: null,
       contactMethod: asContactMethod(action, hasCrm),
-      needsAdvanced: !['form', 'whatsapp', 'link', 'auto'].includes(action),
+      needsAdvanced: !['form', 'whatsapp', 'link', 'booking', 'auto'].includes(action),
     };
   }
 
@@ -252,7 +269,7 @@ export function inferButtonIntent(
       intent: 'procedure',
       socialNetwork: null,
       contactMethod: asContactMethod(action, hasCrm),
-      needsAdvanced: !['form', 'whatsapp', 'link', 'info', 'auto'].includes(action),
+      needsAdvanced: !['form', 'whatsapp', 'link', 'info', 'booking', 'auto'].includes(action),
     };
   }
 
@@ -346,12 +363,14 @@ export function previewIntentHeadline(opts: {
   if (opts.intent === 'appointment') {
     if (opts.contactMethod === 'whatsapp') return 'Conversar sobre agendamento no WhatsApp';
     if (opts.contactMethod === 'link') return 'Abrir agenda externa';
+    if (opts.contactMethod === 'online_booking') return 'Agendar online pelo sistema';
     return 'Solicitar agendamento';
   }
 
   if (opts.intent === 'procedure') {
     if (opts.contactMethod === 'whatsapp') return 'Falar sobre o procedimento no WhatsApp';
     if (opts.contactMethod === 'link') return 'Abrir link do procedimento';
+    if (opts.contactMethod === 'online_booking') return 'Agendar procedimento online';
     return 'Solicitar contato sobre o procedimento';
   }
 
@@ -365,6 +384,7 @@ export function previewIntentHeadline(opts: {
 
 export function contactMethodLabel(method: ContactMethodId | null | undefined): string {
   if (!method) return '—';
+  if (method === 'online_booking') return CONTACT_METHOD_ONLINE_BOOKING.label;
   return CONTACT_METHOD_OPTIONS.find((o) => o.id === method)?.label || method;
 }
 
@@ -383,8 +403,10 @@ export function intentMatchesTypeAction(
   const applied = applyButtonIntent(intent, {
     socialNetwork,
     contactMethod:
-      action === 'form' || action === 'whatsapp' || action === 'link'
-        ? action
+      action === 'form' || action === 'whatsapp' || action === 'link' || action === 'booking'
+        ? action === 'booking'
+          ? 'online_booking'
+          : action
         : null,
   });
   if (intent === 'appointment' || intent === 'procedure') {
@@ -397,4 +419,9 @@ export function intentMatchesTypeAction(
     return type === 'site' || type === 'link';
   }
   return type === applied.type;
+}
+
+/** True quando o hub aceita booking online na UI pública/editor. */
+export function isPublicBookingEnabled(hub: { public_booking_enabled?: boolean | null } | null | undefined): boolean {
+  return hub?.public_booking_enabled === true;
 }

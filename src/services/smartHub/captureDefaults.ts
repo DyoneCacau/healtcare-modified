@@ -125,6 +125,10 @@ export function resolveClickAction(
   }
 }
 
+export function isBookingClickAction(action: string | null | undefined): boolean {
+  return action === 'booking';
+}
+
 export function mergeCaptureConfig(
   hubConfig?: SmartHubCaptureConfig | null
 ): SmartHubCaptureConfig {

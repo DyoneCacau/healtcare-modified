@@ -3,7 +3,7 @@
  *
  * Deploy: `npx supabase functions deploy smart-hub-booking --no-verify-jwt`
  *
- * Ações: `availability` | `confirm`
+ * Ações: `availability` | `confirm` | `catalog`
  * O clinic_id NUNCA vem do cliente — resolve pelo slug do Hub.
  */
 import { serviceClient } from '../_shared/integrations.ts'
@@ -308,6 +308,84 @@ function bookingFingerprintMatches(
     String(existing.professional_id || '') === expected.professional_id &&
     String(existing.procedure_id || '') === expected.procedure_id
   )
+}
+
+async function handleCatalog(
+  req: Request,
+  supabase: ReturnType<typeof serviceClient>,
+  body: Json,
+  requestId: string,
+): Promise<Response> {
+  const slug = asString(body.slug, 120).toLowerCase()
+  if (!slug) {
+    throw new HttpError(400, 'Payload inválido', 'invalid_payload')
+  }
+
+  if ('clinic_id' in body) {
+    logBooking('warn', { step: 'catalog', note: 'clinic_id_ignored', request_id: requestId })
+  }
+
+  const hub = await resolveHubBySlug(supabase, slug)
+  assertHubBookable(hub)
+  await assertClinicModules(supabase, hub.clinic_id, ['smart_hub', 'agenda'])
+
+  const [procRes, profRes] = await Promise.all([
+    supabase
+      .from('clinic_procedures')
+      .select('id, name, duration_minutes, is_active')
+      .eq('clinic_id', hub.clinic_id)
+      .eq('is_active', true)
+      .order('name'),
+    supabase
+      .from('professionals')
+      .select('id, name, is_active')
+      .eq('clinic_id', hub.clinic_id)
+      .eq('is_active', true)
+      .order('name'),
+  ])
+
+  if (procRes.error || profRes.error) {
+    logBooking('error', {
+      step: 'catalog',
+      request_id: requestId,
+      procedures: procRes.error?.message ?? null,
+      professionals: profRes.error?.message ?? null,
+    })
+    throw new HttpError(500, 'Erro ao carregar catálogo', 'internal_error')
+  }
+
+  const procedures = (procRes.data || [])
+    .filter((p) => p.is_active !== false)
+    .map((p) => {
+      const duration = Number(p.duration_minutes)
+      return {
+        id: String(p.id),
+        name: String(p.name),
+        duration_minutes:
+          Number.isFinite(duration) && duration >= MIN_DURATION_MINUTES
+            ? duration
+            : 30,
+      }
+    })
+    .filter(
+      (p) =>
+        p.duration_minutes >= MIN_DURATION_MINUTES &&
+        p.duration_minutes <= MAX_DURATION_MINUTES,
+    )
+
+  const professionals = (profRes.data || [])
+    .filter((p) => p.is_active !== false)
+    .map((p) => ({
+      id: String(p.id),
+      name: String(p.name),
+    }))
+
+  return json(req, {
+    booking_enabled: true,
+    procedures,
+    professionals,
+    request_id: requestId,
+  })
 }
 
 async function handleAvailability(
@@ -793,6 +871,9 @@ Deno.serve(async (req) => {
     }
     if (action === 'confirm') {
       return await handleConfirm(req, supabase, body, requestId)
+    }
+    if (action === 'catalog') {
+      return await handleCatalog(req, supabase, body, requestId)
     }
 
     throw new HttpError(400, 'Ação inválida', 'invalid_payload')

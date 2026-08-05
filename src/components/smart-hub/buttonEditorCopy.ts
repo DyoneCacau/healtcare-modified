@@ -87,6 +87,11 @@ export const CLICK_ACTION_HELP: Record<
   info: {
     description: 'Mostra uma informação ao visitante sem sair da página.',
   },
+  booking: {
+    description:
+      'Abre o wizard de agendamento online para o visitante escolher horário e confirmar.',
+    badge: 'Agenda automática',
+  },
 };
 
 export const VARIANT_HELP: Record<
@@ -222,7 +227,7 @@ export function previewBehaviorLines(
     redirectWhatsapp?: boolean;
     stageLabel?: string;
     ownerName?: string | null;
-    contactMethod?: 'form' | 'whatsapp' | 'link' | null;
+    contactMethod?: 'form' | 'whatsapp' | 'link' | 'online_booking' | null;
     isAppointmentFlow?: boolean;
   }
 ): string[] {
@@ -261,6 +266,12 @@ export function previewBehaviorLines(
       return ['O mapa ou endereço da clínica será aberto.'];
     case 'info':
       return ['A informação será exibida na própria página, sem redirecionar.'];
+    case 'booking':
+      return [
+        'Abre o wizard de agendamento online.',
+        'O visitante escolhe procedimento, profissional, data e horário.',
+        'Confirma e reserva o horário na agenda da clínica.',
+      ];
     default:
       return ['O comportamento segue o tipo escolhido para este botão.'];
   }
@@ -273,7 +284,7 @@ export function previewBehaviorDescription(
     redirectWhatsapp?: boolean;
     stageLabel?: string;
     ownerName?: string | null;
-    contactMethod?: 'form' | 'whatsapp' | 'link' | null;
+    contactMethod?: 'form' | 'whatsapp' | 'link' | 'online_booking' | null;
     isAppointmentFlow?: boolean;
   }
 ): string {

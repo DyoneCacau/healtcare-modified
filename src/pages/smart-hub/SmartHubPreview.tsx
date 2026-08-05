@@ -1,9 +1,17 @@
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { SmartHubLayout, HubPublicView, PublishWorkflowCard } from '@/components/smart-hub';
+import {
+  SmartHubLayout,
+  HubPublicView,
+  HubBookingWizard,
+  HubCaptureForm,
+  PublishWorkflowCard,
+} from '@/components/smart-hub';
 import { usePreviewSmartHub, useSmartHub } from '@/hooks/useSmartHub';
 import { Button } from '@/components/ui/button';
 import { ExternalLink } from 'lucide-react';
+import { resolveClickAction } from '@/services/smartHub';
+import type { SmartHubButton } from '@/types/smartHub';
 
 export default function SmartHubPreview() {
   const {
@@ -17,6 +25,10 @@ export default function SmartHubPreview() {
     revertToDraft,
   } = useSmartHub();
   const { data, isLoading: loadingPreview, error, refetch } = usePreviewSmartHub(hub?.id);
+  const [formOpen, setFormOpen] = useState(false);
+  const [formButton, setFormButton] = useState<SmartHubButton | null>(null);
+  const [bookingOpen, setBookingOpen] = useState(false);
+  const [bookingButton, setBookingButton] = useState<SmartHubButton | null>(null);
 
   // Prévia interna não deve ser indexada por buscadores (melhoria do WIP).
   useEffect(() => {
@@ -32,6 +44,19 @@ export default function SmartHubPreview() {
       el!.content = prev || 'index,follow';
     };
   }, []);
+
+  const handleButtonClick = (button: SmartHubButton) => {
+    const action = resolveClickAction(button.click_action, button.type);
+    if (action === 'form') {
+      setFormButton(button);
+      setFormOpen(true);
+      return;
+    }
+    if (action === 'booking') {
+      setBookingButton(button);
+      setBookingOpen(true);
+    }
+  };
 
   return (
     <SmartHubLayout
@@ -83,7 +108,29 @@ export default function SmartHubPreview() {
             </div>
           ) : (
             <div className="overflow-hidden rounded-xl border shadow-sm">
-              <HubPublicView payload={data} preview />
+              <HubPublicView
+                payload={data}
+                preview
+                onButtonClick={handleButtonClick}
+                onOpenCaptureForm={(b) => {
+                  setFormButton(b || null);
+                  setFormOpen(true);
+                }}
+              />
+              <HubCaptureForm
+                hub={data.hub}
+                button={formButton}
+                open={formOpen}
+                onOpenChange={setFormOpen}
+                preview
+              />
+              <HubBookingWizard
+                hub={data.hub}
+                button={bookingButton}
+                open={bookingOpen}
+                onOpenChange={setBookingOpen}
+                preview
+              />
             </div>
           )}
         </div>

@@ -35,9 +35,10 @@ import {
   listVisibleIntents,
   previewIntentHeadline,
   SOCIAL_NETWORK_OPTIONS,
-  CONTACT_METHOD_COMING_SOON,
+  CONTACT_METHOD_ONLINE_BOOKING,
   SUGGESTED_APPOINTMENT_FORM_TITLE,
   shouldSuggestAppointmentFormTitle,
+  isPublicBookingEnabled,
   type ButtonIntentId,
   type ContactMethodId,
   type SocialNetworkId,
@@ -150,6 +151,7 @@ export default function SmartHubButtons() {
   const { hub, isLoading } = useSmartHub();
   const { buttons, isLoading: loadingButtons, createButton, updateButton, deleteButton } =
     useHubButtons(hub?.id);
+  const bookingEnabled = isPublicBookingEnabled(hub);
   const [open, setOpen] = useState(false);
   const [summaryOpen, setSummaryOpen] = useState(false);
   const [editing, setEditing] = useState<SmartHubButton | null>(null);
@@ -167,9 +169,11 @@ export default function SmartHubButtons() {
 
   const effectiveAction = resolveClickAction(form.click_action, form.type);
   const availableActions = useMemo(() => {
-    const list = getCompatibleActions(form.type, customActions);
+    const list = getCompatibleActions(form.type, customActions).filter((a) =>
+      a === 'booking' ? bookingEnabled : true
+    );
     return hasCrm ? list : list.filter((a) => a !== 'form');
-  }, [form.type, customActions, hasCrm]);
+  }, [form.type, customActions, hasCrm, bookingEnabled]);
   const visibleIntents = useMemo(() => listVisibleIntents(hasCrm), [hasCrm]);
   const contactMethodOptions = useMemo(() => listContactMethods(hasCrm), [hasCrm]);
   const intentMeta = intentOptionById(
@@ -182,6 +186,7 @@ export default function SmartHubButtons() {
   const actionHelp = CLICK_ACTION_HELP[effectiveAction] || CLICK_ACTION_HELP.auto;
   const variantHelp = VARIANT_HELP[form.visual_variant] || VARIANT_HELP.simple;
   const isFormAction = effectiveAction === 'form' && hasCrm;
+  const isBookingAction = effectiveAction === 'booking' && bookingEnabled;
   const isWhatsApp = effectiveAction === 'whatsapp';
   const isLink = effectiveAction === 'link';
   const isPhone = effectiveAction === 'phone';
@@ -192,7 +197,14 @@ export default function SmartHubButtons() {
   const isAppointmentOrProcedure =
     buttonIntent === 'appointment' || buttonIntent === 'procedure';
   const showFallbackDestination =
-    !isFormAction && !isWhatsApp && !isLink && !isPhone && !isEmail && !isMap && !isInfo;
+    !isFormAction &&
+    !isBookingAction &&
+    !isWhatsApp &&
+    !isLink &&
+    !isPhone &&
+    !isEmail &&
+    !isMap &&
+    !isInfo;
 
   const applyIntentToForm = (
     intent: ButtonIntentId,
@@ -374,7 +386,7 @@ export default function SmartHubButtons() {
       return true;
     }
 
-    if (isInfo) return true;
+    if (isBookingAction || isInfo) return true;
 
     const destinationValue = form.url.trim();
     if (isWhatsApp || isPhone || isEmail || isLink || isMap) {
@@ -433,6 +445,11 @@ export default function SmartHubButtons() {
       return;
     }
 
+    if (effectiveAction === 'booking' && !bookingEnabled) {
+      toast.error('Ative o agendamento online neste hub antes de usar esta opção.');
+      return;
+    }
+
     const ownerCheck = assertValidOwnerInput(
       form.capture_use_hub_defaults ? null : form.capture_owner
     );
@@ -467,7 +484,7 @@ export default function SmartHubButtons() {
       title: form.title.trim(),
       subtitle: form.subtitle || null,
       type: form.type,
-      url: isFormAction ? null : form.url || null,
+      url: isFormAction || isBookingAction ? null : form.url || null,
       whatsapp_message: isWhatsApp ? form.whatsapp_message || null : null,
       visual_variant: form.visual_variant,
       click_action: form.click_action,
@@ -738,12 +755,17 @@ export default function SmartHubButtons() {
             />
             <Select
               value={
-                contactMethodOptions.some((o) => o.id === contactMethod)
-                  ? contactMethod
-                  : contactMethodOptions[0]?.id || 'link'
+                contactMethod === 'online_booking'
+                  ? bookingEnabled
+                    ? 'online_booking'
+                    : contactMethodOptions[0]?.id || 'link'
+                  : contactMethodOptions.some((o) => o.id === contactMethod)
+                    ? contactMethod
+                    : contactMethodOptions[0]?.id || 'link'
               }
               onValueChange={(v) => {
                 const next = v as ContactMethodId;
+                if (next === 'online_booking' && !bookingEnabled) return;
                 setContactMethod(next);
                 applyIntentToForm(buttonIntent, socialNetwork, next);
               }}
@@ -762,16 +784,23 @@ export default function SmartHubButtons() {
                     </span>
                   </SelectItem>
                 ))}
-                <SelectItem value={CONTACT_METHOD_COMING_SOON.id} disabled>
-                  <span className="flex flex-col items-start gap-0.5 py-0.5 text-left opacity-70">
+                <SelectItem value={CONTACT_METHOD_ONLINE_BOOKING.id} disabled={!bookingEnabled}>
+                  <span
+                    className={cn(
+                      'flex flex-col items-start gap-0.5 py-0.5 text-left',
+                      !bookingEnabled && 'opacity-70'
+                    )}
+                  >
                     <span className="flex flex-wrap items-center gap-1.5">
-                      {CONTACT_METHOD_COMING_SOON.label}
-                      <Badge variant="secondary" className="text-[10px] font-normal">
-                        {CONTACT_METHOD_COMING_SOON.badge}
-                      </Badge>
+                      {CONTACT_METHOD_ONLINE_BOOKING.label}
+                      {!bookingEnabled ? (
+                        <Badge variant="secondary" className="text-[10px] font-normal">
+                          {CONTACT_METHOD_ONLINE_BOOKING.badgeDisabled}
+                        </Badge>
+                      ) : null}
                     </span>
                     <span className="text-[11px] font-normal leading-snug text-muted-foreground">
-                      {CONTACT_METHOD_COMING_SOON.description}
+                      {CONTACT_METHOD_ONLINE_BOOKING.description}
                     </span>
                   </span>
                 </SelectItem>
@@ -785,6 +814,17 @@ export default function SmartHubButtons() {
                 <AlertDescription>{APPOINTMENT_FORM_HOW_IT_WORKS}</AlertDescription>
               </Alert>
             ) : null}
+            {contactMethod === 'online_booking' && bookingEnabled ? (
+              <Alert>
+                <Info className="h-4 w-4" />
+                <AlertTitle>Como funciona</AlertTitle>
+                <AlertDescription>
+                  O visitante escolhe procedimento, profissional, data e horário e confirma
+                  direto na agenda. Exige jornadas cadastradas e a flag de agendamento online
+                  ativa neste hub.
+                </AlertDescription>
+              </Alert>
+            ) : null}
           </div>
         </FormSection>
       ) : null}
@@ -794,6 +834,8 @@ export default function SmartHubButtons() {
         description={
           isFormAction
             ? 'Para onde o pedido vai e como a equipe acompanha no CRM.'
+            : isBookingAction
+              ? 'O visitante agenda pelo wizard na própria página do hub.'
             : isSocialIntent
               ? 'Link da rede social escolhida.'
               : isWhatsApp
@@ -801,6 +843,17 @@ export default function SmartHubButtons() {
                 : 'Campos necessários para esta escolha.'
         }
       >
+        {isBookingAction ? (
+          <Alert>
+            <Info className="h-4 w-4" />
+            <AlertTitle>Agendamento online</AlertTitle>
+                <AlertDescription>
+                  Não é necessário link externo. O visitante agenda pelo wizard; o catálogo
+                  público de procedimentos e profissionais é carregado ao vivo pela API de
+                  agendamento.
+                </AlertDescription>
+          </Alert>
+        ) : null}
         {isFormAction ? (
           <div className="space-y-4">
             <div className="space-y-2">

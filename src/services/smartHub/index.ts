@@ -17,3 +17,28 @@ export { CaptureService } from './CaptureService';
 export * from './buttonUtils';
 export { validatePublishReadiness } from './PublishService';
 export type { PublishValidationResult, PublishReadinessItem } from './PublishService';
+export {
+  BookingService,
+  BOOKING_PUBLIC_ERROR_MESSAGES,
+  BOOKING_INITIAL_WINDOW_DAYS,
+  BOOKING_MAX_WINDOW_DAYS,
+  addDaysYmd,
+  todayYmdLocal,
+  formatBookingDateLabel,
+  formatBookingTimeRange,
+  formatPhoneMaskBr,
+  digitsOnlyPhone,
+  isPhoneVisuallyValid,
+  groupSlotsByDate,
+  createIdempotencyKey,
+  buildConfirmPayload,
+} from './BookingService';
+export type {
+  BookingSlot,
+  BookingCatalogProcedure,
+  BookingCatalogProfessional,
+  BookingCatalogResult,
+  BookingAvailabilityResult,
+  BookingConfirmInput,
+  BookingConfirmResult,
+} from './BookingService';

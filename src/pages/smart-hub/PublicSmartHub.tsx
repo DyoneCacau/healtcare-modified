@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useParams } from 'react-router-dom';
-import { HubPublicView, HubCaptureForm } from '@/components/smart-hub';
+import { HubPublicView, HubCaptureForm, HubBookingWizard } from '@/components/smart-hub';
 import { usePublicSmartHub } from '@/hooks/useSmartHub';
 import {
   AnalyticsService,
@@ -95,6 +95,8 @@ function PublicSmartHubContent({ slug }: { slug?: string }) {
   const hub = data?.hub;
   const [formOpen, setFormOpen] = useState(false);
   const [formButton, setFormButton] = useState<SmartHubButton | null>(null);
+  const [bookingOpen, setBookingOpen] = useState(false);
+  const [bookingButton, setBookingButton] = useState<SmartHubButton | null>(null);
 
   const seoTitle = hub?.seo_title || hub?.title;
   const seoDescription = hub?.seo_description || hub?.description;
@@ -135,10 +137,19 @@ function PublicSmartHubContent({ slug }: { slug?: string }) {
     }
   };
 
+  const openBooking = (button?: SmartHubButton | null) => {
+    setBookingButton(button || null);
+    setBookingOpen(true);
+  };
+
   const handleButtonClick = async (button: SmartHubButton) => {
     const action = resolveClickAction(button.click_action, button.type);
     if (action === 'form') {
       openForm(button);
+      return;
+    }
+    if (action === 'booking') {
+      openBooking(button);
       return;
     }
     if (action === 'info') return;
@@ -211,6 +222,12 @@ function PublicSmartHubContent({ slug }: { slug?: string }) {
         button={formButton}
         open={formOpen}
         onOpenChange={setFormOpen}
+      />
+      <HubBookingWizard
+        hub={hub}
+        button={bookingButton}
+        open={bookingOpen}
+        onOpenChange={setBookingOpen}
       />
     </>
   );

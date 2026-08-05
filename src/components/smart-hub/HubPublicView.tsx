@@ -165,6 +165,10 @@ export const HubPublicView = memo(function HubPublicView({
       onOpenCaptureForm?.(button);
       return;
     }
+    if (action === 'booking') {
+      onButtonClick?.(button);
+      return;
+    }
     if (action === 'info') return;
 
     if (onButtonClick) {
