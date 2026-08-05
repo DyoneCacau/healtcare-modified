@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useMemo } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -35,6 +35,8 @@ import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import { format } from 'date-fns';
 import { useClinic } from '@/hooks/useClinic';
+import { useProfessionals } from '@/hooks/useProfessionals';
+import { Skeleton } from '@/components/ui/skeleton';
 
 interface Professional {
   id: string;
@@ -49,7 +51,7 @@ interface Professional {
 
 export default function Professionals() {
   const { clinicId } = useClinic();
-  const [professionals, setProfessionals] = useState<Professional[]>([]);
+  const { professionals, isLoading, refetch } = useProfessionals();
   const [searchTerm, setSearchTerm] = useState('');
   const [specialtyFilter, setSpecialtyFilter] = useState('all');
   const [statusFilter, setStatusFilter] = useState('all');
@@ -57,29 +59,6 @@ export default function Professionals() {
   const [detailsOpen, setDetailsOpen] = useState(false);
   const [formOpen, setFormOpen] = useState(false);
   const [editingProfessional, setEditingProfessional] = useState<Professional | null>(null);
-
-  useEffect(() => {
-    fetchProfessionals();
-  }, [clinicId]);
-
-  const fetchProfessionals = async () => {
-    if (!clinicId) {
-      setProfessionals([]);
-      return;
-    }
-
-    const { data, error } = await supabase
-      .from('professionals')
-      .select('*')
-      .eq('clinic_id', clinicId)
-      .order('name');
-
-    if (error) {
-      console.error('Error fetching professionals:', error);
-    } else {
-      setProfessionals(data || []);
-    }
-  };
 
   const specialties = useMemo(() => {
     const specs = new Set<string>();
@@ -178,7 +157,7 @@ export default function Professionals() {
           toast.success('Profissional atualizado com sucesso!');
         }
       }
-      fetchProfessionals();
+      await refetch();
     } else {
       if (!clinicId) {
         toast.error('Clinica nao encontrada');
@@ -212,7 +191,7 @@ export default function Professionals() {
       } else {
         toast.success('Profissional cadastrado com sucesso!');
       }
-      fetchProfessionals();
+      await refetch();
     }
   };
 
@@ -228,7 +207,7 @@ export default function Professionals() {
       toast.success(
         `Profissional ${professional.is_active ? 'desativado' : 'ativado'} com sucesso!`
       );
-      fetchProfessionals();
+      await refetch();
       setDetailsOpen(false);
     }
   };
@@ -263,6 +242,25 @@ export default function Professionals() {
       <>
         <div className="rounded-lg border border-dashed p-12 text-center text-muted-foreground">
           Selecione uma clínica no menu lateral para gerenciar profissionais.
+        </div>
+      </>
+    );
+  }
+
+  if (isLoading && professionals.length === 0) {
+    return (
+      <>
+        <div className="space-y-6">
+          <div>
+            <h1 className="text-2xl font-bold">Profissionais</h1>
+            <p className="text-muted-foreground">Carregando...</p>
+          </div>
+          <div className="grid gap-4 md:grid-cols-4">
+            {[1, 2, 3, 4].map((i) => (
+              <Skeleton key={i} className="h-24" />
+            ))}
+          </div>
+          <Skeleton className="h-64" />
         </div>
       </>
     );

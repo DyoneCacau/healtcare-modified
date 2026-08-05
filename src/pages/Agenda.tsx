@@ -1,6 +1,6 @@
 import { useState, useMemo, useEffect } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { format, parseISO } from 'date-fns';
+import { format, parseISO, startOfWeek, endOfWeek, startOfMonth, endOfMonth } from 'date-fns';
 import { Plus, Clock } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { AgendaFilters } from '@/components/agenda/AgendaFilters';
@@ -76,8 +76,28 @@ export default function Agenda() {
       ? [clinic.id]
       : [];
 
+  // Limita o fetch ao intervalo visível (dia/semana/mês) — evita baixar o histórico inteiro.
+  const appointmentsDateRange = useMemo(() => {
+    const weekOpts = { weekStartsOn: 1 as const };
+    if (view === 'day') {
+      const day = format(selectedDate, 'yyyy-MM-dd');
+      return { from: day, to: day };
+    }
+    if (view === 'week') {
+      return {
+        from: format(startOfWeek(selectedDate, weekOpts), 'yyyy-MM-dd'),
+        to: format(endOfWeek(selectedDate, weekOpts), 'yyyy-MM-dd'),
+      };
+    }
+    // month: inclui dias do calendário que “vazam” do mês anterior/próximo
+    return {
+      from: format(startOfWeek(startOfMonth(selectedDate), weekOpts), 'yyyy-MM-dd'),
+      to: format(endOfWeek(endOfMonth(selectedDate), weekOpts), 'yyyy-MM-dd'),
+    };
+  }, [view, selectedDate]);
+
   const { appointments: rawAppointments, isLoading: isLoadingAppointments } = useAppointments(
-    undefined,
+    appointmentsDateRange,
     clinicIdsForQuery,
   );
   const { activeProfessionals, isLoading: isLoadingProfessionals } = useProfessionals();

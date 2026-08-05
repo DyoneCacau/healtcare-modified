@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useState, ReactNode } from 'react';
+import { createContext, useContext, useEffect, useRef, useState, ReactNode } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from './useAuth';
 import { useSelectedClinicId } from './useSelectedClinicId';
@@ -255,13 +255,28 @@ export function SubscriptionProvider({ children }: { children: ReactNode }) {
     await fetchSubscription({ silent: true });
   };
 
+  // Depende de user?.id (não do objeto user) para não refetch em TOKEN_REFRESHED.
+  // Após o 1º load, refreshes são silenciosos — evita LoadingScreen derrubar o MainLayout.
+  const hasLoadedOnceRef = useRef(false);
   useEffect(() => {
-    fetchSubscription();
-  }, [user, isSuperAdmin, selectedClinicId]);
+    if (!user?.id) {
+      hasLoadedOnceRef.current = false;
+      setSubscription(null);
+      setHasClinic(false);
+      setIsLoading(false);
+      return;
+    }
+
+    const silent = hasLoadedOnceRef.current;
+    void fetchSubscription({ silent }).finally(() => {
+      hasLoadedOnceRef.current = true;
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- fetchSubscription fecha sobre user/clinic atuais
+  }, [user?.id, isSuperAdmin, selectedClinicId]);
 
   // Real-time listener: auto-refresh when subscription or plan changes
   useEffect(() => {
-    if (!user || isSuperAdmin) return;
+    if (!user?.id || isSuperAdmin) return;
 
     const channel = supabase
       .channel('subscription-realtime')
@@ -278,7 +293,8 @@ export function SubscriptionProvider({ children }: { children: ReactNode }) {
       .subscribe();
 
     return () => { supabase.removeChannel(channel); };
-  }, [user, isSuperAdmin]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user?.id, isSuperAdmin]);
 
   // Trial não é mais usado no modelo de vendas diretas
   const isTrialExpired = false;

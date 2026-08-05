@@ -41,7 +41,21 @@ export interface AppointmentData {
   };
 }
 
-export function useAppointments(dateFilter?: string, clinicIdsOverride?: string[]) {
+export type AppointmentsDateFilter =
+  | string
+  | { from: string; to: string }
+  | undefined;
+
+function dateFilterKey(dateFilter: AppointmentsDateFilter): string {
+  if (!dateFilter) return 'all';
+  if (typeof dateFilter === 'string') return dateFilter;
+  return `${dateFilter.from}:${dateFilter.to}`;
+}
+
+export function useAppointments(
+  dateFilter?: AppointmentsDateFilter,
+  clinicIdsOverride?: string[],
+) {
   const { clinicId } = useClinic();
 
   const effectiveClinicIds =
@@ -52,7 +66,7 @@ export function useAppointments(dateFilter?: string, clinicIdsOverride?: string[
       : [];
 
   const { data: appointments, isLoading, error, refetch } = useQuery({
-    queryKey: ['appointments', effectiveClinicIds.join(','), dateFilter],
+    queryKey: ['appointments', effectiveClinicIds.join(','), dateFilterKey(dateFilter)],
     queryFn: async () => {
       if (!effectiveClinicIds.length) return [];
 
@@ -67,8 +81,10 @@ export function useAppointments(dateFilter?: string, clinicIdsOverride?: string[
         .order('date', { ascending: true })
         .order('start_time', { ascending: true });
 
-      if (dateFilter) {
+      if (typeof dateFilter === 'string') {
         query = query.eq('date', dateFilter);
+      } else if (dateFilter?.from && dateFilter?.to) {
+        query = query.gte('date', dateFilter.from).lte('date', dateFilter.to);
       }
 
       const { data, error } = await query;
@@ -84,6 +100,40 @@ export function useAppointments(dateFilter?: string, clinicIdsOverride?: string[
     isLoading, 
     error,
     refetch 
+  };
+}
+
+/** Agendamentos de um paciente — só busca quando há patientId (ex.: dialog de detalhes). */
+export function usePatientAppointments(patientId: string | null | undefined, enabled = true) {
+  const { clinicId } = useClinic();
+
+  const { data: appointments, isLoading, error } = useQuery({
+    queryKey: ['patient-appointments', clinicId, patientId],
+    queryFn: async () => {
+      if (!clinicId || !patientId) return [];
+
+      const { data, error } = await supabase
+        .from('appointments')
+        .select(`
+          *,
+          patient:patients(id, name, phone),
+          professional:professionals(id, name, specialty, cro)
+        `)
+        .eq('clinic_id', clinicId)
+        .eq('patient_id', patientId)
+        .order('date', { ascending: false })
+        .order('start_time', { ascending: false });
+
+      if (error) throw error;
+      return data || [];
+    },
+    enabled: enabled && !!clinicId && !!patientId,
+  });
+
+  return {
+    appointments: appointments || [],
+    isLoading,
+    error,
   };
 }
 

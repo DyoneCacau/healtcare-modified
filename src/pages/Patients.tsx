@@ -8,7 +8,7 @@ import { PatientDetailsDialog } from '@/components/patients/PatientDetailsDialog
 import { WhatsAppConfirmationDialog } from '@/components/patients/WhatsAppConfirmationDialog';
 import { ImportPatientsDialog } from '@/components/patients/ImportPatientsDialog';
 import { usePatients, usePatientMutations, PatientData } from '@/hooks/usePatients';
-import { useAppointments } from '@/hooks/useAppointments';
+import { usePatientAppointments } from '@/hooks/useAppointments';
 import { Skeleton } from '@/components/ui/skeleton';
 
 // Transform DB patient to UI format
@@ -54,8 +54,14 @@ const Patients = () => {
   const [editingPatient, setEditingPatient] = useState<UIPatient | null>(null);
 
   const { patients: rawPatients, isLoading } = usePatients();
-  const { appointments } = useAppointments();
   const { createPatient, updatePatient } = usePatientMutations();
+
+  const patientIdForAppointments =
+    detailsDialogOpen || whatsAppDialogOpen ? selectedPatient?.id : null;
+  const { appointments: patientAppointments } = usePatientAppointments(
+    patientIdForAppointments,
+    Boolean(patientIdForAppointments),
+  );
 
   const patients = useMemo(() => rawPatients.map(transformPatient), [rawPatients]);
 
@@ -73,11 +79,9 @@ const Patients = () => {
     });
   }, [patients, searchTerm, statusFilter]);
 
-  // Get appointments for a specific patient
-  const getPatientAppointments = (patientId: string) => {
-    return appointments
-      .filter((apt: any) => apt.patient_id === patientId)
-      .map((apt: any) => ({
+  const mappedPatientAppointments = useMemo(
+    () =>
+      patientAppointments.map((apt: any) => ({
         id: apt.id,
         date: apt.date,
         time: apt.start_time?.slice(0, 5) || '',
@@ -92,8 +96,9 @@ const Patients = () => {
           phone: '',
           cnpj: '',
         },
-      }));
-  };
+      })),
+    [patientAppointments],
+  );
 
   const handleView = (patient: UIPatient) => {
     setSelectedPatient(patient);
@@ -265,7 +270,7 @@ const Patients = () => {
           open={detailsDialogOpen}
           onOpenChange={setDetailsDialogOpen}
           patient={selectedPatient}
-          appointments={selectedPatient ? getPatientAppointments(selectedPatient.id) : []}
+          appointments={mappedPatientAppointments}
         />
 
         {/* WhatsApp Confirmation Dialog */}
@@ -273,7 +278,7 @@ const Patients = () => {
           open={whatsAppDialogOpen}
           onOpenChange={setWhatsAppDialogOpen}
           patient={selectedPatient}
-          appointments={selectedPatient ? getPatientAppointments(selectedPatient.id) : []}
+          appointments={mappedPatientAppointments}
         />
       </div>
     </>
