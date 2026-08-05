@@ -3,7 +3,7 @@ import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { BrowserRouter, Routes, Route, Navigate, Outlet, useLocation } from "react-router-dom";
+import { BrowserRouter, Routes, Route, Navigate, Outlet } from "react-router-dom";
 import { AuthProvider, useAuth } from "@/hooks/useAuth";
 import { SubscriptionProvider, useSubscription } from "@/hooks/useSubscription";
 import { SubscriptionBlockedScreen } from "@/components/subscription/SubscriptionBlockedScreen";
@@ -12,30 +12,31 @@ import { RequireFeature } from "@/components/subscription/RequireFeature";
 import { OnboardingScreen } from "@/components/onboarding/OnboardingScreen";
 import { useOnboarding } from "@/hooks/useOnboarding";
 import { lazyWithRetry } from "@/lib/lazyWithRetry";
+import { MainLayout } from "@/components/layout/MainLayout";
 
-const Index = lazyWithRetry(() => import("./pages/Index"));
+// Pós-login o sistema redireciona para /app — único eager para não inflar o bundle.
+import Index from "./pages/Index";
+
 const Landing = lazyWithRetry(() => import("./pages/Landing"));
 const Login = lazyWithRetry(() => import("./pages/Login"));
 const ForgotPassword = lazyWithRetry(() => import("./pages/ForgotPassword"));
 const ResetPassword = lazyWithRetry(() => import("./pages/ResetPassword"));
 const Patients = lazyWithRetry(() => import("./pages/Patients"));
 const Agenda = lazyWithRetry(() => import("./pages/Agenda"));
+const Professionals = lazyWithRetry(() => import("./pages/Professionals"));
+const Procedures = lazyWithRetry(() => import("./pages/Procedures"));
+const Settings = lazyWithRetry(() => import("./pages/Settings"));
 const Financial = lazyWithRetry(() => import("./pages/Financial"));
 const Receivables = lazyWithRetry(() => import("./pages/Receivables"));
 const Terms = lazyWithRetry(() => import("./pages/Terms"));
 const Reports = lazyWithRetry(() => import("./pages/Reports"));
 const Commissions = lazyWithRetry(() => import("./pages/Commissions"));
 const Inventory = lazyWithRetry(() => import("./pages/Inventory"));
-const Professionals = lazyWithRetry(() => import("./pages/Professionals"));
-const Procedures = lazyWithRetry(() => import("./pages/Procedures"));
 const Crm = lazyWithRetry(() => import("./pages/Crm"));
 const Integrations = lazyWithRetry(() => import("./pages/Integrations"));
 const TimeClock = lazyWithRetry(() => import("./pages/TimeClock"));
 const Administration = lazyWithRetry(() => import("./pages/Administration"));
 const SuperAdmin = lazyWithRetry(() => import("./pages/SuperAdmin"));
-const Settings = lazyWithRetry(() => import("./pages/Settings"));
-// TODO(go-live): reativar módulo Atendimento omnichannel (Meta WhatsApp)
-// import Atendimento from "./pages/Atendimento";
 const Privacy = lazyWithRetry(() => import("./pages/Privacy"));
 const SignDocument = lazyWithRetry(() => import("./pages/SignDocument"));
 const SelectClinic = lazyWithRetry(() => import("./pages/SelectClinic"));
@@ -64,11 +65,30 @@ const MarketingAnalytics = lazyWithRetry(() =>
   import("./pages/marketing/MarketingPlaceholders").then((m) => ({ default: m.MarketingAnalytics }))
 );
 
-const queryClient = new QueryClient();
+const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: {
+      // Evita refetch em toda remontagem/navegação quando os dados ainda estão frescos.
+      // Telas dinâmicas (ex.: caixa) podem sobrescrever com staleTime: 0.
+      staleTime: 30_000,
+      refetchOnWindowFocus: false,
+    },
+  },
+});
 
 function LoadingScreen() {
   return (
     <div className="flex min-h-screen items-center justify-center" role="status" aria-live="polite">
+      <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary" aria-hidden="true" />
+      <span className="sr-only">Carregando...</span>
+    </div>
+  );
+}
+
+/** Loading só na área de conteúdo — Sidebar/header permanecem montados. */
+function PageContentLoading() {
+  return (
+    <div className="flex min-h-[40vh] items-center justify-center" role="status" aria-live="polite">
       <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary" aria-hidden="true" />
       <span className="sr-only">Carregando...</span>
     </div>
@@ -152,22 +172,31 @@ function OnboardingGate({ children }: { children: ReactNode }) {
   return <>{children}</>;
 }
 
-/** Layout autenticado: gates montados uma vez; só a página interna troca ao navegar */
-function AuthenticatedAppLayout() {
-  const location = useLocation();
+/**
+ * Gates autenticados sem MainLayout (evita duplicar ProtectedRoute/SubscriptionGate).
+ * Usado por /selecionar-clinica e como pai do layout com Sidebar.
+ */
+function AuthenticatedGateLayout() {
   return (
     <ProtectedRoute>
       <SubscriptionGate>
-        {/*
-          key por pathname: com v7_startTransition o Suspense externo mantém a página
-          antiga até o lazy resolver — se o chunk falhar, a UI fica “travada”.
-          Remontar o boundary a cada rota força fallback/loading e evita tela presa.
-        */}
-        <Suspense key={location.pathname} fallback={<LoadingScreen />}>
-          <Outlet />
-        </Suspense>
+        <Outlet />
       </SubscriptionGate>
     </ProtectedRoute>
+  );
+}
+
+/**
+ * Páginas internas da clínica: MainLayout/Sidebar montados uma vez; só o Outlet troca.
+ * Sem key no Suspense — chunk pós-deploy fica a cargo de lazyWithRetry + main.tsx.
+ */
+function AuthenticatedAppLayout() {
+  return (
+    <MainLayout>
+      <Suspense fallback={<PageContentLoading />}>
+        <Outlet />
+      </Suspense>
+    </MainLayout>
   );
 }
 
@@ -186,7 +215,7 @@ function PublicHome() {
 }
 
 function LazyPage({ children }: { children: ReactNode }) {
-  return <Suspense fallback={<LoadingScreen />}>{children}</Suspense>;
+  return <Suspense fallback={<PageContentLoading />}>{children}</Suspense>;
 }
 
 function AppRoutes() {
@@ -211,7 +240,11 @@ function AppRoutes() {
         }
       />
 
-      <Route element={<AuthenticatedAppLayout />}>
+      <Route element={<AuthenticatedGateLayout />}>
+        {/* Autenticada, sem Sidebar/MainLayout */}
+        <Route path="/selecionar-clinica" element={<SelectClinic />} />
+
+        <Route element={<AuthenticatedAppLayout />}>
         <Route path="/app" element={<Index />} />
 
         <Route
@@ -475,9 +508,8 @@ function AppRoutes() {
           }
         />
 
-        <Route path="/selecionar-clinica" element={<SelectClinic />} />
-
         <Route path="/configuracoes" element={<Settings />} />
+        </Route>
       </Route>
 
       {/* Cobrança permanece acessível mesmo quando a assinatura está bloqueada. */}

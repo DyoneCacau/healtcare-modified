@@ -1,5 +1,4 @@
 import { useState, useEffect, useMemo } from 'react';
-import { MainLayout } from '@/components/layout/MainLayout';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -261,16 +260,16 @@ export default function Professionals() {
 
   if (!clinicId) {
     return (
-      <MainLayout>
+      <>
         <div className="rounded-lg border border-dashed p-12 text-center text-muted-foreground">
           Selecione uma clínica no menu lateral para gerenciar profissionais.
         </div>
-      </MainLayout>
+      </>
     );
   }
 
   return (
-    <MainLayout>
+    <>
       <div className="space-y-6">
         {/* Header */}
         <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
@@ -550,6 +549,6 @@ export default function Professionals() {
         }
         onSave={handleSaveProfessional}
       />
-    </MainLayout>
+    </>
   );
 }

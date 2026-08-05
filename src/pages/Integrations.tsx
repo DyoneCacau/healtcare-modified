@@ -2,7 +2,6 @@ import { useEffect, useMemo, useState } from 'react';
 import { Navigate, useSearchParams } from 'react-router-dom';
 import { Plug, Info } from 'lucide-react';
 import { toast } from 'sonner';
-import { MainLayout } from '@/components/layout/MainLayout';
 import { Header } from '@/components/layout/Header';
 import { Card, CardContent } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -140,17 +139,17 @@ export default function Integrations() {
 
   if (permissionsLoading) {
     return (
-      <MainLayout>
+      <>
         <Header title="Central de Integrações" subtitle="Conexões desta clínica" />
         <Skeleton className="h-64" />
-      </MainLayout>
+      </>
     );
   }
 
   if (!canView) return <Navigate to="/app" replace />;
 
   return (
-    <MainLayout>
+    <>
       <Header
         title="Central de Integrações"
         subtitle="Conexões, automações e credenciais isoladas por clínica"
@@ -264,6 +263,6 @@ export default function Integrations() {
         canEdit={canEdit}
         autoOpenAssets={metaAutoAssets}
       />
-    </MainLayout>
+    </>
   );
 }

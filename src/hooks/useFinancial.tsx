@@ -935,7 +935,7 @@ export function useUnclosedCashDays() {
       return unclosed;
     },
     enabled: !!clinicId,
-    staleTime: 0,
+    staleTime: 60_000,
     refetchOnWindowFocus: true,
   });
 

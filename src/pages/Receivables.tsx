@@ -10,7 +10,6 @@ import {
   Search,
   Wallet,
 } from 'lucide-react';
-import { MainLayout } from '@/components/layout/MainLayout';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -139,7 +138,7 @@ export default function Receivables() {
 
   if (permLoading || isLoading) {
     return (
-      <MainLayout>
+      <>
         <div className="space-y-4">
           <Skeleton className="h-10 w-64" />
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
@@ -149,19 +148,19 @@ export default function Receivables() {
           </div>
           <Skeleton className="h-64" />
         </div>
-      </MainLayout>
+      </>
     );
   }
 
   if (!canView) {
     return (
-      <MainLayout>
+      <>
         <Card>
           <CardContent className="py-10 text-center text-muted-foreground">
             Você não tem permissão para ver Contas a receber.
           </CardContent>
         </Card>
-      </MainLayout>
+      </>
     );
   }
 
@@ -175,7 +174,7 @@ export default function Receivables() {
   ];
 
   return (
-    <MainLayout>
+    <>
       <div className="space-y-6">
         <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <div>
@@ -418,6 +417,6 @@ export default function Receivables() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
-    </MainLayout>
+    </>
   );
 }

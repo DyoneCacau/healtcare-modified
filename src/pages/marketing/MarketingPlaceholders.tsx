@@ -1,4 +1,3 @@
-import { MainLayout } from '@/components/layout/MainLayout';
 
 interface MarketingPlaceholderProps {
   title: string;
@@ -7,7 +6,7 @@ interface MarketingPlaceholderProps {
 
 function MarketingPlaceholder({ title, description }: MarketingPlaceholderProps) {
   return (
-    <MainLayout>
+    <>
       <div className="mb-6">
         <h1 className="text-2xl font-bold tracking-tight">{title}</h1>
         <p className="mt-1 text-muted-foreground">{description}</p>
@@ -15,7 +14,7 @@ function MarketingPlaceholder({ title, description }: MarketingPlaceholderProps)
       <div className="rounded-lg border border-dashed p-12 text-center text-muted-foreground">
         Módulo em preparação. A arquitetura do Marketing foi reservada para as próximas fases.
       </div>
-    </MainLayout>
+    </>
   );
 }
 

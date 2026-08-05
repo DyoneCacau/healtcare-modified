@@ -3,7 +3,6 @@ import { useSearchParams } from 'react-router-dom';
 import { format, parseISO } from 'date-fns';
 import { Plus, Clock } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { MainLayout } from '@/components/layout/MainLayout';
 import { AgendaFilters } from '@/components/agenda/AgendaFilters';
 import { AgendaStats } from '@/components/agenda/AgendaStats';
 import { DayView } from '@/components/agenda/DayView';
@@ -629,7 +628,7 @@ export default function Agenda() {
 
   if (isLoadingAppointments || isLoadingProfessionals) {
     return (
-      <MainLayout>
+      <>
         <div className="space-y-6">
           <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
             <div>
@@ -644,12 +643,12 @@ export default function Agenda() {
           </div>
           <Skeleton className="h-96" />
         </div>
-      </MainLayout>
+      </>
     );
   }
 
   return (
-    <MainLayout>
+    <>
       <div className="space-y-6">
         {/* Header */}
         <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
@@ -808,6 +807,6 @@ export default function Agenda() {
           name: p.name,
         }))}
       />
-    </MainLayout>
+    </>
   );
 }

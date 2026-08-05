@@ -1,5 +1,4 @@
 import { useState, useMemo, useEffect } from 'react';
-import { MainLayout } from '@/components/layout/MainLayout';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -242,7 +241,7 @@ export default function TimeClock() {
   };
 
   return (
-    <MainLayout>
+    <>
       <div className="space-y-6">
         {/* Header */}
         <div>
@@ -484,6 +483,6 @@ export default function TimeClock() {
         onOpenChange={setCorrectionDialogOpen}
         onSubmit={handleCorrectionSubmit}
       />
-    </MainLayout>
+    </>
   );
 }

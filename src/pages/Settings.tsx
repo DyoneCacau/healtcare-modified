@@ -1,5 +1,4 @@
 import { useState, useEffect } from 'react';
-import { MainLayout } from '@/components/layout/MainLayout';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -401,16 +400,16 @@ export default function Settings() {
 
   if (isLoading) {
     return (
-      <MainLayout>
+      <>
         <div className="flex items-center justify-center h-96">
           <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
         </div>
-      </MainLayout>
+      </>
     );
   }
 
   return (
-    <MainLayout>
+    <>
       <div className="space-y-6">
         <div>
           <h1 className="text-3xl font-bold text-foreground">Configurações</h1>
@@ -930,6 +929,6 @@ export default function Settings() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
-    </MainLayout>
+    </>
   );
 }

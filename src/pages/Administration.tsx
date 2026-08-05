@@ -1,5 +1,4 @@
 import { useState, useEffect, useMemo } from 'react';
-import { MainLayout } from '@/components/layout/MainLayout';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -488,7 +487,7 @@ export default function Administration() {
   }
 
   return (
-    <MainLayout>
+    <>
       <div className="space-y-6">
         {/* Header */}
         <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
@@ -889,6 +888,6 @@ export default function Administration() {
           </TabsContent>
         </Tabs>
       </div>
-    </MainLayout>
+    </>
   );
 }

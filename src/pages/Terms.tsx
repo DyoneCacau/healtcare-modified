@@ -1,5 +1,4 @@
 import { useState } from 'react';
-import { MainLayout } from '@/components/layout/MainLayout';
 import { TermsList } from '@/components/terms/TermsList';
 import { TermEditor } from '@/components/terms/TermEditor';
 import { TermPrintPreview } from '@/components/terms/TermPrintPreview';
@@ -75,7 +74,7 @@ export default function Terms() {
 
   if (isLoading) {
     return (
-      <MainLayout>
+      <>
         <div className="space-y-6">
           <Skeleton className="h-12 w-64" />
           <div className="grid gap-6 lg:grid-cols-3">
@@ -85,12 +84,12 @@ export default function Terms() {
             <Skeleton className="h-64" />
           </div>
         </div>
-      </MainLayout>
+      </>
     );
   }
 
   return (
-    <MainLayout>
+    <>
       <div className="space-y-6">
         <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
           <div>
@@ -174,6 +173,6 @@ export default function Terms() {
           clinicPhone={clinic?.phone}
         />
       )}
-    </MainLayout>
+    </>
   );
 }

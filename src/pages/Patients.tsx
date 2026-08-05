@@ -1,6 +1,5 @@
 import { useState, useMemo } from 'react';
 import { Plus, Users } from 'lucide-react';
-import { MainLayout } from '@/components/layout/MainLayout';
 import { Button } from '@/components/ui/button';
 import { PatientSearch } from '@/components/patients/PatientSearch';
 import { PatientsList } from '@/components/patients/PatientsList';
@@ -156,7 +155,7 @@ const Patients = () => {
 
   if (isLoading) {
     return (
-      <MainLayout>
+      <>
         <div className="space-y-6">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
             <div>
@@ -171,12 +170,12 @@ const Patients = () => {
           </div>
           <Skeleton className="h-96" />
         </div>
-      </MainLayout>
+      </>
     );
   }
 
   return (
-    <MainLayout>
+    <>
       <div className="space-y-6 animate-fade-in">
         {/* Header */}
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
@@ -277,7 +276,7 @@ const Patients = () => {
           appointments={selectedPatient ? getPatientAppointments(selectedPatient.id) : []}
         />
       </div>
-    </MainLayout>
+    </>
   );
 };
 

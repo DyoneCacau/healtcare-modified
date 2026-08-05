@@ -16,7 +16,6 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { MainLayout } from '@/components/layout/MainLayout';
 import { CommissionRulesList } from '@/components/commissions/CommissionRulesList';
 import { CommissionRuleForm } from '@/components/commissions/CommissionRuleForm';
 import { CommissionReport } from '@/components/commissions/CommissionReport';
@@ -143,18 +142,18 @@ export default function Commissions() {
 
   if (isLoading || isLoadingRules) {
     return (
-      <MainLayout>
+      <>
         <div className="space-y-6">
           <Skeleton className="h-12 w-64" />
           <Skeleton className="h-32" />
           <Skeleton className="h-64" />
         </div>
-      </MainLayout>
+      </>
     );
   }
 
   return (
-    <MainLayout>
+    <>
       <div className="space-y-6">
         {/* Header */}
         <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
@@ -319,6 +318,6 @@ export default function Commissions() {
         editingRule={editingRule}
         selectedClinicId={selectedClinic !== 'all' ? selectedClinic : undefined}
       />
-    </MainLayout>
+    </>
   );
 }

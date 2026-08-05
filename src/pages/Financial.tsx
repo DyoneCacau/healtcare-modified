@@ -17,7 +17,6 @@ import {
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { MainLayout } from '@/components/layout/MainLayout';
 import { PaymentForm } from '@/components/financial/PaymentForm';
 import { TransactionsList } from '@/components/financial/TransactionsList';
 import { CashClosingDialog } from '@/components/financial/CashClosingDialog';
@@ -368,7 +367,7 @@ export default function Financial() {
 
   if (isLoading || isSummaryLoading) {
     return (
-      <MainLayout>
+      <>
         <div className="space-y-6">
           <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
             <div>
@@ -384,12 +383,12 @@ export default function Financial() {
           </div>
           <Skeleton className="h-96" />
         </div>
-      </MainLayout>
+      </>
     );
   }
 
   return (
-    <MainLayout>
+    <>
       <div className="space-y-6">
         <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <div>
@@ -751,6 +750,6 @@ export default function Financial() {
         </DialogContent>
       </Dialog>
 
-    </MainLayout>
+    </>
   );
 }

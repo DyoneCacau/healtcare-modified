@@ -11,7 +11,6 @@ import {
   Trash2,
 } from 'lucide-react';
 import { toast } from 'sonner';
-import { MainLayout } from '@/components/layout/MainLayout';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -206,19 +205,19 @@ export default function Procedures() {
 
   if (permissionsLoading) {
     return (
-      <MainLayout>
+      <>
         <div className="space-y-4">
           <Skeleton className="h-10 w-64" />
           <Skeleton className="h-40 w-full" />
         </div>
-      </MainLayout>
+      </>
     );
   }
 
   if (!canView) return <Navigate to="/app" replace />;
 
   return (
-    <MainLayout>
+    <>
       <div className="space-y-6">
         <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <div>
@@ -549,6 +548,6 @@ export default function Procedures() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
-    </MainLayout>
+    </>
   );
 }

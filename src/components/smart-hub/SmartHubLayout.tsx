@@ -10,7 +10,6 @@ import {
   Eye,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { MainLayout } from '@/components/layout/MainLayout';
 
 const NAV_ITEMS = [
   { label: 'Dashboard', path: '/smart-hub', icon: LayoutDashboard, exact: true },
@@ -34,7 +33,7 @@ export function SmartHubLayout({ children, title, description, actions }: SmartH
   const location = useLocation();
 
   return (
-    <MainLayout>
+    <>
       <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
         <div>
           <h1 className="text-2xl font-bold tracking-tight">{title}</h1>
@@ -72,6 +71,6 @@ export function SmartHubLayout({ children, title, description, actions }: SmartH
       </nav>
 
       {children}
-    </MainLayout>
+    </>
   );
 }

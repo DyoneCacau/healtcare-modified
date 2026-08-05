@@ -1,9 +1,10 @@
-import { ReactNode, useState } from "react";
+import { ReactNode, useEffect, useState } from "react";
 import { Menu } from "lucide-react";
 import { Sidebar } from "./Sidebar";
 import { CashClosingAlert } from "@/components/financial/CashClosingAlert";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet";
+import { preloadPriorityRoutesWhenIdle } from "@/lib/routePreload";
 
 interface MainLayoutProps {
   children: ReactNode;
@@ -11,6 +12,10 @@ interface MainLayoutProps {
 
 export function MainLayout({ children }: MainLayoutProps) {
   const [mobileOpen, setMobileOpen] = useState(false);
+
+  useEffect(() => {
+    preloadPriorityRoutesWhenIdle();
+  }, []);
 
   return (
     <div className="flex h-screen overflow-hidden bg-background">

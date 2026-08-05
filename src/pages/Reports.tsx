@@ -1,5 +1,4 @@
 import { useState, useEffect } from 'react';
-import { MainLayout } from '@/components/layout/MainLayout';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
@@ -710,27 +709,27 @@ export default function Reports() {
 
   if (!clinicId) {
     return (
-      <MainLayout>
+      <>
         <div className="rounded-lg border border-dashed p-12 text-center text-muted-foreground">
           Selecione uma clínica no menu lateral para visualizar os relatórios.
         </div>
-      </MainLayout>
+      </>
     );
   }
 
   if (isLoading) {
     return (
-      <MainLayout>
+      <>
         <div className="flex items-center justify-center h-96" role="status" aria-live="polite">
           <Loader2 className="h-8 w-8 animate-spin text-primary" aria-hidden="true" />
           <span className="sr-only">Carregando relatórios...</span>
         </div>
-      </MainLayout>
+      </>
     );
   }
 
   return (
-    <MainLayout>
+    <>
       <div className="space-y-6">
         <div>
           <h1 className="text-2xl font-bold flex items-center gap-2">
@@ -1364,6 +1363,6 @@ export default function Reports() {
         </Tabs>
         </div>
       </div>
-    </MainLayout>
+    </>
   );
 }

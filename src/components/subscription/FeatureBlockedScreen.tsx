@@ -13,7 +13,6 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog';
 import { useNavigate } from 'react-router-dom';
-import { MainLayout } from '@/components/layout/MainLayout';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
 import { toast } from 'sonner';
@@ -101,7 +100,7 @@ export function FeatureBlockedScreen({ featureName, planName }: FeatureBlockedSc
   }
 
   return (
-    <MainLayout>
+    <>
       <div className="flex flex-col items-center justify-center min-h-[calc(100vh-200px)] p-8">
         <Card className="max-w-lg w-full">
           <CardContent className="pt-10 pb-8 space-y-6 text-center">
@@ -233,6 +232,6 @@ export function FeatureBlockedScreen({ featureName, planName }: FeatureBlockedSc
           </DialogFooter>
         </DialogContent>
       </Dialog>
-    </MainLayout>
+    </>
   );
 }

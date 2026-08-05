@@ -60,6 +60,7 @@ export function useClinic() {
       };
     },
     enabled: !!user?.id,
+    staleTime: 1000 * 60 * 5, // 5 minutos — clínica ativa não muda a cada navegação
   });
 
   return {
@@ -124,6 +125,7 @@ export function useClinics() {
       }));
     },
     enabled: !!user?.id || isSuperAdmin,
+    staleTime: 1000 * 60 * 5,
   });
 
   return { clinics: clinics || [], isLoading, error };

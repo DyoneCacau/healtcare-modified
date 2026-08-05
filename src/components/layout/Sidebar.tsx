@@ -43,6 +43,7 @@ import { useCurrentClinic } from "@/hooks/useCurrentClinic";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { ClinicDisplayName } from "@/components/common/ClinicDisplayName";
 import { getClinicDisplayName } from "@/lib/utils";
+import { preloadRoute } from "@/lib/routePreload";
 import { NotificationBell } from "./NotificationBell";
 
 interface MenuItem {
@@ -243,6 +244,8 @@ export function Sidebar({ mobile = false, onNavigate }: SidebarProps = {}) {
       <Link
         to={item.path}
         onClick={() => onNavigate?.()}
+        onMouseEnter={() => preloadRoute(item.path)}
+        onFocus={() => preloadRoute(item.path)}
         className={cn(
           "flex items-center gap-3 rounded-lg px-3 text-sm font-medium transition-all duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sidebar-primary",
           nested ? "py-2" : "py-2.5",
@@ -327,7 +330,17 @@ export function Sidebar({ mobile = false, onNavigate }: SidebarProps = {}) {
       <li key={group.id} className="space-y-1">
         <button
           type="button"
-          onClick={() => opts.setOpen((open) => !open)}
+          onClick={() =>
+            opts.setOpen((open) => {
+              const next = !open;
+              if (next) {
+                for (const { child } of visibleChildren) {
+                  if ("path" in child && child.path) preloadRoute(child.path);
+                }
+              }
+              return next;
+            })
+          }
           className={cn(
             "flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-all duration-200",
             opts.childActive

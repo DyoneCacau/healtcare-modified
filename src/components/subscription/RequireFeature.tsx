@@ -48,10 +48,10 @@ export function RequireFeature({ feature, children }: RequireFeatureProps) {
     return <>{children}</>;
   }
 
-  // Aguardar carregamento
+  // Aguardar carregamento (só conteúdo — layout já está no AuthenticatedAppLayout)
   if (isLoading) {
     return (
-      <div className="flex min-h-screen items-center justify-center">
+      <div className="flex min-h-[40vh] items-center justify-center">
         <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
       </div>
     );

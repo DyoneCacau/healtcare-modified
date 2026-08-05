@@ -88,6 +88,7 @@ export function usePermissions() {
       return map;
     },
     enabled: !!user?.id && !!clinicId,
+    staleTime: 1000 * 60 * 5, // 5 minutos — matriz de permissões não muda a cada aba
   });
 
   const can = (feature: string, action: PermissionAction): boolean => {
@@ -126,6 +127,7 @@ export function usePermissions() {
       return (perms?.length ?? 0) > 0;
     },
     enabled: !!user?.id && !isSuperAdmin,
+    staleTime: 1000 * 60 * 5,
   });
 
   const canSeeAllClinicsInAgenda = (): boolean =>

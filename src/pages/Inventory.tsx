@@ -1,5 +1,4 @@
 import { useState, useMemo } from 'react';
-import { MainLayout } from '@/components/layout/MainLayout';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -183,7 +182,7 @@ export default function Inventory() {
 
   if (isLoadingProducts || isLoadingMovements) {
     return (
-      <MainLayout>
+      <>
         <div className="space-y-6">
           <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
             <div>
@@ -201,12 +200,12 @@ export default function Inventory() {
           </div>
           <Skeleton className="h-96" />
         </div>
-      </MainLayout>
+      </>
     );
   }
 
   return (
-    <MainLayout>
+    <>
       <div className="space-y-6">
         {/* Header */}
         <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
@@ -617,6 +616,6 @@ export default function Inventory() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
-    </MainLayout>
+    </>
   );
 }
