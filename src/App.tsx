@@ -1,9 +1,9 @@
-import React, { lazy, Suspense } from "react";
+import { Suspense, useEffect, useState, type ReactNode } from "react";
 import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { BrowserRouter, Routes, Route, Navigate, Outlet } from "react-router-dom";
+import { BrowserRouter, Routes, Route, Navigate, Outlet, useLocation } from "react-router-dom";
 import { AuthProvider, useAuth } from "@/hooks/useAuth";
 import { SubscriptionProvider, useSubscription } from "@/hooks/useSubscription";
 import { SubscriptionBlockedScreen } from "@/components/subscription/SubscriptionBlockedScreen";
@@ -11,54 +11,56 @@ import { ContactAdminScreen } from "@/components/subscription/ContactAdminScreen
 import { RequireFeature } from "@/components/subscription/RequireFeature";
 import { OnboardingScreen } from "@/components/onboarding/OnboardingScreen";
 import { useOnboarding } from "@/hooks/useOnboarding";
-const Index = React.lazy(() => import("./pages/Index"));
-const Landing = React.lazy(() => import("./pages/Landing"));
-const Login = React.lazy(() => import("./pages/Login"));
-const ForgotPassword = React.lazy(() => import("./pages/ForgotPassword"));
-const ResetPassword = React.lazy(() => import("./pages/ResetPassword"));
-const Patients = React.lazy(() => import("./pages/Patients"));
-const Agenda = React.lazy(() => import("./pages/Agenda"));
-const Financial = React.lazy(() => import("./pages/Financial"));
-const Receivables = React.lazy(() => import("./pages/Receivables"));
-const Terms = React.lazy(() => import("./pages/Terms"));
-const Reports = React.lazy(() => import("./pages/Reports"));
-const Commissions = React.lazy(() => import("./pages/Commissions"));
-const Inventory = React.lazy(() => import("./pages/Inventory"));
-const Professionals = React.lazy(() => import("./pages/Professionals"));
-const Procedures = React.lazy(() => import("./pages/Procedures"));
-const Crm = React.lazy(() => import("./pages/Crm"));
-const Integrations = React.lazy(() => import("./pages/Integrations"));
-const TimeClock = React.lazy(() => import("./pages/TimeClock"));
-const Administration = React.lazy(() => import("./pages/Administration"));
-const SuperAdmin = React.lazy(() => import("./pages/SuperAdmin"));
-const Settings = React.lazy(() => import("./pages/Settings"));
+import { lazyWithRetry } from "@/lib/lazyWithRetry";
+
+const Index = lazyWithRetry(() => import("./pages/Index"));
+const Landing = lazyWithRetry(() => import("./pages/Landing"));
+const Login = lazyWithRetry(() => import("./pages/Login"));
+const ForgotPassword = lazyWithRetry(() => import("./pages/ForgotPassword"));
+const ResetPassword = lazyWithRetry(() => import("./pages/ResetPassword"));
+const Patients = lazyWithRetry(() => import("./pages/Patients"));
+const Agenda = lazyWithRetry(() => import("./pages/Agenda"));
+const Financial = lazyWithRetry(() => import("./pages/Financial"));
+const Receivables = lazyWithRetry(() => import("./pages/Receivables"));
+const Terms = lazyWithRetry(() => import("./pages/Terms"));
+const Reports = lazyWithRetry(() => import("./pages/Reports"));
+const Commissions = lazyWithRetry(() => import("./pages/Commissions"));
+const Inventory = lazyWithRetry(() => import("./pages/Inventory"));
+const Professionals = lazyWithRetry(() => import("./pages/Professionals"));
+const Procedures = lazyWithRetry(() => import("./pages/Procedures"));
+const Crm = lazyWithRetry(() => import("./pages/Crm"));
+const Integrations = lazyWithRetry(() => import("./pages/Integrations"));
+const TimeClock = lazyWithRetry(() => import("./pages/TimeClock"));
+const Administration = lazyWithRetry(() => import("./pages/Administration"));
+const SuperAdmin = lazyWithRetry(() => import("./pages/SuperAdmin"));
+const Settings = lazyWithRetry(() => import("./pages/Settings"));
 // TODO(go-live): reativar módulo Atendimento omnichannel (Meta WhatsApp)
 // import Atendimento from "./pages/Atendimento";
-const Privacy = React.lazy(() => import("./pages/Privacy"));
-const SignDocument = React.lazy(() => import("./pages/SignDocument"));
-const SelectClinic = React.lazy(() => import("./pages/SelectClinic"));
-const NotFound = React.lazy(() => import("./pages/NotFound"));
-const Billing = React.lazy(() => import("./pages/Billing"));
+const Privacy = lazyWithRetry(() => import("./pages/Privacy"));
+const SignDocument = lazyWithRetry(() => import("./pages/SignDocument"));
+const SelectClinic = lazyWithRetry(() => import("./pages/SelectClinic"));
+const NotFound = lazyWithRetry(() => import("./pages/NotFound"));
+const Billing = lazyWithRetry(() => import("./pages/Billing"));
 
-const SmartHubDashboard = lazy(() => import("./pages/smart-hub/SmartHubDashboard"));
-const SmartHubEditor = lazy(() => import("./pages/smart-hub/SmartHubEditor"));
-const SmartHubTemplates = lazy(() => import("./pages/smart-hub/SmartHubTemplates"));
-const SmartHubButtons = lazy(() => import("./pages/smart-hub/SmartHubButtons"));
-const SmartHubAnalytics = lazy(() => import("./pages/smart-hub/SmartHubAnalytics"));
-const SmartHubSettings = lazy(() => import("./pages/smart-hub/SmartHubSettings"));
-const SmartHubDomain = lazy(() => import("./pages/smart-hub/SmartHubDomain"));
-const SmartHubPreview = lazy(() => import("./pages/smart-hub/SmartHubPreview"));
-const PublicSmartHub = lazy(() => import("./pages/smart-hub/PublicSmartHub"));
-const MarketingCrm = lazy(() =>
+const SmartHubDashboard = lazyWithRetry(() => import("./pages/smart-hub/SmartHubDashboard"));
+const SmartHubEditor = lazyWithRetry(() => import("./pages/smart-hub/SmartHubEditor"));
+const SmartHubTemplates = lazyWithRetry(() => import("./pages/smart-hub/SmartHubTemplates"));
+const SmartHubButtons = lazyWithRetry(() => import("./pages/smart-hub/SmartHubButtons"));
+const SmartHubAnalytics = lazyWithRetry(() => import("./pages/smart-hub/SmartHubAnalytics"));
+const SmartHubSettings = lazyWithRetry(() => import("./pages/smart-hub/SmartHubSettings"));
+const SmartHubDomain = lazyWithRetry(() => import("./pages/smart-hub/SmartHubDomain"));
+const SmartHubPreview = lazyWithRetry(() => import("./pages/smart-hub/SmartHubPreview"));
+const PublicSmartHub = lazyWithRetry(() => import("./pages/smart-hub/PublicSmartHub"));
+const MarketingCrm = lazyWithRetry(() =>
   import("./pages/marketing/MarketingPlaceholders").then((m) => ({ default: m.MarketingCrm }))
 );
-const MarketingCampaigns = lazy(() =>
+const MarketingCampaigns = lazyWithRetry(() =>
   import("./pages/marketing/MarketingPlaceholders").then((m) => ({ default: m.MarketingCampaigns }))
 );
-const MarketingLandingPages = lazy(() =>
+const MarketingLandingPages = lazyWithRetry(() =>
   import("./pages/marketing/MarketingPlaceholders").then((m) => ({ default: m.MarketingLandingPages }))
 );
-const MarketingAnalytics = lazy(() =>
+const MarketingAnalytics = lazyWithRetry(() =>
   import("./pages/marketing/MarketingPlaceholders").then((m) => ({ default: m.MarketingAnalytics }))
 );
 
@@ -73,7 +75,7 @@ function LoadingScreen() {
   );
 }
 
-function ProtectedRoute({ children }: { children: React.ReactNode }) {
+function ProtectedRoute({ children }: { children: ReactNode }) {
   const { user, isLoading } = useAuth();
 
   if (isLoading) {
@@ -87,7 +89,7 @@ function ProtectedRoute({ children }: { children: React.ReactNode }) {
   return <>{children}</>;
 }
 
-function SubscriptionGate({ children }: { children: React.ReactNode }) {
+function SubscriptionGate({ children }: { children: ReactNode }) {
   const { isBlocked, needsActivation, isLoading } = useSubscription();
   const { isSuperAdmin } = useAuth();
 
@@ -110,11 +112,11 @@ function SubscriptionGate({ children }: { children: React.ReactNode }) {
   return <OnboardingGate>{children}</OnboardingGate>;
 }
 
-function OnboardingGate({ children }: { children: React.ReactNode }) {
+function OnboardingGate({ children }: { children: ReactNode }) {
   const { hasCompletedOnboarding, isLoading } = useOnboarding();
 
   // Timeout único por sessão — evita tela branca ao trocar de rota
-  const [timedOut, setTimedOut] = React.useState(() => {
+  const [timedOut, setTimedOut] = useState(() => {
     try {
       return sessionStorage.getItem('healthcare_onboarding_gate_timeout') === 'true';
     } catch {
@@ -122,7 +124,7 @@ function OnboardingGate({ children }: { children: React.ReactNode }) {
     }
   });
 
-  React.useEffect(() => {
+  useEffect(() => {
     if (timedOut || hasCompletedOnboarding) return;
     const t = setTimeout(() => {
       try {
@@ -152,10 +154,18 @@ function OnboardingGate({ children }: { children: React.ReactNode }) {
 
 /** Layout autenticado: gates montados uma vez; só a página interna troca ao navegar */
 function AuthenticatedAppLayout() {
+  const location = useLocation();
   return (
     <ProtectedRoute>
       <SubscriptionGate>
-        <Outlet />
+        {/*
+          key por pathname: com v7_startTransition o Suspense externo mantém a página
+          antiga até o lazy resolver — se o chunk falhar, a UI fica “travada”.
+          Remontar o boundary a cada rota força fallback/loading e evita tela presa.
+        */}
+        <Suspense key={location.pathname} fallback={<LoadingScreen />}>
+          <Outlet />
+        </Suspense>
       </SubscriptionGate>
     </ProtectedRoute>
   );
@@ -175,13 +185,13 @@ function PublicHome() {
   return <Landing />;
 }
 
-function LazyPage({ children }: { children: React.ReactNode }) {
+function LazyPage({ children }: { children: ReactNode }) {
   return <Suspense fallback={<LoadingScreen />}>{children}</Suspense>;
 }
 
 function AppRoutes() {
   return (
-    <React.Suspense fallback={<LoadingScreen />}>
+    <Suspense fallback={<LoadingScreen />}>
       <Routes>
       <Route path="/" element={<PublicHome />} />
       <Route path="/login" element={<Login />} />
@@ -494,7 +504,7 @@ function AppRoutes() {
 
       <Route path="*" element={<NotFound />} />
       </Routes>
-    </React.Suspense>
+    </Suspense>
   );
 }
 
