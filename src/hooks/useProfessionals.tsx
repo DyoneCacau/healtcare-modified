@@ -13,6 +13,7 @@ export interface ProfessionalData {
   phone: string | null;
   hire_date: string | null;
   is_active: boolean;
+  performs_all_procedures: boolean;
   user_id: string | null;
   created_at: string;
   updated_at: string;

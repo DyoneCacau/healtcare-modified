@@ -109,43 +109,26 @@ describe('Smart Hub Fase D — booking payload / catalog', () => {
     expect(body.privacy_accepted).toBe(false);
   });
 
-  it('contrato catalog: body só com action + slug', async () => {
-    const invoke = vi.fn().mockResolvedValue({
-      data: {
-        booking_enabled: true,
-        procedures: [{ id: 'p1', name: 'Consulta', duration_minutes: 30 }],
-        professionals: [{ id: 'r1', name: 'Emanuel' }],
-        request_id: 'req-1',
-      },
-      error: null,
-    });
-
-    vi.doMock('@/integrations/supabase/client', () => ({
-      supabase: { functions: { invoke } },
-    }));
-
-    // Chama diretamente o shape esperado do client (sem remock do módulo já carregado)
-    const resultShape = {
-      action: 'catalog',
-      slug: 'clinica-sorriso',
-    };
-    expect(resultShape).toEqual({ action: 'catalog', slug: 'clinica-sorriso' });
-    expect(resultShape).not.toHaveProperty('clinic_id');
-
+  it('contrato catalog: procedimentos com professionals aninhados', async () => {
     const catalogOk = {
-      procedures: [{ id: 'p1', name: 'Consulta', duration_minutes: 30 }],
-      professionals: [{ id: 'r1', name: 'Emanuel' }],
+      procedures: [
+        {
+          id: 'p1',
+          name: 'Consulta',
+          duration_minutes: 30,
+          professionals: [{ id: 'r1', name: 'Emanuel' }],
+        },
+      ],
     };
     expect(catalogOk.procedures[0]).toEqual({
       id: 'p1',
       name: 'Consulta',
       duration_minutes: 30,
+      professionals: [{ id: 'r1', name: 'Emanuel' }],
     });
-    expect(catalogOk.professionals[0]).toEqual({ id: 'r1', name: 'Emanuel' });
     expect(catalogOk.procedures[0]).not.toHaveProperty('default_price');
-    expect(catalogOk.procedures[0]).not.toHaveProperty('description');
-    expect(catalogOk.professionals[0]).not.toHaveProperty('phone');
-    expect(catalogOk.professionals[0]).not.toHaveProperty('email');
+    expect(catalogOk.procedures[0].professionals[0]).not.toHaveProperty('phone');
+    expect(catalogOk.procedures[0].professionals[0]).not.toHaveProperty('email');
   });
 
   it('BookingService.getCatalog propaga booking_disabled', async () => {

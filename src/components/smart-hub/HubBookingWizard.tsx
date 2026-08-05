@@ -92,7 +92,6 @@ export function HubBookingWizard({
 
   const [step, setStep] = useState<WizardStep>(bookingOn ? 'procedure' : 'disabled');
   const [procedures, setProcedures] = useState<BookingCatalogProcedure[]>([]);
-  const [professionals, setProfessionals] = useState<BookingCatalogProfessional[]>([]);
   const [catalogLoading, setCatalogLoading] = useState(false);
   const [catalogError, setCatalogError] = useState<string | null>(null);
   const [procedure, setProcedure] = useState<BookingCatalogProcedure | null>(null);
@@ -135,7 +134,6 @@ export function HubBookingWizard({
   const resetFlow = useCallback(() => {
     setStep(bookingOn ? 'procedure' : 'disabled');
     setProcedures([]);
-    setProfessionals([]);
     setCatalogLoading(false);
     setCatalogError(null);
     setProcedure(null);
@@ -182,12 +180,10 @@ export function HubBookingWizard({
           return;
         }
         setProcedures([]);
-        setProfessionals([]);
         setCatalogError(result.error || BOOKING_PUBLIC_ERROR_MESSAGES.server_error);
         return;
       }
       setProcedures(result.procedures || []);
-      setProfessionals(result.professionals || []);
     })();
 
     return () => {
@@ -475,12 +471,12 @@ export function HubBookingWizard({
 
           {step === 'professional' ? (
             <div className="space-y-3" role="list">
-              {professionals.length === 0 ? (
+              {(procedure?.professionals || []).length === 0 ? (
                 <p className="text-sm text-muted-foreground">
-                  Nenhum profissional disponível no momento.
+                  Nenhum profissional está disponível para este procedimento no momento.
                 </p>
               ) : (
-                professionals.map((item) => (
+                (procedure?.professionals || []).map((item) => (
                   <button
                     key={item.id}
                     type="button"

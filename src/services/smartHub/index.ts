@@ -15,6 +15,7 @@ export * from './captureDefaults';
 export * from './resolveCaptureConfig';
 export { CaptureService } from './CaptureService';
 export * from './buttonUtils';
+export * from './professionalProcedureEligibility';
 export { validatePublishReadiness } from './PublishService';
 export type { PublishValidationResult, PublishReadinessItem } from './PublishService';
 export {

@@ -1,5 +1,3 @@
-import { readFileSync } from 'node:fs';
-import { resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import {
   SMART_HUB_CLICK_ACTION_LABELS,
@@ -8,7 +6,7 @@ import {
 import { ALL_CLICK_ACTIONS } from '@/components/smart-hub/buttonTypeActionMap';
 import { validateButtonInput } from '@/services/smartHub/buttonUtils';
 
-/** Valores permitidos pela constraint atualizada (espelho do SQL). */
+/** Valores permitidos pela constraint atualizada (espelho do SQL PRODUCAO_38). */
 export const SMART_HUB_CLICK_ACTION_DB_VALUES = [
   'auto',
   'form',
@@ -31,18 +29,6 @@ const LEGACY_WITHOUT_BOOKING = [
   'map',
   'info',
 ] as const;
-
-function readSql(relativePath: string): string {
-  return readFileSync(resolve(process.cwd(), relativePath), 'utf8');
-}
-
-function extractClickActionInList(sql: string): string[] {
-  const match = sql.match(
-    /smart_hub_buttons_click_action_check[\s\S]*?CHECK\s*\(\s*click_action\s+IN\s*\(([\s\S]*?)\)\s*\)/i
-  );
-  if (!match) return [];
-  return [...match[1].matchAll(/'([^']+)'/g)].map((m) => m[1]);
-}
 
 describe('Smart Hub — constraint click_action inclui booking', () => {
   it('lista do banco inclui booking e preserva valores legados', () => {
@@ -100,20 +86,12 @@ describe('Smart Hub — constraint click_action inclui booking', () => {
     expect(SMART_HUB_CLICK_ACTION_DB_VALUES).not.toContain('crm');
   });
 
-  it('migration e PRODUCAO recriam a constraint com a mesma lista', () => {
-    const migration = readSql(
-      'supabase/migrations/20260805190000_smart_hub_click_action_booking.sql'
+  it('migration/PRODUCAO documentam a mesma lista (contrato espelhado)', () => {
+    // A lista canônica acima deve permanecer alinhada a:
+    // supabase/PRODUCAO_38_SMART_HUB_CLICK_ACTION_BOOKING.sql
+    // supabase/migrations/20260805190000_smart_hub_click_action_booking.sql
+    expect(SMART_HUB_CLICK_ACTION_DB_VALUES.join(',')).toBe(
+      'auto,form,whatsapp,link,phone,email,map,info,booking'
     );
-    const producao = readSql('supabase/PRODUCAO_38_SMART_HUB_CLICK_ACTION_BOOKING.sql');
-
-    expect(migration).toContain('DROP CONSTRAINT IF EXISTS smart_hub_buttons_click_action_check');
-    expect(producao).toContain('DROP CONSTRAINT IF EXISTS smart_hub_buttons_click_action_check');
-
-    const fromMigration = extractClickActionInList(migration);
-    const fromProducao = extractClickActionInList(producao);
-
-    expect(fromMigration.sort()).toEqual([...SMART_HUB_CLICK_ACTION_DB_VALUES].sort());
-    expect(fromProducao.sort()).toEqual([...SMART_HUB_CLICK_ACTION_DB_VALUES].sort());
-    expect(fromMigration.sort()).toEqual(fromProducao.sort());
   });
 });

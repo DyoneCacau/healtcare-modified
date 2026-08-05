@@ -8,6 +8,8 @@ export const BOOKING_PUBLIC_ERROR_MESSAGES: Record<string, string> = {
   invalid_date_range: 'O período selecionado é inválido. Escolha outra data.',
   procedure_not_found: 'Este procedimento não está mais disponível.',
   professional_not_found: 'Este profissional não está mais disponível.',
+  professional_not_eligible:
+    'Este profissional não realiza o procedimento selecionado. Escolha outro.',
   slot_taken: 'Este horário acabou de ser reservado. Escolha outro horário.',
   idempotency_conflict: 'Esta solicitação conflita com um agendamento já iniciado. Tente novamente.',
   rate_limited: 'Muitas tentativas. Aguarde um momento e tente de novo.',
@@ -27,21 +29,23 @@ export interface BookingSlot {
   end_time: string;
 }
 
+export interface BookingCatalogProfessional {
+  id: string;
+  name: string;
+}
+
 export interface BookingCatalogProcedure {
   id: string;
   name: string;
   duration_minutes: number;
-}
-
-export interface BookingCatalogProfessional {
-  id: string;
-  name: string;
+  professionals: BookingCatalogProfessional[];
 }
 
 export interface BookingCatalogResult {
   ok: boolean;
   booking_enabled?: boolean;
   procedures?: BookingCatalogProcedure[];
+  /** @deprecated Preferir procedure.professionals no contrato atual. */
   professionals?: BookingCatalogProfessional[];
   code?: string;
   error?: string;
@@ -255,6 +259,34 @@ export function buildConfirmPayload(input: BookingConfirmInput): Record<string, 
   };
 }
 
+function normalizeCatalogProcedures(raw: unknown): BookingCatalogProcedure[] {
+  if (!Array.isArray(raw)) return [];
+  return raw
+    .map((item) => {
+      if (!isRecord(item)) return null;
+      const id = typeof item.id === 'string' ? item.id : '';
+      const name = typeof item.name === 'string' ? item.name : '';
+      const duration = Number(item.duration_minutes);
+      if (!id || !name) return null;
+      const professionals = Array.isArray(item.professionals)
+        ? item.professionals
+            .filter(isRecord)
+            .map((p) => ({
+              id: typeof p.id === 'string' ? p.id : '',
+              name: typeof p.name === 'string' ? p.name : '',
+            }))
+            .filter((p) => p.id && p.name)
+        : [];
+      return {
+        id,
+        name,
+        duration_minutes: Number.isFinite(duration) ? duration : 30,
+        professionals,
+      };
+    })
+    .filter((p): p is BookingCatalogProcedure => p !== null);
+}
+
 export const BookingService = {
   async getCatalog(slug: string): Promise<BookingCatalogResult> {
     try {
@@ -281,15 +313,12 @@ export const BookingService = {
         };
       }
 
+      const procedures = normalizeCatalogProcedures(payload.procedures);
+
       return {
         ok: true,
         booking_enabled: payload.booking_enabled !== false,
-        procedures: Array.isArray(payload.procedures)
-          ? (payload.procedures as BookingCatalogProcedure[])
-          : [],
-        professionals: Array.isArray(payload.professionals)
-          ? (payload.professionals as BookingCatalogProfessional[])
-          : [],
+        procedures,
         request_id:
           typeof payload.request_id === 'string' ? payload.request_id : undefined,
       };

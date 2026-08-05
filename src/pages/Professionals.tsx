@@ -47,6 +47,7 @@ interface Professional {
   phone: string | null;
   is_active: boolean;
   hire_date: string | null;
+  performs_all_procedures?: boolean;
 }
 
 export default function Professionals() {
@@ -99,11 +100,40 @@ export default function Professionals() {
     phone: string;
     is_active: boolean;
     hire_date: string;
+    performs_all_procedures?: boolean;
+    procedureIds?: string[];
     additionalClinicIds?: string[];
     suppressSuccessToast?: boolean;
   }) => {
-    const replicateToAdditionalClinics = async (excludeClinicId: string | null): Promise<string | null> => {
-      const additionalClinicIds = (data.additionalClinicIds || []).filter((id) => id !== excludeClinicId);
+    const performsAll = data.performs_all_procedures !== false;
+    const procedureIds = performsAll ? [] : [...new Set(data.procedureIds || [])];
+
+    const syncProcedureLinks = async (professionalId: string, targetClinicId: string) => {
+      const { error: delError } = await supabase
+        .from('professional_procedures')
+        .delete()
+        .eq('professional_id', professionalId)
+        .eq('clinic_id', targetClinicId);
+      if (delError) throw delError;
+
+      if (performsAll || procedureIds.length === 0) return;
+
+      const { error: insError } = await supabase.from('professional_procedures').insert(
+        procedureIds.map((procedureId) => ({
+          clinic_id: targetClinicId,
+          professional_id: professionalId,
+          procedure_id: procedureId,
+        }))
+      );
+      if (insError) throw insError;
+    };
+
+    const replicateToAdditionalClinics = async (
+      excludeClinicId: string | null
+    ): Promise<string | null> => {
+      const additionalClinicIds = (data.additionalClinicIds || []).filter(
+        (id) => id !== excludeClinicId
+      );
       if (additionalClinicIds.length === 0) return null;
 
       const { error: additionalError } = await supabase.from('professionals').insert(
@@ -116,6 +146,7 @@ export default function Professionals() {
           phone: data.phone || null,
           is_active: data.is_active,
           hire_date: data.hire_date || null,
+          performs_all_procedures: true,
         }))
       );
       if (additionalError) {
@@ -136,12 +167,23 @@ export default function Professionals() {
           phone: data.phone || null,
           is_active: data.is_active,
           hire_date: data.hire_date || null,
+          performs_all_procedures: performsAll,
         })
         .eq('id', data.id);
 
       if (error) {
         toast.error('Erro ao atualizar profissional');
         throw error;
+      }
+
+      if (clinicId) {
+        try {
+          await syncProcedureLinks(data.id, clinicId);
+        } catch (linkError) {
+          console.error(linkError);
+          toast.error('Erro ao salvar procedimentos do profissional');
+          throw linkError;
+        }
       }
 
       const replicationError = await replicateToAdditionalClinics(clinicId);
@@ -164,31 +206,43 @@ export default function Professionals() {
         throw new Error('Clínica não encontrada');
       }
 
-      const { error } = await supabase.from('professionals').insert({
-        clinic_id: clinicId,
-        name: data.name,
-        specialty: data.specialty,
-        cro: data.cro,
-        email: data.email || null,
-        phone: data.phone || null,
-        is_active: data.is_active,
-        hire_date: data.hire_date || null,
-      });
+      const { data: created, error } = await supabase
+        .from('professionals')
+        .insert({
+          clinic_id: clinicId,
+          name: data.name,
+          specialty: data.specialty,
+          cro: data.cro,
+          email: data.email || null,
+          phone: data.phone || null,
+          is_active: data.is_active,
+          hire_date: data.hire_date || null,
+          performs_all_procedures: performsAll,
+        })
+        .select('id')
+        .single();
 
-      if (error) {
+      if (error || !created?.id) {
         toast.error('Erro ao cadastrar profissional');
         console.error(error);
-        throw error;
+        throw error || new Error('Erro ao cadastrar profissional');
       }
 
-      // Replica o cadastro nas demais unidades marcadas, sem precisar repetir manualmente
+      try {
+        await syncProcedureLinks(created.id, clinicId);
+      } catch (linkError) {
+        console.error(linkError);
+        toast.error('Profissional cadastrado, mas houve erro ao salvar os procedimentos');
+        throw linkError;
+      }
+
       const additionalClinicIds = (data.additionalClinicIds || []).filter((id) => id !== clinicId);
       const replicationError = await replicateToAdditionalClinics(clinicId);
       if (replicationError) {
         toast.error(`Profissional cadastrado, mas ${replicationError.toLowerCase()}`);
       } else if (additionalClinicIds.length > 0) {
-        toast.success(`Profissional cadastrado nesta clínica e em mais ${additionalClinicIds.length} clínica(s)!`);
-      } else {
+        toast.success('Profissional cadastrado e vinculado às unidades selecionadas!');
+      } else if (!data.suppressSuccessToast) {
         toast.success('Profissional cadastrado com sucesso!');
       }
       await refetch();
@@ -542,6 +596,8 @@ export default function Professionals() {
                 phone: editingProfessional.phone || '',
                 is_active: editingProfessional.is_active,
                 hire_date: editingProfessional.hire_date || new Date().toISOString().split('T')[0],
+                performs_all_procedures:
+                  editingProfessional.performs_all_procedures !== false,
               }
             : null
         }

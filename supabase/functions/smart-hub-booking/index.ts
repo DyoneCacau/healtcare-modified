@@ -142,7 +142,7 @@ async function loadProfessional(
 ) {
   const { data, error } = await supabase
     .from('professionals')
-    .select('id, clinic_id, name, is_active')
+    .select('id, clinic_id, name, is_active, performs_all_procedures')
     .eq('id', professionalId)
     .eq('clinic_id', clinicId)
     .maybeSingle()
@@ -154,7 +154,45 @@ async function loadProfessional(
   if (!data || data.is_active === false) {
     throw new HttpError(404, 'Profissional não encontrado', 'professional_not_found')
   }
-  return { id: String(data.id), name: String(data.name) }
+  return {
+    id: String(data.id),
+    name: String(data.name),
+    performs_all_procedures: data.performs_all_procedures !== false,
+  }
+}
+
+/** Confirma no servidor se o profissional pode realizar o procedimento. */
+async function assertProfessionalEligible(
+  supabase: ReturnType<typeof serviceClient>,
+  clinicId: string,
+  professionalId: string,
+  procedureId: string,
+) {
+  const professional = await loadProfessional(supabase, clinicId, professionalId)
+  if (professional.performs_all_procedures) {
+    return { id: professional.id, name: professional.name }
+  }
+
+  const { data: link, error } = await supabase
+    .from('professional_procedures')
+    .select('id')
+    .eq('clinic_id', clinicId)
+    .eq('professional_id', professionalId)
+    .eq('procedure_id', procedureId)
+    .maybeSingle()
+
+  if (error) {
+    logBooking('error', { step: 'assert_professional_eligible', code: error.code })
+    throw new HttpError(500, 'Erro ao validar profissional', 'internal_error')
+  }
+  if (!link) {
+    throw new HttpError(
+      400,
+      'Profissional não habilitado para este procedimento',
+      'professional_not_eligible',
+    )
+  }
+  return { id: professional.id, name: professional.name }
 }
 
 async function loadScheduleContext(
@@ -329,7 +367,7 @@ async function handleCatalog(
   assertHubBookable(hub)
   await assertClinicModules(supabase, hub.clinic_id, ['smart_hub', 'agenda'])
 
-  const [procRes, profRes] = await Promise.all([
+  const [procRes, profRes, linksRes] = await Promise.all([
     supabase
       .from('clinic_procedures')
       .select('id, name, duration_minutes, is_active')
@@ -338,33 +376,65 @@ async function handleCatalog(
       .order('name'),
     supabase
       .from('professionals')
-      .select('id, name, is_active')
+      .select('id, name, is_active, performs_all_procedures')
       .eq('clinic_id', hub.clinic_id)
       .eq('is_active', true)
       .order('name'),
+    supabase
+      .from('professional_procedures')
+      .select('professional_id, procedure_id')
+      .eq('clinic_id', hub.clinic_id),
   ])
 
-  if (procRes.error || profRes.error) {
+  if (procRes.error || profRes.error || linksRes.error) {
     logBooking('error', {
       step: 'catalog',
       request_id: requestId,
       procedures: procRes.error?.message ?? null,
       professionals: profRes.error?.message ?? null,
+      links: linksRes.error?.message ?? null,
     })
     throw new HttpError(500, 'Erro ao carregar catálogo', 'internal_error')
+  }
+
+  const activeProfessionals = (profRes.data || [])
+    .filter((p) => p.is_active !== false)
+    .map((p) => ({
+      id: String(p.id),
+      name: String(p.name),
+      performs_all_procedures: p.performs_all_procedures !== false,
+    }))
+
+  const linksByProfessional = new Map<string, Set<string>>()
+  for (const row of linksRes.data || []) {
+    const profId = String(row.professional_id)
+    const procId = String(row.procedure_id)
+    const set = linksByProfessional.get(profId) || new Set<string>()
+    set.add(procId)
+    linksByProfessional.set(profId, set)
   }
 
   const procedures = (procRes.data || [])
     .filter((p) => p.is_active !== false)
     .map((p) => {
       const duration = Number(p.duration_minutes)
+      const duration_minutes =
+        Number.isFinite(duration) && duration >= MIN_DURATION_MINUTES
+          ? duration
+          : 30
+      const procedureId = String(p.id)
+      const professionals = activeProfessionals
+        .filter((prof) => {
+          if (prof.performs_all_procedures) return true
+          return linksByProfessional.get(prof.id)?.has(procedureId) === true
+        })
+        .map((prof) => ({ id: prof.id, name: prof.name }))
+
       return {
-        id: String(p.id),
+        id: procedureId,
         name: String(p.name),
-        duration_minutes:
-          Number.isFinite(duration) && duration >= MIN_DURATION_MINUTES
-            ? duration
-            : 30,
+        duration_minutes,
+        professionals,
       }
     })
     .filter(
@@ -373,17 +443,9 @@ async function handleCatalog(
         p.duration_minutes <= MAX_DURATION_MINUTES,
     )
 
-  const professionals = (profRes.data || [])
-    .filter((p) => p.is_active !== false)
-    .map((p) => ({
-      id: String(p.id),
-      name: String(p.name),
-    }))
-
   return json(req, {
     booking_enabled: true,
     procedures,
-    professionals,
     request_id: requestId,
   })
 }
@@ -419,7 +481,12 @@ async function handleAvailability(
   await assertClinicModules(supabase, hub.clinic_id, ['smart_hub', 'agenda'])
 
   const procedure = await loadProcedure(supabase, hub.clinic_id, procedureId)
-  const professional = await loadProfessional(supabase, hub.clinic_id, professionalId)
+  const professional = await assertProfessionalEligible(
+    supabase,
+    hub.clinic_id,
+    professionalId,
+    procedureId,
+  )
   const ctx = await loadScheduleContext(
     supabase,
     hub.clinic_id,
@@ -550,7 +617,12 @@ async function handleConfirm(
   }
 
   const procedure = await loadProcedure(supabase, hub.clinic_id, procedureId)
-  const professional = await loadProfessional(supabase, hub.clinic_id, professionalId)
+  const professional = await assertProfessionalEligible(
+    supabase,
+    hub.clinic_id,
+    professionalId,
+    procedureId,
+  )
   const endTime = addMinutesToTime(startTime, procedure.duration_minutes)
 
   const ctx = await loadScheduleContext(

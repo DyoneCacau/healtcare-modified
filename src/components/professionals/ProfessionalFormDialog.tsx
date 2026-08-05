@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import {
   Dialog,
   DialogContent,
@@ -19,9 +19,11 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { Switch } from '@/components/ui/switch';
-import { Stethoscope } from 'lucide-react';
+import { Checkbox } from '@/components/ui/checkbox';
+import { Search, Stethoscope } from 'lucide-react';
 import { toast } from 'sonner';
 import { useClinics } from '@/hooks/useClinic';
+import { useClinicProcedures } from '@/hooks/useClinicProcedures';
 import { supabase } from '@/integrations/supabase/client';
 import { ClinicMultiSelect } from '@/components/common/ClinicMultiSelect';
 import { SPECIALTIES } from '@/lib/specialties';
@@ -39,17 +41,20 @@ interface Professional {
   phone: string;
   is_active: boolean;
   hire_date: string;
+  performs_all_procedures?: boolean;
   /** Ao cadastrar, cria o mesmo profissional também nestas outras clínicas */
   additionalClinicIds?: string[];
   /** Quando true, o caller exibe o toast final (evita sucesso parcial/duplicado). */
   suppressSuccessToast?: boolean;
+  /** IDs de clinic_procedures quando performs_all_procedures = false */
+  procedureIds?: string[];
 }
 
 interface ProfessionalFormDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   professional?: Professional | null;
-  onSave: (professional: Professional) => void;
+  onSave: (professional: Professional) => void | Promise<void>;
   /** Clínica atual (selecionada), para não listá-la entre as "outras clínicas" */
   currentClinicId?: string | null;
 }
@@ -69,16 +74,31 @@ export function ProfessionalFormDialog({
     phone: '',
     is_active: true,
     hire_date: new Date().toISOString().split('T')[0],
+    performs_all_procedures: true,
   });
   const [selectedClinicIds, setSelectedClinicIds] = useState<string[]>([]);
   /** Clínicas onde já existe um profissional com o mesmo CRO (não removíveis por aqui) */
   const [existingClinicIds, setExistingClinicIds] = useState<string[]>([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [schedulePeriods, setSchedulePeriods] = useState<WorkSchedulePeriodInput[]>([]);
+  const [performsAll, setPerformsAll] = useState(true);
+  const [selectedProcedureIds, setSelectedProcedureIds] = useState<string[]>([]);
+  const [procedureSearch, setProcedureSearch] = useState('');
+  const [loadingLinks, setLoadingLinks] = useState(false);
   const { clinics } = useClinics();
+  const { procedures, isLoading: loadingProcedures } = useClinicProcedures(currentClinicId);
 
   const isEditing = !!professional;
   const otherClinics = clinics.filter((c: { id: string }) => c.id !== currentClinicId);
+  const activeProcedures = useMemo(
+    () => (procedures || []).filter((p) => p.is_active),
+    [procedures]
+  );
+  const filteredProcedures = useMemo(() => {
+    const q = procedureSearch.trim().toLowerCase();
+    if (!q) return activeProcedures;
+    return activeProcedures.filter((p) => p.name.toLowerCase().includes(q));
+  }, [activeProcedures, procedureSearch]);
 
   const { schedules, isLoading: isLoadingSchedules } = useWorkSchedules({
     clinicId: currentClinicId,
@@ -107,6 +127,7 @@ export function ProfessionalFormDialog({
     if (!open) return;
 
     if (professional) {
+      const all = professional.performs_all_procedures !== false;
       setFormData({
         id: professional.id,
         name: professional.name,
@@ -116,10 +137,11 @@ export function ProfessionalFormDialog({
         phone: professional.phone || '',
         is_active: professional.is_active,
         hire_date: professional.hire_date || new Date().toISOString().split('T')[0],
+        performs_all_procedures: all,
       });
+      setPerformsAll(all);
+      setProcedureSearch('');
 
-      // Busca em quais outras clínicas (que o usuário tem acesso) já existe
-      // um profissional com o mesmo CRO, para pré-marcar e travar essas opções.
       if (professional.cro) {
         supabase
           .from('professionals')
@@ -136,6 +158,26 @@ export function ProfessionalFormDialog({
         setExistingClinicIds([]);
         setSelectedClinicIds([]);
       }
+
+      if (professional.id && currentClinicId && !all) {
+        setLoadingLinks(true);
+        void supabase
+          .from('professional_procedures')
+          .select('procedure_id')
+          .eq('professional_id', professional.id)
+          .eq('clinic_id', currentClinicId)
+          .then(({ data, error }) => {
+            setLoadingLinks(false);
+            if (error) {
+              console.error(error);
+              setSelectedProcedureIds([]);
+              return;
+            }
+            setSelectedProcedureIds((data || []).map((r) => r.procedure_id));
+          });
+      } else {
+        setSelectedProcedureIds([]);
+      }
     } else {
       setFormData({
         name: '',
@@ -145,7 +187,11 @@ export function ProfessionalFormDialog({
         phone: '',
         is_active: true,
         hire_date: new Date().toISOString().split('T')[0],
+        performs_all_procedures: true,
       });
+      setPerformsAll(true);
+      setSelectedProcedureIds([]);
+      setProcedureSearch('');
       setExistingClinicIds([]);
       setSelectedClinicIds([]);
     }
@@ -168,11 +214,23 @@ export function ProfessionalFormDialog({
     });
   };
 
+  const toggleProcedure = (procedureId: string, checked: boolean) => {
+    setSelectedProcedureIds((prev) => {
+      if (checked) return prev.includes(procedureId) ? prev : [...prev, procedureId];
+      return prev.filter((id) => id !== procedureId);
+    });
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
     if (!formData.name || !formData.specialty || !formData.cro) {
       toast.error('Preencha os campos obrigatórios');
+      return;
+    }
+
+    if (!performsAll && selectedProcedureIds.length === 0) {
+      toast.error('Selecione pelo menos um procedimento ou marque “realiza todos”.');
       return;
     }
 
@@ -186,12 +244,13 @@ export function ProfessionalFormDialog({
 
     setIsSubmitting(true);
     try {
-      // Só as clínicas marcadas agora que ainda não tinham este profissional
       const additionalClinicIds = selectedClinicIds.filter((id) => !existingClinicIds.includes(id));
       const isCombinedScheduleSave = isEditing && !!professional?.id && !!currentClinicId;
 
       await onSave({
         ...formData,
+        performs_all_procedures: performsAll,
+        procedureIds: performsAll ? [] : selectedProcedureIds,
         additionalClinicIds,
         suppressSuccessToast: isCombinedScheduleSave,
       });
@@ -205,7 +264,6 @@ export function ProfessionalFormDialog({
 
       onOpenChange(false);
     } catch (error) {
-      // Erros já tostados por onSave / replaceSchedules / validação — sem sucesso parcial.
       console.error('Error saving professional:', error);
     } finally {
       setIsSubmitting(false);
@@ -314,6 +372,84 @@ export function ProfessionalFormDialog({
             />
           </div>
 
+          <div className="space-y-3 rounded-lg border p-3">
+            <div>
+              <h3 className="text-sm font-semibold">Procedimentos realizados</h3>
+              <p className="text-xs text-muted-foreground">
+                Define em quais procedimentos este profissional aparece no agendamento online.
+              </p>
+            </div>
+            <div className="flex items-start justify-between gap-3">
+              <div className="min-w-0 space-y-0.5">
+                <Label htmlFor="performs_all">Este profissional realiza todos os procedimentos</Label>
+                <p className="text-xs text-muted-foreground">
+                  Com esta opção ativa, procedimentos novos da clínica também ficam disponíveis
+                  automaticamente.
+                </p>
+              </div>
+              <Switch
+                id="performs_all"
+                checked={performsAll}
+                onCheckedChange={(checked) => {
+                  setPerformsAll(checked);
+                  if (checked) setSelectedProcedureIds([]);
+                }}
+              />
+            </div>
+
+            {!performsAll ? (
+              <div className="space-y-2">
+                <div className="relative">
+                  <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                  <Input
+                    className="pl-9"
+                    placeholder="Buscar procedimento…"
+                    value={procedureSearch}
+                    onChange={(e) => setProcedureSearch(e.target.value)}
+                    disabled={loadingProcedures || loadingLinks}
+                  />
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  {selectedProcedureIds.length} selecionado
+                  {selectedProcedureIds.length === 1 ? '' : 's'}
+                  {activeProcedures.length
+                    ? ` de ${activeProcedures.length} ativo${activeProcedures.length === 1 ? '' : 's'}`
+                    : ''}
+                </p>
+                {loadingProcedures || loadingLinks ? (
+                  <p className="text-sm text-muted-foreground">Carregando procedimentos…</p>
+                ) : activeProcedures.length === 0 ? (
+                  <p className="text-sm text-muted-foreground">
+                    Nenhum procedimento ativo cadastrado nesta clínica.
+                  </p>
+                ) : (
+                  <div className="max-h-48 space-y-1 overflow-y-auto rounded-md border p-2">
+                    {filteredProcedures.map((proc) => {
+                      const checked = selectedProcedureIds.includes(proc.id);
+                      return (
+                        <label
+                          key={proc.id}
+                          className="flex cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 text-sm hover:bg-muted/60"
+                        >
+                          <Checkbox
+                            checked={checked}
+                            onCheckedChange={(v) => toggleProcedure(proc.id, v === true)}
+                          />
+                          <span className="min-w-0 truncate">{proc.name}</span>
+                        </label>
+                      );
+                    })}
+                    {filteredProcedures.length === 0 ? (
+                      <p className="px-2 py-1 text-xs text-muted-foreground">
+                        Nenhum procedimento encontrado para essa busca.
+                      </p>
+                    ) : null}
+                  </div>
+                )}
+              </div>
+            ) : null}
+          </div>
+
           {otherClinics.length > 0 && (
             <ClinicMultiSelect
               label="Unidades de atuação"
@@ -352,36 +488,42 @@ export function ProfessionalFormDialog({
                   <WorkScheduleEditor
                     periods={schedulePeriods}
                     onChange={setSchedulePeriods}
+                    disabled={isSubmitting}
                   />
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    disabled={
+                      !!validateWorkSchedulePeriods(schedulePeriods) ||
+                      replaceSchedules.isPending ||
+                      isSubmitting
+                    }
+                    onClick={async () => {
+                      try {
+                        await persistWorkSchedules();
+                      } catch {
+                        // toast já tratado em persistWorkSchedules / onError
+                      }
+                    }}
+                  >
+                    Salvar horários
+                  </Button>
                 </>
               )}
-              <Button
-                type="button"
-                variant="secondary"
-                disabled={
-                  !!validateWorkSchedulePeriods(schedulePeriods) ||
-                  replaceSchedules.isPending ||
-                  isSubmitting
-                }
-                onClick={async () => {
-                  try {
-                    await persistWorkSchedules();
-                  } catch {
-                    // toast já tratado em persistWorkSchedules / onError
-                  }
-                }}
-              >
-                Salvar horários
-              </Button>
             </div>
           )}
 
-          <DialogFooter>
-            <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
+          <DialogFooter className="gap-2 sm:gap-0">
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => onOpenChange(false)}
+              disabled={isSubmitting}
+            >
               Cancelar
             </Button>
             <Button type="submit" disabled={isSubmitting}>
-              {isSubmitting ? 'Salvando...' : professional ? 'Salvar Alterações' : 'Cadastrar'}
+              {isSubmitting ? 'Salvando…' : professional ? 'Salvar Alterações' : 'Cadastrar'}
             </Button>
           </DialogFooter>
         </form>

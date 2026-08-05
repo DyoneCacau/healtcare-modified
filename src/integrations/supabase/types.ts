@@ -1890,6 +1890,7 @@ export type Database = {
           id: string
           is_active: boolean | null
           name: string
+          performs_all_procedures: boolean
           phone: string | null
           specialty: string
           updated_at: string
@@ -1904,6 +1905,7 @@ export type Database = {
           id?: string
           is_active?: boolean | null
           name: string
+          performs_all_procedures?: boolean
           phone?: string | null
           specialty: string
           updated_at?: string
@@ -1918,6 +1920,7 @@ export type Database = {
           id?: string
           is_active?: boolean | null
           name?: string
+          performs_all_procedures?: boolean
           phone?: string | null
           specialty?: string
           updated_at?: string
@@ -1929,6 +1932,52 @@ export type Database = {
             columns: ["clinic_id"]
             isOneToOne: false
             referencedRelation: "clinics"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      professional_procedures: {
+        Row: {
+          id: string
+          clinic_id: string
+          professional_id: string
+          procedure_id: string
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          clinic_id: string
+          professional_id: string
+          procedure_id: string
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          clinic_id?: string
+          professional_id?: string
+          procedure_id?: string
+          created_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "professional_procedures_clinic_id_fkey"
+            columns: ["clinic_id"]
+            isOneToOne: false
+            referencedRelation: "clinics"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "professional_procedures_professional_id_fkey"
+            columns: ["professional_id"]
+            isOneToOne: false
+            referencedRelation: "professionals"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "professional_procedures_procedure_id_fkey"
+            columns: ["procedure_id"]
+            isOneToOne: false
+            referencedRelation: "clinic_procedures"
             referencedColumns: ["id"]
           },
         ]
