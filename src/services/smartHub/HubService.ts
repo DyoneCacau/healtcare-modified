@@ -121,7 +121,7 @@ export const HubService = {
       title: input.title,
       slug,
       status: 'draft',
-      layout_blocks: ['header', 'logo', 'description', 'buttons', 'footer'],
+      layout_blocks: ['banner', 'header', 'logo', 'description', 'buttons', 'footer'],
       validation_errors: [],
       style_preset: 'clean',
       visual_config: {},

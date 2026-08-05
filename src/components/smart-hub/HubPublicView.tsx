@@ -12,12 +12,12 @@ import { MessageCircle } from 'lucide-react';
 import type {
   PublicSmartHubPayload,
   SmartHubButton,
-  SmartHubLayoutBlock,
   SmartHubVisualConfig,
 } from '@/types/smartHub';
 import { mergeVisualConfig } from '@/services/smartHub/imageUtils';
 import { buildDestinationUrl } from '@/services/smartHub/buttonDestinations';
 import { resolveClickAction } from '@/services/smartHub/captureDefaults';
+import { ensureBannerBlock } from '@/lib/smartHubLayout';
 import { cn } from '@/lib/utils';
 
 interface HubPublicViewProps {
@@ -26,13 +26,6 @@ interface HubPublicViewProps {
   onButtonClick?: (button: SmartHubButton) => void;
   onOpenCaptureForm?: (button?: SmartHubButton | null) => void;
   className?: string;
-}
-
-function normalizeBlocks(blocks: SmartHubLayoutBlock[] | undefined): SmartHubLayoutBlock[] {
-  if (!Array.isArray(blocks) || blocks.length === 0) {
-    return ['banner', 'logo', 'header', 'whatsapp', 'buttons', 'social', 'contact', 'map', 'footer'];
-  }
-  return blocks;
 }
 
 function radiusClass(value?: string): string {
@@ -75,13 +68,13 @@ export const HubPublicView = memo(function HubPublicView({
 
   const primary = theme?.primary_color || hub.primary_color || visual.button_bg_color || '#0F766E';
   const textColor = visual.text_color || theme?.text_color || undefined;
-  const blocks = normalizeBlocks(hub.layout_blocks);
+  const blocks = ensureBannerBlock(hub.layout_blocks);
   const hasWhatsappBlock = blocks.includes('whatsapp');
   const hasSocialBlock = blocks.includes('social');
   const hasLogoBlock = blocks.includes('logo');
   const hasHeader = blocks.includes('header');
   const hasDescription = blocks.includes('description');
-  const hasBanner = blocks.includes('banner');
+  const hasBanner = true;
   const align =
     visual.content_align === 'left'
       ? 'items-start text-left'
@@ -187,10 +180,16 @@ export const HubPublicView = memo(function HubPublicView({
   const rendered = blocks.map((block, index) => {
     switch (block) {
       case 'banner':
-        return hub.banner_url ? (
+        return (
           <div key={`${block}-${index}`} className="relative">
-            <HubBanner src={hub.banner_url} alt={`Banner de ${hub.title || 'clínica'}`} />
-            {visual.banner_overlay_color && (
+            <HubBanner
+              src={hub.banner_url}
+              alt={`Banner de ${hub.title || 'clínica'}`}
+              primaryColor={primary}
+              secondaryColor={visual.gradient_to || theme?.secondary_color || '#134E4A'}
+              showUploadHint={preview}
+            />
+            {hub.banner_url && visual.banner_overlay_color ? (
               <div
                 className="pointer-events-none absolute inset-0"
                 style={{
@@ -198,9 +197,9 @@ export const HubPublicView = memo(function HubPublicView({
                   opacity: visual.banner_overlay_opacity ?? 0.2,
                 }}
               />
-            )}
+            ) : null}
           </div>
-        ) : null;
+        );
       case 'logo':
         return profileSrc ? (
           <div

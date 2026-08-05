@@ -16,7 +16,7 @@ interface TemplateThumbnailProps {
 export function TemplateThumbnail({
   name,
   style = 'classic',
-  banner = false,
+  banner = true,
   profile = true,
   whatsapp = false,
   grid = false,

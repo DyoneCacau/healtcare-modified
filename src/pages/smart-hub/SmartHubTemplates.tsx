@@ -39,7 +39,7 @@ export default function SmartHubTemplates() {
                 <TemplateThumbnail
                   name={tpl.name}
                   style={String(preview.style || 'classic')}
-                  banner={Boolean(preview.banner)}
+                  banner
                   profile={preview.profile !== false}
                   whatsapp={Boolean(preview.whatsapp_featured)}
                   grid={Boolean(preview.grid)}
@@ -88,7 +88,7 @@ export default function SmartHubTemplates() {
             <TemplateThumbnail
               name={previewTpl.name}
               style={String((previewTpl.json_layout?.preview as Record<string, unknown>)?.style || 'classic')}
-              banner={Boolean((previewTpl.json_layout?.preview as Record<string, unknown>)?.banner)}
+              banner
               profile={(previewTpl.json_layout?.preview as Record<string, unknown>)?.profile !== false}
               whatsapp={Boolean(
                 (previewTpl.json_layout?.preview as Record<string, unknown>)?.whatsapp_featured
@@ -105,8 +105,8 @@ export default function SmartHubTemplates() {
           <DialogHeader>
             <DialogTitle>Aplicar template {confirmTpl?.name}?</DialogTitle>
             <DialogDescription>
-              A organização visual será atualizada. Textos, contatos, imagens e botões existentes não
-              serão apagados.
+              A organização visual será atualizada. Textos, contatos, imagens (incluindo o banner),
+              links e botões existentes serão preservados.
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>
