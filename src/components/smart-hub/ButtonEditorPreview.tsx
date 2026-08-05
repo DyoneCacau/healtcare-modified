@@ -1,27 +1,13 @@
 import { HubButton } from './HubButton';
-import {
-  previewAttendanceTitle,
-  previewBehaviorLines,
-  previewBehaviorTitle,
-  previewIntentTitle,
-} from './buttonEditorCopy';
-import {
-  contactMethodLabel,
-  inferButtonIntent,
-  previewIntentHeadline,
-  type ButtonIntentId,
-  type ContactMethodId,
-  type SocialNetworkId,
-} from './buttonIntentOptions';
 import { resolveClickAction } from '@/services/smartHub/captureDefaults';
 import {
-  SMART_HUB_VARIANT_LABELS,
   type SmartHubButton,
   type SmartHubButtonType,
   type SmartHubButtonVisualVariant,
   type SmartHubClickAction,
 } from '@/types/smartHub';
 import { cn } from '@/lib/utils';
+import type { ButtonIntentId, ContactMethodId, SocialNetworkId } from './buttonIntentOptions';
 
 export interface ButtonEditorPreviewModel {
   title: string;
@@ -39,17 +25,14 @@ export interface ButtonEditorPreviewModel {
   redirect_whatsapp?: boolean;
   email_subject?: string;
   open_in_new_tab?: boolean;
-  /** Resumo amigável (formulário / CRM) */
   interest?: string | null;
   stage_label?: string | null;
   owner_label?: string | null;
   has_owner?: boolean;
   show_crm_summary?: boolean;
-  /** Intenção amigável (opcional; inferida se ausente) */
   intent?: ButtonIntentId;
   social_network?: SocialNetworkId | null;
   contact_method?: ContactMethodId | null;
-  /** Resumo do formulário padrão do Hub */
   form_source_label?: string | null;
   using_hub_form?: boolean;
 }
@@ -61,34 +44,14 @@ interface ButtonEditorPreviewProps {
   showActualColors?: boolean;
 }
 
-function SummaryRow({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="space-y-0.5">
-      <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
-        {label}
-      </p>
-      <p className="text-sm font-medium leading-snug text-foreground">{value}</p>
-    </div>
-  );
-}
-
+/** Prévia compacta do botão — sem painel lateral de configuração. */
 export function ButtonEditorPreview({
   model,
   className,
   showActualColors = true,
 }: ButtonEditorPreviewProps) {
   const action = resolveClickAction(model.click_action, model.type);
-  const inferred = inferButtonIntent(model.type, model.click_action);
-  const intent = model.intent || inferred.intent;
-  const socialNetwork = model.social_network ?? inferred.socialNetwork;
-  const contactMethod = model.contact_method ?? inferred.contactMethod;
-  const isAppointmentFlow = intent === 'appointment' || intent === 'procedure';
-  const intentHeadline = previewIntentHeadline({
-    intent,
-    socialNetwork,
-    type: model.type,
-    contactMethod,
-  });
+  void action;
 
   const previewButton = {
     id: 'preview-button',
@@ -122,27 +85,11 @@ export function ButtonEditorPreview({
     deleted_at: null,
   } as SmartHubButton;
 
-  const ownerDisplay = model.has_owner
-    ? model.owner_label || 'Responsável definido'
-    : 'Equipe da clínica';
-
-  const behaviorLines = previewBehaviorLines(action, {
-    redirectWhatsapp: Boolean(model.redirect_whatsapp),
-    stageLabel: model.stage_label || 'Novo',
-    ownerName: model.has_owner ? model.owner_label || null : null,
-    contactMethod,
-    isAppointmentFlow,
-  });
-
   return (
-    <div className={cn('space-y-4', className)}>
-      <div>
-        <p className="text-sm font-semibold">Prévia do botão</p>
-        <p className="text-xs text-muted-foreground">Atualiza conforme você edita.</p>
-      </div>
-
-      <div className="rounded-2xl border bg-muted/40 p-4">
-        <div className="mx-auto max-w-sm space-y-3">
+    <div className={cn('space-y-2', className)}>
+      <p className="text-xs font-medium text-muted-foreground">Prévia</p>
+      <div className="rounded-xl border bg-muted/30 p-3">
+        <div className="mx-auto max-w-[280px]">
           <HubButton
             button={previewButton}
             onClick={() => undefined}
@@ -150,59 +97,6 @@ export function ButtonEditorPreview({
             defaultFg={model.text_color || '#FFFFFF'}
             autoFixContrast={!showActualColors}
           />
-        </div>
-      </div>
-
-      <div className="space-y-3 rounded-lg border bg-background px-3 py-3">
-        <p className="text-sm font-semibold">Configuração deste botão</p>
-
-        <SummaryRow label={previewIntentTitle()} value={intentHeadline} />
-
-        {isAppointmentFlow && contactMethod ? (
-          <SummaryRow label={previewAttendanceTitle()} value={contactMethodLabel(contactMethod)} />
-        ) : null}
-
-        {model.show_crm_summary ? (
-          <>
-            <SummaryRow label="Responsável" value={ownerDisplay} />
-            <SummaryRow label="Etapa no CRM" value={model.stage_label || 'Novo'} />
-            {model.interest?.trim() ? (
-              <SummaryRow label="Interesse registrado" value={model.interest.trim()} />
-            ) : null}
-            {model.using_hub_form ? (
-              <div className="space-y-1 rounded-md border bg-muted/20 px-2.5 py-2">
-                <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
-                  Formulário utilizado
-                </p>
-                <p className="text-sm font-medium">
-                  {model.form_source_label || 'Padrão do Smart Hub'}
-                </p>
-                <p className="text-xs text-muted-foreground">Responsável: {ownerDisplay}</p>
-                <p className="text-xs text-muted-foreground">
-                  Etapa inicial: {model.stage_label || 'Novo'}
-                </p>
-              </div>
-            ) : null}
-          </>
-        ) : null}
-
-        <SummaryRow
-          label="Aparência"
-          value={SMART_HUB_VARIANT_LABELS[model.visual_variant] || model.visual_variant}
-        />
-
-        <div className="space-y-1.5 border-t pt-3">
-          <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
-            {previewBehaviorTitle()}
-          </p>
-          <ul className="space-y-1 text-sm leading-relaxed text-muted-foreground">
-            {behaviorLines.map((line) => (
-              <li key={line} className="flex gap-2">
-                <span className="mt-2 h-1 w-1 shrink-0 rounded-full bg-muted-foreground/70" />
-                <span>{line}</span>
-              </li>
-            ))}
-          </ul>
         </div>
       </div>
     </div>

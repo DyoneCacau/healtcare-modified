@@ -30,6 +30,7 @@ export interface ButtonIntentOption {
   requiresCrm?: boolean;
 }
 
+/** Opções disponíveis para novos botões / troca no editor. */
 export const BUTTON_INTENT_OPTIONS: ButtonIntentOption[] = [
   {
     id: 'capture_form',
@@ -48,6 +49,18 @@ export const BUTTON_INTENT_OPTIONS: ButtonIntentOption[] = [
     description: 'Direciona o visitante para solicitar ou realizar um agendamento.',
   },
   {
+    id: 'website',
+    label: 'Abrir site ou link externo',
+    description: 'Abre outra página da internet.',
+  },
+];
+
+/**
+ * Intenções removidas do seletor — mantidas só para leitura/edição de botões legados.
+ * Não entram em listVisibleIntents / dropdown / buscas.
+ */
+export const LEGACY_BUTTON_INTENT_OPTIONS: ButtonIntentOption[] = [
+  {
     id: 'procedure',
     label: 'Mostrar um procedimento ou serviço',
     description:
@@ -57,11 +70,6 @@ export const BUTTON_INTENT_OPTIONS: ButtonIntentOption[] = [
     id: 'social',
     label: 'Abrir uma rede social',
     description: 'Direciona para o perfil ou conteúdo da clínica em uma rede social.',
-  },
-  {
-    id: 'website',
-    label: 'Abrir site ou link externo',
-    description: 'Abre outra página da internet.',
   },
   {
     id: 'phone',
@@ -79,6 +87,23 @@ export const BUTTON_INTENT_OPTIONS: ButtonIntentOption[] = [
     description: 'Exibe orientações, avisos ou detalhes sem captar um contato.',
   },
 ];
+
+const ALL_INTENT_OPTIONS: ButtonIntentOption[] = [
+  ...BUTTON_INTENT_OPTIONS,
+  ...LEGACY_BUTTON_INTENT_OPTIONS,
+];
+
+export const LEGACY_BUTTON_INTENT_IDS = new Set<ButtonIntentId>(
+  LEGACY_BUTTON_INTENT_OPTIONS.map((o) => o.id)
+);
+
+export function isLegacyButtonIntent(id: ButtonIntentId): boolean {
+  return LEGACY_BUTTON_INTENT_IDS.has(id);
+}
+
+export function isSelectableButtonIntent(id: ButtonIntentId): boolean {
+  return BUTTON_INTENT_OPTIONS.some((o) => o.id === id);
+}
 
 export const SOCIAL_NETWORK_OPTIONS: {
   id: SocialNetworkId;
@@ -331,6 +356,7 @@ export function inferButtonIntent(
   };
 }
 
+/** Apenas as 4 opções ativas (CRM filtrado). Nunca inclui legadas. */
 export function listVisibleIntents(hasCrm: boolean): ButtonIntentOption[] {
   return BUTTON_INTENT_OPTIONS.filter((opt) => !opt.requiresCrm || hasCrm);
 }
@@ -378,7 +404,7 @@ export function previewIntentHeadline(opts: {
     return 'Captar contato pelo formulário';
   }
 
-  const option = BUTTON_INTENT_OPTIONS.find((o) => o.id === opts.intent);
+  const option = ALL_INTENT_OPTIONS.find((o) => o.id === opts.intent);
   return option?.label || 'Continuar no hub';
 }
 
@@ -389,7 +415,7 @@ export function contactMethodLabel(method: ContactMethodId | null | undefined): 
 }
 
 export function intentOptionById(id: ButtonIntentId): ButtonIntentOption | undefined {
-  return BUTTON_INTENT_OPTIONS.find((o) => o.id === id);
+  return ALL_INTENT_OPTIONS.find((o) => o.id === id);
 }
 
 /** Se a combinação type/ação ainda é coerente com a intenção. */

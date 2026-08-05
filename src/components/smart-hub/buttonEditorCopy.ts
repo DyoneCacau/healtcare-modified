@@ -302,3 +302,38 @@ export function formFlowSteps(redirectWhatsapp: boolean): string[] {
   }
   return steps;
 }
+
+/**
+ * Resumo curto do rodapé do modal (máx. ~2–3 linhas).
+ * Não repete labels/descrições longas do formulário.
+ */
+export function buttonEditorShortSummary(opts: {
+  action: SmartHubClickAction;
+  isAppointmentFlow?: boolean;
+  redirectWhatsapp?: boolean;
+}): string {
+  switch (opts.action) {
+    case 'form':
+      return opts.redirectWhatsapp
+        ? 'Este botão abrirá um formulário, registrará o contato no CRM e poderá abrir o WhatsApp após o envio.'
+        : 'Este botão abrirá um formulário e registrará o contato no CRM.';
+    case 'whatsapp':
+      return 'Este botão abrirá uma conversa no WhatsApp.';
+    case 'booking':
+      return 'Este botão abrirá o agendamento online na própria página.';
+    case 'link':
+      return opts.isAppointmentFlow
+        ? 'Este botão abrirá o link de agenda externa informado.'
+        : 'Este botão abrirá um site ou link externo.';
+    case 'phone':
+      return 'Este botão iniciará uma ligação para o número informado.';
+    case 'email':
+      return 'Este botão abrirá o aplicativo de e-mail do visitante.';
+    case 'map':
+      return 'Este botão abrirá o mapa ou endereço da clínica.';
+    case 'info':
+      return 'Este botão mostrará uma informação na própria página.';
+    default:
+      return 'O comportamento segue a configuração deste botão.';
+  }
+}

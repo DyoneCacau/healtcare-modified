@@ -8,19 +8,14 @@ import {
   ColorField,
   FieldHelpLabel,
   FieldHint,
-  FormSection,
   ButtonEditorPreview,
   ContrastPairAlert,
 } from '@/components/smart-hub';
 import {
   BUTTON_FIELD_HELP,
   CLICK_ACTION_HELP,
-  VARIANT_HELP,
-  OWNER_OPTION_HINTS,
-  APPOINTMENT_FORM_HOW_IT_WORKS,
-  formFlowSteps,
+  buttonEditorShortSummary,
   ownerFieldGuidance,
-  recommendVariantForButton,
 } from '@/components/smart-hub/buttonEditorCopy';
 import {
   getCompatibleActions,
@@ -31,9 +26,10 @@ import {
   applyButtonIntent,
   inferButtonIntent,
   intentOptionById,
+  isLegacyButtonIntent,
+  isSelectableButtonIntent,
   listContactMethods,
   listVisibleIntents,
-  previewIntentHeadline,
   SOCIAL_NETWORK_OPTIONS,
   CONTACT_METHOD_ONLINE_BOOKING,
   SUGGESTED_APPOINTMENT_FORM_TITLE,
@@ -153,7 +149,6 @@ export default function SmartHubButtons() {
     useHubButtons(hub?.id);
   const bookingEnabled = isPublicBookingEnabled(hub);
   const [open, setOpen] = useState(false);
-  const [summaryOpen, setSummaryOpen] = useState(false);
   const [editing, setEditing] = useState<SmartHubButton | null>(null);
   const [form, setForm] = useState<FormState>(emptyForm);
   const [uploadingImage, setUploadingImage] = useState(false);
@@ -176,15 +171,11 @@ export default function SmartHubButtons() {
   }, [form.type, customActions, hasCrm, bookingEnabled]);
   const visibleIntents = useMemo(() => listVisibleIntents(hasCrm), [hasCrm]);
   const contactMethodOptions = useMemo(() => listContactMethods(hasCrm), [hasCrm]);
-  const intentMeta = intentOptionById(
-    buttonIntent === 'advanced' ? 'website' : buttonIntent
-  );
   const actionIsSuggested =
     !actionManuallySet &&
     !customActions &&
     form.click_action === getRecommendedAction(form.type);
   const actionHelp = CLICK_ACTION_HELP[effectiveAction] || CLICK_ACTION_HELP.auto;
-  const variantHelp = VARIANT_HELP[form.visual_variant] || VARIANT_HELP.simple;
   const isFormAction = effectiveAction === 'form' && hasCrm;
   const isBookingAction = effectiveAction === 'booking' && bookingEnabled;
   const isWhatsApp = effectiveAction === 'whatsapp';
@@ -269,14 +260,6 @@ export default function SmartHubButtons() {
 
   const ownerGuidance = ownerFieldGuidance({ ownerName: selectedCustomOwnerName });
 
-  const variantRecommendation = recommendVariantForButton({
-    type: form.type,
-    action: effectiveAction,
-    hasImage: Boolean(form.image?.trim()),
-    title: form.title,
-    interest: form.capture_interest || null,
-  });
-
   const stageLabel =
     CRM_STAGES.find((s) => s.id === hubResolvedCapture.initial_stage)?.label ||
     hubResolvedCapture.initial_stage;
@@ -302,7 +285,6 @@ export default function SmartHubButtons() {
       type: applied.type,
       click_action: applied.click_action,
     });
-    setSummaryOpen(false);
     setOpen(true);
   };
 
@@ -323,7 +305,7 @@ export default function SmartHubButtons() {
     setButtonIntent(inferred.intent);
     setSocialNetwork(inferred.socialNetwork || 'instagram');
     setContactMethod(inferred.contactMethod || (hasCrm ? 'form' : 'link'));
-    setAdvancedOpen(inferred.needsAdvanced || unlocked);
+    setAdvancedOpen(unlocked);
     setForm({
       title: btn.title,
       subtitle: btn.subtitle || '',
@@ -356,15 +338,11 @@ export default function SmartHubButtons() {
       open_in_new_tab: cap.open_in_new_tab !== false,
       email_subject: cap.email_subject || '',
     });
-    setSummaryOpen(false);
     setOpen(true);
   };
 
   const handleDialogOpenChange = (next: boolean) => {
     setOpen(next);
-    if (!next) {
-      setSummaryOpen(false);
-    }
   };
 
   const validateForm = (): boolean => {
@@ -506,7 +484,6 @@ export default function SmartHubButtons() {
       await createButton.mutateAsync(payload);
     }
     setOpen(false);
-    setSummaryOpen(false);
   };
 
   const handleButtonImageUpload = async (file: File) => {
@@ -582,682 +559,355 @@ export default function SmartHubButtons() {
     using_hub_form: isFormAction && form.capture_use_hub_defaults,
   };
 
-  const destinationSummary = (() => {
-    if (isFormAction) {
-      return form.capture_redirect_wa
-        ? form.capture_wa_phone || hub?.whatsapp_number || 'WhatsApp da clínica'
-        : 'Formulário → CRM';
-    }
-    if (isWhatsApp || isPhone) return form.url || '—';
-    if (isEmail) return form.url || '—';
-    if (isInfo) return 'Exibição na página';
-    return form.url || '—';
-  })();
+  const isLegacyIntent = isLegacyButtonIntent(buttonIntent);
+  const legacyIntentMeta = isLegacyIntent ? intentOptionById(buttonIntent) : undefined;
+  const shortFooterSummary = buttonEditorShortSummary({
+    action: effectiveAction,
+    isAppointmentFlow: isAppointmentOrProcedure,
+    redirectWhatsapp: Boolean(
+      isFormAction && hubResolvedCapture.redirect_whatsapp_after_submit
+    ),
+  });
 
   const formFields = (
-    <div className="space-y-5 pb-2">
-      <FormSection
-        title="Informações do botão"
-        description="Textos que o visitante vê na página pública."
-      >
-        <div className="space-y-2">
-          <FieldHelpLabel htmlFor="btn-title" label="Título" help={BUTTON_FIELD_HELP.title} />
-          <Input
-            id="btn-title"
-            value={form.title}
-            onChange={(e) => setForm((f) => ({ ...f, title: e.target.value }))}
-            placeholder={
-              isAppointmentOrProcedure && contactMethod === 'form'
-                ? 'Ex.: Solicitar agendamento'
-                : 'Ex.: Agendar consulta'
-            }
-          />
-          {isAppointmentOrProcedure && contactMethod === 'form' ? (
-            <div className="space-y-1.5">
-              <FieldHint>{BUTTON_FIELD_HELP.title_form_appointment}</FieldHint>
-              {shouldSuggestAppointmentFormTitle(form.title) &&
-              form.title.trim() !== SUGGESTED_APPOINTMENT_FORM_TITLE ? (
-                <Button
-                  type="button"
-                  variant="link"
-                  className="h-auto p-0 text-xs"
-                  onClick={() =>
-                    setForm((f) => ({ ...f, title: SUGGESTED_APPOINTMENT_FORM_TITLE }))
-                  }
-                >
-                  Usar “{SUGGESTED_APPOINTMENT_FORM_TITLE}”
-                </Button>
-              ) : null}
-            </div>
-          ) : null}
-        </div>
-
-        {!isInfo ? (
-          <div className="space-y-2">
-            <FieldHelpLabel
-              htmlFor="btn-subtitle"
-              label="Subtítulo"
-              help={BUTTON_FIELD_HELP.subtitle}
-            />
-            <Input
-              id="btn-subtitle"
-              value={form.subtitle}
-              onChange={(e) => setForm((f) => ({ ...f, subtitle: e.target.value }))}
-              placeholder="Ex.: Resposta em poucos minutos"
-            />
+    <div className="space-y-5">
+      <div className="space-y-2">
+        <FieldHelpLabel htmlFor="btn-title" label="Título" help={BUTTON_FIELD_HELP.title} />
+        <Input
+          id="btn-title"
+          value={form.title}
+          onChange={(e) => setForm((f) => ({ ...f, title: e.target.value }))}
+          placeholder={
+            isAppointmentOrProcedure && contactMethod === 'form'
+              ? 'Ex.: Solicitar agendamento'
+              : 'Ex.: Agendar consulta'
+          }
+        />
+        {isAppointmentOrProcedure && contactMethod === 'form' ? (
+          <div className="space-y-1.5">
+            <FieldHint>{BUTTON_FIELD_HELP.title_form_appointment}</FieldHint>
+            {shouldSuggestAppointmentFormTitle(form.title) &&
+            form.title.trim() !== SUGGESTED_APPOINTMENT_FORM_TITLE ? (
+              <Button
+                type="button"
+                variant="link"
+                className="h-auto p-0 text-xs"
+                onClick={() =>
+                  setForm((f) => ({ ...f, title: SUGGESTED_APPOINTMENT_FORM_TITLE }))
+                }
+              >
+                Usar “{SUGGESTED_APPOINTMENT_FORM_TITLE}”
+              </Button>
+            ) : null}
           </div>
         ) : null}
-      </FormSection>
+      </div>
 
-      <FormSection
-        title="Objetivo"
-        description="O resultado comercial que este botão deve gerar."
-      >
+      {!isInfo ? (
         <div className="space-y-2">
           <FieldHelpLabel
-            label="O que este botão fará?"
-            help={BUTTON_FIELD_HELP.intent}
+            htmlFor="btn-subtitle"
+            label="Subtítulo"
+            help={BUTTON_FIELD_HELP.subtitle}
           />
-          <Select
-            value={
-              visibleIntents.some((opt) => opt.id === buttonIntent)
-                ? buttonIntent
-                : ''
+          <Input
+            id="btn-subtitle"
+            value={form.subtitle}
+            onChange={(e) => setForm((f) => ({ ...f, subtitle: e.target.value }))}
+            placeholder="Ex.: Resposta em poucos minutos"
+          />
+        </div>
+      ) : null}
+
+      <div className="space-y-2">
+        <FieldHelpLabel label="O que este botão fará?" help={BUTTON_FIELD_HELP.intent} />
+        {isLegacyIntent ? (
+          <Alert>
+            <Info className="h-4 w-4" />
+            <AlertTitle>Ação legada</AlertTitle>
+            <AlertDescription>
+              Este botão usa “{legacyIntentMeta?.label || buttonIntent}”, uma opção que não está
+              mais disponível para novos botões. Ele continua funcionando na página pública.
+              Escolha uma das opções atuais para atualizar.
+            </AlertDescription>
+          </Alert>
+        ) : null}
+        {buttonIntent === 'advanced' ? (
+          <Alert>
+            <Info className="h-4 w-4" />
+            <AlertTitle>Configuração personalizada</AlertTitle>
+            <AlertDescription>
+              Este botão usa uma combinação técnica avançada. Escolha uma opção abaixo ou ajuste
+              em Configurações avançadas.
+            </AlertDescription>
+          </Alert>
+        ) : null}
+        <Select
+          value={isSelectableButtonIntent(buttonIntent) ? buttonIntent : undefined}
+          onValueChange={(v) => {
+            const next = v as ButtonIntentId;
+            const nextMethod =
+              next === 'appointment' || next === 'procedure'
+                ? contactMethod
+                : hasCrm
+                  ? 'form'
+                  : 'link';
+            if (next === 'appointment' || next === 'procedure') {
+              setContactMethod(nextMethod);
             }
-            onValueChange={(v) => {
-              const next = v as ButtonIntentId;
-              const nextMethod =
-                next === 'appointment' || next === 'procedure'
-                  ? contactMethod
-                  : hasCrm
-                    ? 'form'
-                    : 'link';
-              if (next === 'appointment' || next === 'procedure') {
-                setContactMethod(nextMethod);
+            applyIntentToForm(next, socialNetwork, nextMethod);
+          }}
+        >
+          <SelectTrigger>
+            <SelectValue
+              placeholder={
+                isLegacyIntent
+                  ? `Legado: ${legacyIntentMeta?.label || buttonIntent}`
+                  : buttonIntent === 'advanced'
+                    ? 'Escolha uma opção atual'
+                    : 'Escolha o resultado do botão'
               }
-              applyIntentToForm(next, socialNetwork, nextMethod);
+            />
+          </SelectTrigger>
+          <SelectContent position="popper" className="max-h-80">
+            {visibleIntents.map((opt) => (
+              <SelectItem key={opt.id} value={opt.id}>
+                {opt.label}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </div>
+
+      {isSocialIntent ? (
+        <div className="space-y-2">
+          <FieldHelpLabel label="Qual rede social?" help={BUTTON_FIELD_HELP.intent_social} />
+          <Select
+            value={socialNetwork}
+            onValueChange={(v) => {
+              const next = v as SocialNetworkId;
+              setSocialNetwork(next);
+              applyIntentToForm('social', next, contactMethod);
             }}
           >
             <SelectTrigger>
-              <SelectValue
-                placeholder={
-                  buttonIntent === 'advanced'
-                    ? 'Configuração personalizada (avançado)'
-                    : 'Escolha o resultado do botão'
-                }
-              />
+              <SelectValue />
             </SelectTrigger>
-            <SelectContent position="popper" className="max-h-80">
-              {visibleIntents.map((opt) => (
-                <SelectItem key={opt.id} value={opt.id}>
-                  <span className="flex flex-col items-start gap-0.5 py-0.5 text-left">
-                    <span>{opt.label}</span>
-                    <span className="text-[11px] font-normal leading-snug text-muted-foreground">
-                      {opt.description}
-                    </span>
-                  </span>
+            <SelectContent position="popper">
+              {SOCIAL_NETWORK_OPTIONS.map((net) => (
+                <SelectItem key={net.id} value={net.id}>
+                  {net.label}
                 </SelectItem>
               ))}
             </SelectContent>
           </Select>
-          {intentMeta && buttonIntent !== 'advanced' ? (
-            <FieldHint>{intentMeta.description}</FieldHint>
-          ) : buttonIntent === 'advanced' ? (
-            <FieldHint>
-              Este botão usa uma configuração avançada. Ajuste tipo e ação na configuração
-              técnica se necessário.
-            </FieldHint>
-          ) : null}
         </div>
-
-        {isSocialIntent ? (
-          <div className="space-y-2">
-            <FieldHelpLabel
-              label="Qual rede social?"
-              help={BUTTON_FIELD_HELP.intent_social}
-            />
-            <Select
-              value={socialNetwork}
-              onValueChange={(v) => {
-                const next = v as SocialNetworkId;
-                setSocialNetwork(next);
-                applyIntentToForm('social', next, contactMethod);
-              }}
-            >
-              <SelectTrigger>
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent position="popper">
-                {SOCIAL_NETWORK_OPTIONS.map((net) => (
-                  <SelectItem key={net.id} value={net.id}>
-                    {net.label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-        ) : null}
-      </FormSection>
-
-      {isAppointmentOrProcedure ? (
-        <FormSection
-          title="Forma de atendimento"
-          description="Como a clínica receberá o pedido do visitante."
-        >
-          <div className="space-y-3">
-            <FieldHelpLabel
-              label={
-                buttonIntent === 'appointment'
-                  ? 'Como o pedido de agendamento será realizado?'
-                  : 'Como o visitante entrará em contato?'
-              }
-              help={BUTTON_FIELD_HELP.intent_contact_method}
-            />
-            <Select
-              value={
-                contactMethod === 'online_booking'
-                  ? bookingEnabled
-                    ? 'online_booking'
-                    : contactMethodOptions[0]?.id || 'link'
-                  : contactMethodOptions.some((o) => o.id === contactMethod)
-                    ? contactMethod
-                    : contactMethodOptions[0]?.id || 'link'
-              }
-              onValueChange={(v) => {
-                const next = v as ContactMethodId;
-                if (next === 'online_booking' && !bookingEnabled) return;
-                setContactMethod(next);
-                applyIntentToForm(buttonIntent, socialNetwork, next);
-              }}
-            >
-              <SelectTrigger>
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent position="popper">
-                {contactMethodOptions.map((opt) => (
-                  <SelectItem key={opt.id} value={opt.id}>
-                    <span className="flex flex-col items-start gap-0.5 py-0.5 text-left">
-                      <span>{opt.label}</span>
-                      <span className="text-[11px] font-normal leading-snug text-muted-foreground">
-                        {opt.description}
-                      </span>
-                    </span>
-                  </SelectItem>
-                ))}
-                <SelectItem value={CONTACT_METHOD_ONLINE_BOOKING.id} disabled={!bookingEnabled}>
-                  <span
-                    className={cn(
-                      'flex flex-col items-start gap-0.5 py-0.5 text-left',
-                      !bookingEnabled && 'opacity-70'
-                    )}
-                  >
-                    <span className="flex flex-wrap items-center gap-1.5">
-                      {CONTACT_METHOD_ONLINE_BOOKING.label}
-                      {!bookingEnabled ? (
-                        <Badge variant="secondary" className="text-[10px] font-normal">
-                          {CONTACT_METHOD_ONLINE_BOOKING.badgeDisabled}
-                        </Badge>
-                      ) : null}
-                    </span>
-                    <span className="text-[11px] font-normal leading-snug text-muted-foreground">
-                      {CONTACT_METHOD_ONLINE_BOOKING.description}
-                    </span>
-                  </span>
-                </SelectItem>
-              </SelectContent>
-            </Select>
-
-            {contactMethod === 'form' ? (
-              <Alert>
-                <Info className="h-4 w-4" />
-                <AlertTitle>Como funciona</AlertTitle>
-                <AlertDescription>{APPOINTMENT_FORM_HOW_IT_WORKS}</AlertDescription>
-              </Alert>
-            ) : null}
-            {contactMethod === 'online_booking' && bookingEnabled ? (
-              <Alert>
-                <Info className="h-4 w-4" />
-                <AlertTitle>Como funciona</AlertTitle>
-                <AlertDescription>
-                  O visitante escolhe procedimento, profissional, data e horário e confirma
-                  direto na agenda. Exige jornadas cadastradas e a flag de agendamento online
-                  ativa neste hub.
-                </AlertDescription>
-              </Alert>
-            ) : null}
-          </div>
-        </FormSection>
       ) : null}
 
-      <FormSection
-        title="Destino do pedido"
-        description={
-          isFormAction
-            ? 'Para onde o pedido vai e como a equipe acompanha no CRM.'
-            : isBookingAction
-              ? 'O visitante agenda pelo wizard na própria página do hub.'
-            : isSocialIntent
-              ? 'Link da rede social escolhida.'
-              : isWhatsApp
-                ? 'Número e mensagem inicial do WhatsApp.'
-                : 'Campos necessários para esta escolha.'
-        }
-      >
-        {isBookingAction ? (
-          <Alert>
-            <Info className="h-4 w-4" />
-            <AlertTitle>Agendamento online</AlertTitle>
-                <AlertDescription>
-                  Não é necessário link externo. O visitante agenda pelo wizard; o catálogo
-                  público de procedimentos e profissionais é carregado ao vivo pela API de
-                  agendamento.
-                </AlertDescription>
-          </Alert>
-        ) : null}
-        {isFormAction ? (
-          <div className="space-y-4">
-            <div className="space-y-2">
-              <FieldHelpLabel
-                htmlFor="capture-interest"
-                label="Serviço ou interesse"
-                help={BUTTON_FIELD_HELP.capture_interest}
-              />
-              <Input
-                id="capture-interest"
-                value={form.capture_interest}
-                onChange={(e) => setForm((f) => ({ ...f, capture_interest: e.target.value }))}
-                placeholder="Ex.: Clareamento, Ortodontia…"
-              />
-            </div>
-
-            <div className="flex items-center justify-between gap-2 rounded-md border px-3 py-2">
-              <div className="min-w-0 space-y-0.5">
-                <p className="text-sm font-medium">Usar o formulário padrão da página</p>
-                <p className="text-xs text-muted-foreground">
-                  {BUTTON_FIELD_HELP.capture_use_hub_defaults}
-                </p>
-              </div>
-              <Switch
-                checked={form.capture_use_hub_defaults}
-                onCheckedChange={(v) => setForm((f) => ({ ...f, capture_use_hub_defaults: v }))}
-              />
-            </div>
-
-            {form.capture_use_hub_defaults ? (
-              <div className="space-y-3 rounded-md border bg-muted/30 px-3 py-3 text-sm">
-                <div className="space-y-0.5">
-                  <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
-                    Formulário utilizado
-                  </p>
-                  <p className="font-medium">Padrão do Smart Hub</p>
-                </div>
-                <p className="text-xs text-muted-foreground">Responsável: {ownerLabel}</p>
-                <p className="text-xs text-muted-foreground">Etapa inicial: {stageLabel}</p>
-                <div className="space-y-1 border-t pt-2">
-                  <p className="text-xs font-medium text-foreground">Após o envio:</p>
-                  <ol className="list-decimal space-y-1 pl-4 text-xs text-muted-foreground">
-                    {formFlowSteps(hubResolvedCapture.redirect_whatsapp_after_submit).map(
-                      (step) => (
-                        <li key={step}>{step}</li>
-                      )
-                    )}
-                  </ol>
-                </div>
-                <Button type="button" variant="outline" size="sm" asChild>
-                  <Link to="/smart-hub/configuracoes">Ver ou editar formulário padrão</Link>
-                </Button>
-              </div>
-            ) : (
-              <div className="space-y-4 rounded-md border px-3 py-3">
-                <div className="space-y-0.5">
-                  <p className="text-sm font-medium">Personalizar este botão</p>
-                  <p className="text-xs text-muted-foreground">
-                    {BUTTON_FIELD_HELP.capture_customize_button}
-                  </p>
-                </div>
-                <div className="space-y-4 border-t pt-4">
-                  <div className="space-y-2">
-                    <FieldHelpLabel
-                      label="Etapa inicial no CRM"
-                      help={BUTTON_FIELD_HELP.capture_stage}
-                    />
-                    <Select
-                      value={form.capture_stage}
-                      onValueChange={(v) => setForm((f) => ({ ...f, capture_stage: v }))}
-                    >
-                      <SelectTrigger>
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent position="popper">
-                        {CRM_STAGES.map((s) => (
-                          <SelectItem key={s.id} value={s.id}>
-                            {s.label}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <div className="space-y-2">
-                    <FieldHelpLabel
-                      label="Quem receberá este lead"
-                      help={BUTTON_FIELD_HELP.capture_owner}
-                    />
-                    <Select
-                      value={form.capture_owner || '__none__'}
-                      onValueChange={(v) =>
-                        setForm((f) => ({
-                          ...f,
-                          capture_owner: v === '__none__' ? '' : v,
-                        }))
-                      }
-                    >
-                      <SelectTrigger>
-                        <SelectValue placeholder="Sem responsável" />
-                      </SelectTrigger>
-                      <SelectContent position="popper" className="max-h-72">
-                        <SelectItem value="__none__">
-                          <span className="flex flex-col items-start gap-0.5 py-0.5 text-left">
-                            <span>Sem responsável</span>
-                            <span className="text-[11px] font-normal leading-snug text-muted-foreground">
-                              {OWNER_OPTION_HINTS.none}
-                            </span>
-                          </span>
-                        </SelectItem>
-                        {staff.map((s) => (
-                          <SelectItem key={s.id} value={s.id}>
-                            <span className="flex flex-col items-start gap-0.5 py-0.5 text-left">
-                              <span>{s.name}</span>
-                              <span className="text-[11px] font-normal leading-snug text-muted-foreground">
-                                {OWNER_OPTION_HINTS.user}
-                              </span>
-                            </span>
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                    <FieldHint>{ownerGuidance.primary}</FieldHint>
-                    <details className="group text-xs text-muted-foreground">
-                      <summary className="cursor-pointer list-none text-xs font-medium text-foreground/80 underline-offset-2 hover:underline [&::-webkit-details-marker]:hidden">
-                        Saiba mais
-                      </summary>
-                      <p className="mt-1.5 leading-relaxed">{ownerGuidance.secondary}</p>
-                    </details>
-                  </div>
-                  <div className="flex items-center justify-between gap-2">
-                    <FieldHelpLabel
-                      label="Abrir WhatsApp depois do formulário"
-                      help={BUTTON_FIELD_HELP.capture_redirect_wa}
-                    />
-                    <Switch
-                      checked={form.capture_redirect_wa}
-                      onCheckedChange={(v) =>
-                        setForm((f) => ({ ...f, capture_redirect_wa: v }))
-                      }
-                    />
-                  </div>
-                  {form.capture_redirect_wa ? (
-                    <>
-                      <div className="space-y-2">
-                        <FieldHelpLabel
-                          htmlFor="capture-wa-phone"
-                          label="Telefone do WhatsApp após envio"
-                          help={BUTTON_FIELD_HELP.capture_wa_phone}
-                        />
-                        <Input
-                          id="capture-wa-phone"
-                          value={form.capture_wa_phone}
-                          onChange={(e) =>
-                            setForm((f) => ({ ...f, capture_wa_phone: e.target.value }))
-                          }
-                          placeholder={hub?.whatsapp_number || '5511999999999'}
-                        />
-                      </div>
-                      <div className="space-y-2">
-                        <FieldHelpLabel
-                          htmlFor="capture-wa-msg"
-                          label="Mensagem após envio"
-                          help={BUTTON_FIELD_HELP.capture_wa_message}
-                        />
-                        <Input
-                          id="capture-wa-msg"
-                          value={form.capture_wa_message}
-                          onChange={(e) =>
-                            setForm((f) => ({ ...f, capture_wa_message: e.target.value }))
-                          }
-                          placeholder="Olá! Acabei de enviar o formulário pelo site."
-                        />
-                      </div>
-                    </>
+      {isAppointmentOrProcedure ? (
+        <div className="space-y-3">
+          <FieldHelpLabel
+            label={
+              buttonIntent === 'appointment'
+                ? 'Como o pedido de agendamento será realizado?'
+                : 'Como o visitante entrará em contato?'
+            }
+            help={BUTTON_FIELD_HELP.intent_contact_method}
+          />
+          <Select
+            value={
+              contactMethod === 'online_booking'
+                ? bookingEnabled
+                  ? 'online_booking'
+                  : contactMethodOptions[0]?.id || 'link'
+                : contactMethodOptions.some((o) => o.id === contactMethod)
+                  ? contactMethod
+                  : contactMethodOptions[0]?.id || 'link'
+            }
+            onValueChange={(v) => {
+              const next = v as ContactMethodId;
+              if (next === 'online_booking' && !bookingEnabled) return;
+              setContactMethod(next);
+              applyIntentToForm(buttonIntent, socialNetwork, next);
+            }}
+          >
+            <SelectTrigger>
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent position="popper">
+              {contactMethodOptions.map((opt) => (
+                <SelectItem key={opt.id} value={opt.id}>
+                  {opt.label}
+                </SelectItem>
+              ))}
+              <SelectItem value={CONTACT_METHOD_ONLINE_BOOKING.id} disabled={!bookingEnabled}>
+                <span className="flex items-center gap-1.5">
+                  {CONTACT_METHOD_ONLINE_BOOKING.label}
+                  {!bookingEnabled ? (
+                    <Badge variant="secondary" className="text-[10px] font-normal">
+                      {CONTACT_METHOD_ONLINE_BOOKING.badgeDisabled}
+                    </Badge>
                   ) : null}
-                </div>
-              </div>
-            )}
-          </div>
-        ) : null}
+                </span>
+              </SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+      ) : null}
 
-        {isWhatsApp ? (
-          <div className="space-y-4">
-            <div className="space-y-2">
-              <FieldHelpLabel htmlFor="btn-phone" label="Telefone" help={BUTTON_FIELD_HELP.phone} />
-              <Input
-                id="btn-phone"
-                value={form.url}
-                onChange={(e) => setForm((f) => ({ ...f, url: e.target.value }))}
-                placeholder="5511999999999"
-              />
-            </div>
-            <div className="space-y-2">
-              <FieldHelpLabel
-                htmlFor="wa-msg"
-                label="Mensagem inicial"
-                help={BUTTON_FIELD_HELP.whatsapp_message}
-              />
-              <Input
-                id="wa-msg"
-                value={form.whatsapp_message}
-                onChange={(e) => setForm((f) => ({ ...f, whatsapp_message: e.target.value }))}
-                placeholder="Olá! Gostaria de agendar uma consulta."
-              />
-            </div>
-            <div className="flex items-center justify-between gap-2">
-              <FieldHelpLabel
-                label="Abrir em nova aba"
-                help={BUTTON_FIELD_HELP.open_in_new_tab}
-              />
-              <Switch
-                checked={form.open_in_new_tab}
-                onCheckedChange={(v) => setForm((f) => ({ ...f, open_in_new_tab: v }))}
-              />
-            </div>
-            <div className="flex items-center justify-between gap-2">
-              <FieldHelpLabel label="Rastrear cliques" help={BUTTON_FIELD_HELP.track_click} />
-              <Switch
-                checked={form.track_click}
-                onCheckedChange={(v) => setForm((f) => ({ ...f, track_click: v }))}
-              />
-            </div>
-          </div>
-        ) : null}
+      {isFormAction ? (
+        <div className="space-y-2">
+          <FieldHelpLabel
+            htmlFor="capture-interest"
+            label="Serviço ou interesse"
+            help={BUTTON_FIELD_HELP.capture_interest}
+          />
+          <Input
+            id="capture-interest"
+            value={form.capture_interest}
+            onChange={(e) => setForm((f) => ({ ...f, capture_interest: e.target.value }))}
+            placeholder="Ex.: Clareamento, Ortodontia…"
+          />
+        </div>
+      ) : null}
 
-        {isLink ? (
-          <div className="space-y-4">
-            <div className="space-y-2">
-              <FieldHelpLabel
-                htmlFor="btn-url"
-                label={isSocialIntent ? 'URL do perfil ou conteúdo' : 'URL'}
-                help={BUTTON_FIELD_HELP.url}
-              />
-              <Input
-                id="btn-url"
-                value={form.url}
-                onChange={(e) => setForm((f) => ({ ...f, url: e.target.value }))}
-                placeholder={
-                  isSocialIntent
-                    ? 'https://instagram.com/sua-clinica'
-                    : 'https://...'
-                }
-              />
-            </div>
-            <div className="flex items-center justify-between gap-2">
-              <FieldHelpLabel
-                label="Abrir em nova aba"
-                help={BUTTON_FIELD_HELP.open_in_new_tab}
-              />
-              <Switch
-                checked={form.open_in_new_tab}
-                onCheckedChange={(v) => setForm((f) => ({ ...f, open_in_new_tab: v }))}
-              />
-            </div>
-          </div>
-        ) : null}
-
-        {isPhone ? (
+      {isWhatsApp ? (
+        <div className="space-y-3">
           <div className="space-y-2">
-            <FieldHelpLabel htmlFor="btn-tel" label="Telefone" help={BUTTON_FIELD_HELP.phone} />
+            <FieldHelpLabel htmlFor="btn-phone" label="Telefone" help={BUTTON_FIELD_HELP.phone} />
             <Input
-              id="btn-tel"
+              id="btn-phone"
               value={form.url}
               onChange={(e) => setForm((f) => ({ ...f, url: e.target.value }))}
               placeholder="5511999999999"
             />
           </div>
-        ) : null}
-
-        {isEmail ? (
-          <div className="space-y-4">
-            <div className="space-y-2">
-              <FieldHelpLabel htmlFor="btn-email" label="E-mail" help={BUTTON_FIELD_HELP.email} />
-              <Input
-                id="btn-email"
-                value={form.url}
-                onChange={(e) => setForm((f) => ({ ...f, url: e.target.value }))}
-                placeholder="contato@clinica.com"
-              />
-            </div>
-            <div className="space-y-2">
-              <FieldHelpLabel
-                htmlFor="email-subject"
-                label="Assunto (opcional)"
-                help={BUTTON_FIELD_HELP.email_subject}
-              />
-              <Input
-                id="email-subject"
-                value={form.email_subject}
-                onChange={(e) => setForm((f) => ({ ...f, email_subject: e.target.value }))}
-                placeholder="Agendamento pelo site"
-              />
-            </div>
-          </div>
-        ) : null}
-
-        {isMap ? (
           <div className="space-y-2">
             <FieldHelpLabel
-              htmlFor="btn-map"
-              label="URL do mapa ou endereço"
-              help={BUTTON_FIELD_HELP.map_url}
+              htmlFor="wa-msg"
+              label="Mensagem inicial"
+              help={BUTTON_FIELD_HELP.whatsapp_message}
             />
             <Input
-              id="btn-map"
-              value={form.url}
-              onChange={(e) => setForm((f) => ({ ...f, url: e.target.value }))}
-              placeholder="https://maps.google.com/… ou Rua Exemplo, 123"
+              id="wa-msg"
+              value={form.whatsapp_message}
+              onChange={(e) => setForm((f) => ({ ...f, whatsapp_message: e.target.value }))}
+              placeholder="Olá! Gostaria de agendar uma consulta."
             />
           </div>
-        ) : null}
+        </div>
+      ) : null}
 
-        {isInfo ? (
+      {isLink ? (
+        <div className="space-y-2">
+          <FieldHelpLabel
+            htmlFor="btn-url"
+            label={isSocialIntent ? 'URL do perfil ou conteúdo' : 'URL'}
+            help={BUTTON_FIELD_HELP.url}
+          />
+          <Input
+            id="btn-url"
+            value={form.url}
+            onChange={(e) => setForm((f) => ({ ...f, url: e.target.value }))}
+            placeholder={
+              isSocialIntent ? 'https://instagram.com/sua-clinica' : 'https://...'
+            }
+          />
+        </div>
+      ) : null}
+
+      {isPhone ? (
+        <div className="space-y-2">
+          <FieldHelpLabel htmlFor="btn-tel" label="Telefone" help={BUTTON_FIELD_HELP.phone} />
+          <Input
+            id="btn-tel"
+            value={form.url}
+            onChange={(e) => setForm((f) => ({ ...f, url: e.target.value }))}
+            placeholder="5511999999999"
+          />
+        </div>
+      ) : null}
+
+      {isEmail ? (
+        <div className="space-y-3">
+          <div className="space-y-2">
+            <FieldHelpLabel htmlFor="btn-email" label="E-mail" help={BUTTON_FIELD_HELP.email} />
+            <Input
+              id="btn-email"
+              value={form.url}
+              onChange={(e) => setForm((f) => ({ ...f, url: e.target.value }))}
+              placeholder="contato@clinica.com"
+            />
+          </div>
           <div className="space-y-2">
             <FieldHelpLabel
-              htmlFor="info-content"
-              label="Conteúdo informativo"
-              help={BUTTON_FIELD_HELP.info_content}
+              htmlFor="email-subject"
+              label="Assunto (opcional)"
+              help={BUTTON_FIELD_HELP.email_subject}
             />
-            <Textarea
-              id="info-content"
-              value={form.subtitle}
-              onChange={(e) => setForm((f) => ({ ...f, subtitle: e.target.value }))}
-              placeholder="Horário de atendimento, formas de pagamento…"
-              rows={4}
-            />
-          </div>
-        ) : null}
-
-        {showFallbackDestination ? (
-          <div className="space-y-2">
-            <FieldHelpLabel htmlFor="btn-url-auto" label="URL / destino" help={BUTTON_FIELD_HELP.url} />
             <Input
-              id="btn-url-auto"
-              value={form.url}
-              onChange={(e) => setForm((f) => ({ ...f, url: e.target.value }))}
-              placeholder="https://..."
+              id="email-subject"
+              value={form.email_subject}
+              onChange={(e) => setForm((f) => ({ ...f, email_subject: e.target.value }))}
+              placeholder="Agendamento pelo site"
             />
           </div>
-        ) : null}
+        </div>
+      ) : null}
 
-        {!isWhatsApp ? (
-          <div className="grid gap-4 border-t pt-4 sm:grid-cols-2">
-            <div className="space-y-2">
-              <FieldHelpLabel
-                htmlFor="btn-order"
-                label="Ordem"
-                help={BUTTON_FIELD_HELP.order_index}
-              />
-              <Input
-                id="btn-order"
-                type="number"
-                value={form.order_index}
-                onChange={(e) =>
-                  setForm((f) => ({ ...f, order_index: Number(e.target.value) || 0 }))
-                }
-              />
-            </div>
-            <div className="flex items-center justify-between gap-2 sm:pt-6">
-              <FieldHelpLabel label="Visível" help={BUTTON_FIELD_HELP.visible} />
-              <Switch
-                checked={form.visible}
-                onCheckedChange={(v) => setForm((f) => ({ ...f, visible: v }))}
-              />
-            </div>
-            {!isWhatsApp ? (
-              <div className="flex items-center justify-between gap-2 sm:col-span-2">
-                <FieldHelpLabel label="Rastrear cliques" help={BUTTON_FIELD_HELP.track_click} />
-                <Switch
-                  checked={form.track_click}
-                  onCheckedChange={(v) => setForm((f) => ({ ...f, track_click: v }))}
-                />
-              </div>
-            ) : null}
-          </div>
-        ) : (
-          <div className="grid gap-4 border-t pt-4 sm:grid-cols-2">
-            <div className="space-y-2">
-              <FieldHelpLabel
-                htmlFor="btn-order-wa"
-                label="Ordem"
-                help={BUTTON_FIELD_HELP.order_index}
-              />
-              <Input
-                id="btn-order-wa"
-                type="number"
-                value={form.order_index}
-                onChange={(e) =>
-                  setForm((f) => ({ ...f, order_index: Number(e.target.value) || 0 }))
-                }
-              />
-            </div>
-            <div className="flex items-center justify-between gap-2 sm:pt-6">
-              <FieldHelpLabel label="Visível" help={BUTTON_FIELD_HELP.visible} />
-              <Switch
-                checked={form.visible}
-                onCheckedChange={(v) => setForm((f) => ({ ...f, visible: v }))}
-              />
-            </div>
-          </div>
-        )}
-      </FormSection>
+      {isMap ? (
+        <div className="space-y-2">
+          <FieldHelpLabel
+            htmlFor="btn-map"
+            label="URL do mapa ou endereço"
+            help={BUTTON_FIELD_HELP.map_url}
+          />
+          <Input
+            id="btn-map"
+            value={form.url}
+            onChange={(e) => setForm((f) => ({ ...f, url: e.target.value }))}
+            placeholder="https://maps.google.com/… ou Rua Exemplo, 123"
+          />
+        </div>
+      ) : null}
 
-      <FormSection title="Aparência" description="Como o botão aparece na página pública.">
+      {isInfo ? (
+        <div className="space-y-2">
+          <FieldHelpLabel
+            htmlFor="info-content"
+            label="Conteúdo informativo"
+            help={BUTTON_FIELD_HELP.info_content}
+          />
+          <Textarea
+            id="info-content"
+            value={form.subtitle}
+            onChange={(e) => setForm((f) => ({ ...f, subtitle: e.target.value }))}
+            placeholder="Horário de atendimento, formas de pagamento…"
+            rows={4}
+          />
+        </div>
+      ) : null}
+
+      {showFallbackDestination ? (
+        <div className="space-y-2">
+          <FieldHelpLabel htmlFor="btn-url-auto" label="URL / destino" help={BUTTON_FIELD_HELP.url} />
+          <Input
+            id="btn-url-auto"
+            value={form.url}
+            onChange={(e) => setForm((f) => ({ ...f, url: e.target.value }))}
+            placeholder="https://..."
+          />
+        </div>
+      ) : null}
+
+      {isBookingAction ? (
+        <p className="text-sm text-muted-foreground">
+          O visitante agenda pelo wizard na própria página. Não é necessário link externo.
+        </p>
+      ) : null}
+
+      <div className="space-y-3">
+        <p className="text-sm font-medium">Aparência</p>
         <div className="space-y-2">
           <FieldHelpLabel label="Variante visual" help={BUTTON_FIELD_HELP.visual_variant} />
           <Select
@@ -1275,35 +925,12 @@ export default function SmartHubButtons() {
             <SelectContent position="popper" className="max-h-72">
               {VARIANT_KEYS.map((v) => (
                 <SelectItem key={v} value={v}>
-                  <span className="flex flex-col items-start gap-0.5 py-0.5 text-left">
-                    <span className="flex flex-wrap items-center gap-1.5">
-                      {SMART_HUB_VARIANT_LABELS[v]}
-                      <Badge variant="outline" className="text-[10px] font-normal">
-                        {VARIANT_HELP[v].badge}
-                      </Badge>
-                    </span>
-                  </span>
+                  {SMART_HUB_VARIANT_LABELS[v]}
                 </SelectItem>
               ))}
             </SelectContent>
           </Select>
-          <div className="space-y-1.5 rounded-md border bg-muted/20 px-3 py-2">
-            <div className="flex flex-wrap items-center gap-1.5">
-              <span className="text-xs font-medium">
-                {SMART_HUB_VARIANT_LABELS[form.visual_variant]}
-              </span>
-              <Badge variant="secondary" className="text-[10px]">
-                {variantHelp.badge}
-              </Badge>
-            </div>
-            <FieldHint>{variantHelp.description}</FieldHint>
-          </div>
-          <div className="rounded-md border border-dashed px-3 py-2 text-xs leading-relaxed">
-            <p className="font-medium text-foreground">Recomendação para este botão</p>
-            <p className="mt-1 text-muted-foreground">{variantRecommendation}</p>
-          </div>
         </div>
-
         <div className="grid gap-4 sm:grid-cols-2">
           <ColorField
             id="btn_bg"
@@ -1327,85 +954,256 @@ export default function SmartHubButtons() {
           textColor={form.text_color || '#FFFFFF'}
           onFix={fixContrast}
         />
+      </div>
 
-        <div className="space-y-2">
-          <FieldHelpLabel htmlFor="btn-icon" label="Ícone" help={BUTTON_FIELD_HELP.icon} />
-          <Input
-            id="btn-icon"
-            value={form.icon}
-            onChange={(e) => setForm((f) => ({ ...f, icon: e.target.value }))}
-            placeholder="message-circle, calendar, phone…"
-          />
-        </div>
+      <ButtonEditorPreview model={previewModel} showActualColors />
 
-        {editing?.id ? (
-          <div className="space-y-2">
-            <FieldHelpLabel label="Imagem do botão" help={BUTTON_FIELD_HELP.image} />
-            {clinicId && hub && (
-              <SmartHubImageUpload
-                kind="button"
-                currentUrl={form.image || null}
-                clinicId={clinicId}
-                hubId={hub.id}
-                disabled={uploadingImage || updateButton.isPending}
-                onUpload={handleButtonImageUpload}
-                onRemove={handleButtonImageRemove}
-              />
+      <Collapsible open={advancedOpen} onOpenChange={setAdvancedOpen}>
+        <div className="rounded-lg border px-3 py-2">
+          <CollapsibleTrigger asChild>
+            <button
+              type="button"
+              className="flex w-full items-center justify-between gap-2 text-left text-sm font-medium"
+            >
+              Configurações avançadas
+              {advancedOpen ? (
+                <ChevronUp className="h-4 w-4 shrink-0" />
+              ) : (
+                <ChevronDown className="h-4 w-4 shrink-0" />
+              )}
+            </button>
+          </CollapsibleTrigger>
+          <CollapsibleContent className="mt-3 space-y-5 border-t pt-3">
+            {isFormAction ? (
+              <div className="space-y-4">
+                <div className="flex items-center justify-between gap-2 rounded-md border px-3 py-2">
+                  <div className="min-w-0 space-y-0.5">
+                    <p className="text-sm font-medium">Usar o formulário padrão da página</p>
+                    <p className="text-xs text-muted-foreground">
+                      {BUTTON_FIELD_HELP.capture_use_hub_defaults}
+                    </p>
+                  </div>
+                  <Switch
+                    checked={form.capture_use_hub_defaults}
+                    onCheckedChange={(v) =>
+                      setForm((f) => ({ ...f, capture_use_hub_defaults: v }))
+                    }
+                  />
+                </div>
+
+                {form.capture_use_hub_defaults ? (
+                  <div className="space-y-2 rounded-md border bg-muted/30 px-3 py-3 text-sm">
+                    <p className="font-medium">Padrão do Smart Hub</p>
+                    <p className="text-xs text-muted-foreground">Responsável: {ownerLabel}</p>
+                    <p className="text-xs text-muted-foreground">Etapa inicial: {stageLabel}</p>
+                    <Button type="button" variant="outline" size="sm" asChild>
+                      <Link to="/smart-hub/configuracoes">Ver ou editar formulário padrão</Link>
+                    </Button>
+                  </div>
+                ) : (
+                  <div className="space-y-4 rounded-md border px-3 py-3">
+                    <div className="space-y-2">
+                      <FieldHelpLabel
+                        label="Etapa inicial no CRM"
+                        help={BUTTON_FIELD_HELP.capture_stage}
+                      />
+                      <Select
+                        value={form.capture_stage}
+                        onValueChange={(v) => setForm((f) => ({ ...f, capture_stage: v }))}
+                      >
+                        <SelectTrigger>
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent position="popper">
+                          {CRM_STAGES.map((s) => (
+                            <SelectItem key={s.id} value={s.id}>
+                              {s.label}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="space-y-2">
+                      <FieldHelpLabel
+                        label="Quem receberá este lead"
+                        help={BUTTON_FIELD_HELP.capture_owner}
+                      />
+                      <Select
+                        value={form.capture_owner || '__none__'}
+                        onValueChange={(v) =>
+                          setForm((f) => ({
+                            ...f,
+                            capture_owner: v === '__none__' ? '' : v,
+                          }))
+                        }
+                      >
+                        <SelectTrigger>
+                          <SelectValue placeholder="Sem responsável" />
+                        </SelectTrigger>
+                        <SelectContent position="popper" className="max-h-72">
+                          <SelectItem value="__none__">Sem responsável</SelectItem>
+                          {staff.map((s) => (
+                            <SelectItem key={s.id} value={s.id}>
+                              {s.name}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      <FieldHint>{ownerGuidance.primary}</FieldHint>
+                    </div>
+                    <div className="flex items-center justify-between gap-2">
+                      <FieldHelpLabel
+                        label="Abrir WhatsApp depois do formulário"
+                        help={BUTTON_FIELD_HELP.capture_redirect_wa}
+                      />
+                      <Switch
+                        checked={form.capture_redirect_wa}
+                        onCheckedChange={(v) =>
+                          setForm((f) => ({ ...f, capture_redirect_wa: v }))
+                        }
+                      />
+                    </div>
+                    {form.capture_redirect_wa ? (
+                      <>
+                        <div className="space-y-2">
+                          <FieldHelpLabel
+                            htmlFor="capture-wa-phone"
+                            label="Telefone do WhatsApp após envio"
+                            help={BUTTON_FIELD_HELP.capture_wa_phone}
+                          />
+                          <Input
+                            id="capture-wa-phone"
+                            value={form.capture_wa_phone}
+                            onChange={(e) =>
+                              setForm((f) => ({ ...f, capture_wa_phone: e.target.value }))
+                            }
+                            placeholder={hub?.whatsapp_number || '5511999999999'}
+                          />
+                        </div>
+                        <div className="space-y-2">
+                          <FieldHelpLabel
+                            htmlFor="capture-wa-msg"
+                            label="Mensagem após envio"
+                            help={BUTTON_FIELD_HELP.capture_wa_message}
+                          />
+                          <Input
+                            id="capture-wa-msg"
+                            value={form.capture_wa_message}
+                            onChange={(e) =>
+                              setForm((f) => ({ ...f, capture_wa_message: e.target.value }))
+                            }
+                            placeholder="Olá! Acabei de enviar o formulário pelo site."
+                          />
+                        </div>
+                      </>
+                    ) : null}
+                  </div>
+                )}
+              </div>
+            ) : null}
+
+            {(isWhatsApp || isLink) && (
+              <div className="flex items-center justify-between gap-2">
+                <FieldHelpLabel
+                  label="Abrir em nova aba"
+                  help={BUTTON_FIELD_HELP.open_in_new_tab}
+                />
+                <Switch
+                  checked={form.open_in_new_tab}
+                  onCheckedChange={(v) => setForm((f) => ({ ...f, open_in_new_tab: v }))}
+                />
+              </div>
             )}
+
+            <div className="grid gap-4 sm:grid-cols-2">
+              <div className="space-y-2">
+                <FieldHelpLabel
+                  htmlFor="btn-order"
+                  label="Ordem"
+                  help={BUTTON_FIELD_HELP.order_index}
+                />
+                <Input
+                  id="btn-order"
+                  type="number"
+                  value={form.order_index}
+                  onChange={(e) =>
+                    setForm((f) => ({ ...f, order_index: Number(e.target.value) || 0 }))
+                  }
+                />
+              </div>
+              <div className="flex items-center justify-between gap-2 sm:pt-6">
+                <FieldHelpLabel label="Visível" help={BUTTON_FIELD_HELP.visible} />
+                <Switch
+                  checked={form.visible}
+                  onCheckedChange={(v) => setForm((f) => ({ ...f, visible: v }))}
+                />
+              </div>
+              <div className="flex items-center justify-between gap-2 sm:col-span-2">
+                <FieldHelpLabel label="Rastrear cliques" help={BUTTON_FIELD_HELP.track_click} />
+                <Switch
+                  checked={form.track_click}
+                  onCheckedChange={(v) => setForm((f) => ({ ...f, track_click: v }))}
+                />
+              </div>
+            </div>
+
             <div className="space-y-2">
-              <FieldHelpLabel
-                htmlFor="img-alt"
-                label="Texto alternativo da imagem"
-                help={BUTTON_FIELD_HELP.image_alt}
-              />
+              <FieldHelpLabel htmlFor="btn-icon" label="Ícone" help={BUTTON_FIELD_HELP.icon} />
               <Input
-                id="img-alt"
-                value={form.image_alt}
-                onChange={(e) => setForm((f) => ({ ...f, image_alt: e.target.value }))}
+                id="btn-icon"
+                value={form.icon}
+                onChange={(e) => setForm((f) => ({ ...f, icon: e.target.value }))}
+                placeholder="message-circle, calendar, phone…"
               />
             </div>
-          </div>
-        ) : (
-          <div className="space-y-2">
-            <FieldHelpLabel
-              htmlFor="img-url"
-              label="URL da imagem (opcional)"
-              help={BUTTON_FIELD_HELP.image}
-            />
-            <Input
-              id="img-url"
-              value={form.image}
-              onChange={(e) => setForm((f) => ({ ...f, image: e.target.value }))}
-              placeholder="https://… ou envie após salvar"
-            />
-            <FieldHint>Após criar o botão, edite-o para enviar pelo upload.</FieldHint>
-          </div>
-        )}
-      </FormSection>
 
-      <FormSection
-        title="Configuração técnica"
-        description={BUTTON_FIELD_HELP.advanced_type}
-      >
-        <Collapsible open={advancedOpen} onOpenChange={setAdvancedOpen}>
-          <div className="rounded-md border px-3 py-2">
-            <CollapsibleTrigger asChild>
-              <button
-                type="button"
-                className="flex w-full items-center justify-between gap-2 text-left text-sm font-medium"
-              >
-                Configuração avançada
-                {advancedOpen ? (
-                  <ChevronUp className="h-4 w-4 shrink-0" />
-                ) : (
-                  <ChevronDown className="h-4 w-4 shrink-0" />
+            {editing?.id ? (
+              <div className="space-y-2">
+                <FieldHelpLabel label="Imagem do botão" help={BUTTON_FIELD_HELP.image} />
+                {clinicId && hub && (
+                  <SmartHubImageUpload
+                    kind="button"
+                    currentUrl={form.image || null}
+                    clinicId={clinicId}
+                    hubId={hub.id}
+                    disabled={uploadingImage || updateButton.isPending}
+                    onUpload={handleButtonImageUpload}
+                    onRemove={handleButtonImageRemove}
+                  />
                 )}
-              </button>
-            </CollapsibleTrigger>
-            <p className="mt-1 text-xs text-muted-foreground">
-              {BUTTON_FIELD_HELP.advanced_type}
-            </p>
-            <CollapsibleContent className="mt-3 space-y-4 border-t pt-3">
+                <div className="space-y-2">
+                  <FieldHelpLabel
+                    htmlFor="img-alt"
+                    label="Texto alternativo da imagem"
+                    help={BUTTON_FIELD_HELP.image_alt}
+                  />
+                  <Input
+                    id="img-alt"
+                    value={form.image_alt}
+                    onChange={(e) => setForm((f) => ({ ...f, image_alt: e.target.value }))}
+                  />
+                </div>
+              </div>
+            ) : (
+              <div className="space-y-2">
+                <FieldHelpLabel
+                  htmlFor="img-url"
+                  label="URL da imagem (opcional)"
+                  help={BUTTON_FIELD_HELP.image}
+                />
+                <Input
+                  id="img-url"
+                  value={form.image}
+                  onChange={(e) => setForm((f) => ({ ...f, image: e.target.value }))}
+                  placeholder="https://… ou envie após salvar"
+                />
+                <FieldHint>Após criar o botão, edite-o para enviar pelo upload.</FieldHint>
+              </div>
+            )}
+
+            <div className="space-y-3">
+              <p className="text-sm font-medium">Configuração técnica</p>
+              <p className="text-xs text-muted-foreground">{BUTTON_FIELD_HELP.advanced_type}</p>
               {!customActions && buttonIntent !== 'advanced' ? (
                 <div className="space-y-3 rounded-md border bg-muted/20 px-3 py-3 text-sm">
                   <div className="space-y-0.5">
@@ -1424,10 +1222,6 @@ export default function SmartHubButtons() {
                       {SMART_HUB_CLICK_ACTION_LABELS[form.click_action] || form.click_action}
                     </p>
                   </div>
-                  <FieldHint>
-                    Definidos automaticamente pela escolha amigável. Só altere se precisar de uma
-                    combinação específica.
-                  </FieldHint>
                   <Button
                     type="button"
                     variant="outline"
@@ -1540,66 +1334,10 @@ export default function SmartHubButtons() {
                   </div>
                 </>
               )}
-            </CollapsibleContent>
-          </div>
-        </Collapsible>
-      </FormSection>
-    </div>
-  );
-
-  const saveSummary = (
-    <div className="rounded-md border bg-muted/20 px-3 py-2 text-xs text-muted-foreground">
-      <button
-        type="button"
-        className="flex w-full items-center justify-between gap-2 text-left font-medium text-foreground"
-        onClick={() => setSummaryOpen((v) => !v)}
-        aria-expanded={summaryOpen}
-      >
-        Resumo antes de salvar
-        {summaryOpen ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
-      </button>
-      {summaryOpen ? (
-        <dl className="mt-2 grid gap-1.5 sm:grid-cols-2">
-          <div>
-            <dt className="text-[11px] uppercase tracking-wide opacity-70">Este botão irá</dt>
-            <dd>
-              {previewIntentHeadline({
-                intent: buttonIntent,
-                socialNetwork: isSocialIntent ? socialNetwork : null,
-                type: form.type,
-              })}
-            </dd>
-          </div>
-          <div>
-            <dt className="text-[11px] uppercase tracking-wide opacity-70">Destino</dt>
-            <dd className="truncate">{destinationSummary}</dd>
-          </div>
-          {isFormAction ? (
-            <>
-              <div>
-                <dt className="text-[11px] uppercase tracking-wide opacity-70">Etapa no CRM</dt>
-                <dd>{stageLabel}</dd>
-              </div>
-              <div>
-                <dt className="text-[11px] uppercase tracking-wide opacity-70">Responsável</dt>
-                <dd>{ownerLabel}</dd>
-              </div>
-              <div>
-                <dt className="text-[11px] uppercase tracking-wide opacity-70">Redirecionamento</dt>
-                <dd>
-                  {hubResolvedCapture.redirect_whatsapp_after_submit
-                    ? 'WhatsApp após envio'
-                    : 'Sem redirecionamento'}
-                </dd>
-              </div>
-            </>
-          ) : null}
-          <div>
-            <dt className="text-[11px] uppercase tracking-wide opacity-70">Aparência</dt>
-            <dd>{SMART_HUB_VARIANT_LABELS[form.visual_variant]}</dd>
-          </div>
-        </dl>
-      ) : null}
+            </div>
+          </CollapsibleContent>
+        </div>
+      </Collapsible>
     </div>
   );
 
@@ -1682,7 +1420,7 @@ export default function SmartHubButtons() {
             <div className="rounded-lg border border-dashed p-10 text-center text-muted-foreground">
               <p className="font-medium text-foreground">Nenhum botão ainda</p>
               <p className="mt-1 text-sm">
-                Crie o primeiro botão (WhatsApp, agendamento, redes sociais…) para ativar a
+                Crie o primeiro botão (formulário, WhatsApp, agendamento ou link) para ativar a
                 conversão na página pública.
               </p>
               <Button className="mt-4" onClick={openCreate}>
@@ -1698,38 +1436,29 @@ export default function SmartHubButtons() {
         <DialogContent
           className={cn(
             'flex max-h-[min(92vh,100dvh)] flex-col gap-0 overflow-hidden p-0',
-            'w-[calc(100vw-1.5rem)] sm:max-w-3xl lg:max-w-5xl'
+            'w-[calc(100vw-1.5rem)] sm:max-w-lg'
           )}
         >
-          <DialogHeader className="shrink-0 space-y-1 border-b px-4 py-3 text-left sm:px-6 sm:py-4">
+          <DialogHeader className="shrink-0 space-y-1 border-b px-4 py-3 text-left sm:px-5 sm:py-4">
             <DialogTitle>{editing ? 'Editar botão' : 'Novo botão'}</DialogTitle>
             <DialogDescription>
-              Os campos mudam conforme a ação escolhida. A prévia mostra aparência e
-              comportamento.
+              Configure o título, a ação e a aparência do botão.
             </DialogDescription>
           </DialogHeader>
 
-          <div className="grid min-h-0 flex-1 overflow-hidden lg:grid-cols-[minmax(0,1fr)_340px]">
-            <div className="min-h-0 overflow-y-auto overscroll-contain px-4 py-4 sm:px-6">
-              {formFields}
-              <div className="mt-6 border-t pt-5 lg:hidden">
-                <ButtonEditorPreview model={previewModel} showActualColors />
-              </div>
-            </div>
-            <aside className="hidden min-h-0 overflow-y-auto border-l bg-muted/20 p-4 lg:block">
-              <div className="sticky top-0">
-                <ButtonEditorPreview model={previewModel} showActualColors />
-              </div>
-            </aside>
+          <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 py-4 sm:px-5">
+            {formFields}
           </div>
 
           <DialogFooter
             className={cn(
-              'shrink-0 flex-col gap-3 border-t bg-background px-4 py-3 sm:px-6 sm:py-4',
+              'shrink-0 flex-col gap-3 border-t bg-background px-4 py-3 sm:px-5 sm:py-4',
               'pb-[max(0.75rem,env(safe-area-inset-bottom))]'
             )}
           >
-            {saveSummary}
+            <p className="w-full text-left text-sm leading-snug text-muted-foreground">
+              {shortFooterSummary}
+            </p>
             <div className="flex w-full flex-col-reverse gap-2 sm:flex-row sm:items-center sm:justify-end">
               <Button variant="outline" onClick={() => handleDialogOpenChange(false)}>
                 Cancelar
