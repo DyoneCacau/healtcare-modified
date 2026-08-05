@@ -3,8 +3,8 @@
  *
  * - Tenant só pelo page_id cadastrado na integração Meta da clínica.
  * - Nunca confia em clinic_id do payload externo.
- * - Idempotência: provider + leadgen_id → external_lead_id no ingestLead.
- * - Sem tokens em logs / respostas públicas.
+ * - Idempotência: meta_leadgen_events(leadgen_id) + external_lead_id no CRM.
+ * - Tokens via Vault; sem tokens/PII em logs.
  */
 import type { SupabaseClient } from 'https://esm.sh/@supabase/supabase-js@2.49.1'
 import { HttpError } from './httpError.ts'
@@ -24,6 +24,13 @@ import {
   readMetaPublicConfig,
   type MetaPublicConfig,
 } from './metaConnection.ts'
+import { vaultReadMetaToken, vaultStoreMetaToken } from './metaCredentialVault.ts'
+import {
+  claimMetaLeadgenEvent,
+  finalizeMetaLeadgenEvent,
+  shouldSkipLeadgenEvent,
+  type MetaLeadgenEventSource,
+} from './metaLeadgenEvents.ts'
 import {
   extractLeadgenChanges,
   resolveMetaLeadCrmSource,
@@ -103,20 +110,26 @@ async function readPageAccessToken(
   supabase: SupabaseClient,
   clinicId: string,
   integrationId: string,
-): Promise<{ pageAccessToken: string; userAccessToken: string; expiresAt: string | null } | null> {
+): Promise<{
+  credentialId: string
+  pageAccessToken: string
+  userAccessToken: string
+  expiresAt: string | null
+} | null> {
   const { data, error } = await supabase
     .from('integration_credentials')
-    .select('id, access_token, page_access_token, expires_at')
+    .select('id, access_token, page_access_token, expires_at, access_token_vault_id, page_access_token_vault_id')
     .eq('clinic_id', clinicId)
     .eq('integration_id', integrationId)
     .maybeSingle()
 
   if (error) {
-    // Coluna page_access_token pode não existir antes do PRODUCAO_30
+    // Colunas vault / page_access_token podem não existir antes do PRODUCAO_30/31
     if (error.code === '42703') {
       const creds = await readMetaAccessToken(supabase, clinicId, integrationId)
       if (!creds) return null
       return {
+        credentialId: creds.credentialId,
         pageAccessToken: creds.accessToken,
         userAccessToken: creds.accessToken,
         expiresAt: creds.expiresAt,
@@ -124,15 +137,27 @@ async function readPageAccessToken(
     }
     throw new HttpError(500, 'Falha ao ler credenciais Meta')
   }
-  if (!data?.access_token) return null
+  if (!data?.id) return null
 
-  const pageToken = typeof data.page_access_token === 'string' && data.page_access_token.trim()
-    ? data.page_access_token.trim()
-    : data.access_token as string
+  const userFromVault = await vaultReadMetaToken(supabase, data.id as string, 'access_token')
+  const pageFromVault = await vaultReadMetaToken(supabase, data.id as string, 'page_access_token')
+
+  const userAccessToken = userFromVault
+    || (typeof data.access_token === 'string' && data.access_token.trim()
+      ? data.access_token.trim()
+      : null)
+  if (!userAccessToken) return null
+
+  const pageAccessToken = pageFromVault
+    || (typeof data.page_access_token === 'string' && data.page_access_token.trim()
+      ? data.page_access_token.trim()
+      : null)
+    || userAccessToken
 
   return {
-    pageAccessToken: pageToken,
-    userAccessToken: data.access_token as string,
+    credentialId: data.id as string,
+    pageAccessToken,
+    userAccessToken,
     expiresAt: (data.expires_at as string | null) ?? null,
   }
 }
@@ -143,6 +168,24 @@ export async function upsertPageAccessToken(
   integrationId: string,
   pageAccessToken: string,
 ): Promise<void> {
+  const { data: cred, error: findError } = await supabase
+    .from('integration_credentials')
+    .select('id')
+    .eq('clinic_id', clinicId)
+    .eq('integration_id', integrationId)
+    .maybeSingle()
+
+  if (findError) throw new HttpError(500, 'Falha ao localizar credenciais Meta')
+  if (!cred?.id) throw new HttpError(409, 'Credenciais Meta ausentes')
+
+  const vaulted = await vaultStoreMetaToken(
+    supabase,
+    cred.id as string,
+    'page_access_token',
+    pageAccessToken,
+  )
+  if (vaulted) return
+
   const { error } = await supabase
     .from('integration_credentials')
     .update({ page_access_token: pageAccessToken })
@@ -164,7 +207,9 @@ export async function upsertPageAccessToken(
 export async function processLeadgenChange(
   supabase: SupabaseClient,
   change: MetaLeadgenChange,
+  options?: { source?: MetaLeadgenEventSource },
 ): Promise<MetaLeadgenProcessResult> {
+  const source: MetaLeadgenEventSource = options?.source || 'webhook'
   const base: MetaLeadgenProcessResult = {
     handled: false,
     created: false,
@@ -177,8 +222,35 @@ export async function processLeadgenChange(
     integrationId: null,
   }
 
+  const claimed = await claimMetaLeadgenEvent(supabase, {
+    leadgenId: change.leadgenId,
+    pageId: change.pageId,
+    formId: change.formId,
+    adId: change.adId,
+    platform: change.platform,
+    source,
+  })
+
+  if (claimed && shouldSkipLeadgenEvent(claimed)) {
+    return {
+      ...base,
+      handled: claimed.status === 'ingested' || claimed.status === 'duplicate',
+      created: false,
+      duplicate: claimed.status === 'duplicate' || claimed.status === 'ingested',
+      skipped: claimed.status === 'skipped',
+      reason: claimed.reason || 'ja_processado',
+      leadId: claimed.crm_lead_id,
+      clinicId: claimed.clinic_id,
+      integrationId: claimed.integration_id,
+    }
+  }
+
   const integration = await findMetaIntegrationByPageId(supabase, change.pageId)
   if (!integration) {
+    await finalizeMetaLeadgenEvent(supabase, change.leadgenId, {
+      status: 'skipped',
+      reason: 'page_id_desconhecido_ou_captura_inativa',
+    })
     return { ...base, skipped: true, reason: 'page_id_desconhecido_ou_captura_inativa' }
   }
 
@@ -187,6 +259,12 @@ export async function processLeadgenChange(
 
   const publicMeta = readMetaPublicConfig(integration.config)
   if (publicMeta.page_id && publicMeta.page_id !== change.pageId) {
+    await finalizeMetaLeadgenEvent(supabase, change.leadgenId, {
+      status: 'skipped',
+      reason: 'page_id_nao_corresponde',
+      clinicId: integration.clinic_id,
+      integrationId: integration.id,
+    })
     return { ...base, skipped: true, reason: 'page_id_nao_corresponde' }
   }
 
@@ -198,7 +276,14 @@ export async function processLeadgenChange(
       eventType: 'leadgen_failed',
       status: 'error',
       message: 'Credenciais Meta ausentes ao processar leadgen',
-      metadata: { leadgen_id: change.leadgenId, page_id: change.pageId },
+      metadata: { leadgen_id: change.leadgenId, page_id: change.pageId, source },
+    })
+    await finalizeMetaLeadgenEvent(supabase, change.leadgenId, {
+      status: 'failed',
+      reason: 'credenciais_ausentes',
+      clinicId: integration.clinic_id,
+      integrationId: integration.id,
+      lastError: 'credenciais_ausentes',
     })
     return { ...base, reason: 'credenciais_ausentes' }
   }
@@ -210,7 +295,14 @@ export async function processLeadgenChange(
       eventType: 'leadgen_failed',
       status: 'error',
       message: 'Token Meta expirado ao processar leadgen',
-      metadata: { leadgen_id: change.leadgenId, page_id: change.pageId },
+      metadata: { leadgen_id: change.leadgenId, page_id: change.pageId, source },
+    })
+    await finalizeMetaLeadgenEvent(supabase, change.leadgenId, {
+      status: 'failed',
+      reason: 'token_expirado',
+      clinicId: integration.clinic_id,
+      integrationId: integration.id,
+      lastError: 'token_expirado',
     })
     return { ...base, reason: 'token_expirado' }
   }
@@ -231,15 +323,30 @@ export async function processLeadgenChange(
         leadgen_id: change.leadgenId,
         page_id: change.pageId,
         http_status: status,
+        source,
       },
     })
-    if (status === 401) return { ...base, reason: 'token_expirado' }
-    if (message.toLowerCase().includes('permission') || message.toLowerCase().includes('(#200)')) {
-      return { ...base, reason: 'permissao_ausente' }
+
+    let reason = 'graph_error'
+    if (status === 401) reason = 'token_expirado'
+    else if (message.toLowerCase().includes('permission') || message.toLowerCase().includes('(#200)')) {
+      reason = 'permissao_ausente'
+    } else if (status === 404 || message.toLowerCase().includes('does not exist')) {
+      reason = 'lead_inexistente'
     }
-    if (status === 404 || message.toLowerCase().includes('does not exist')) {
-      return { ...base, reason: 'lead_inexistente' }
-    }
+
+    const terminal = reason === 'lead_inexistente' || reason === 'permissao_ausente'
+    await finalizeMetaLeadgenEvent(supabase, change.leadgenId, {
+      status: terminal ? 'skipped' : 'failed',
+      reason,
+      clinicId: integration.clinic_id,
+      integrationId: integration.id,
+      lastError: reason,
+    })
+
+    if (reason === 'token_expirado') return { ...base, reason }
+    if (reason === 'permissao_ausente') return { ...base, reason }
+    if (reason === 'lead_inexistente') return { ...base, reason: 'lead_inexistente' }
     // Temporário: propaga para o webhook responder 5xx e a Meta reenviar
     throw error instanceof HttpError ? error : new HttpError(502, message)
   }
@@ -289,7 +396,16 @@ export async function processLeadgenChange(
         leadgen_id: change.leadgenId,
         page_id: change.pageId,
         field_count: graphLead.fieldData.length,
+        source,
       },
+    })
+    await finalizeMetaLeadgenEvent(supabase, change.leadgenId, {
+      status: 'skipped',
+      reason: 'lead_sem_dados_uteis',
+      clinicId: integration.clinic_id,
+      integrationId: integration.id,
+      formId: change.formId ?? graphLead.formId,
+      adId: change.adId ?? graphLead.adId,
     })
     return { ...base, skipped: true, reason: 'lead_sem_dados_uteis' }
   }
@@ -317,7 +433,19 @@ export async function processLeadgenChange(
       origin_detail: originDetail,
       lead_id: result.leadId,
       duplicate: result.duplicate,
+      source,
     },
+  })
+
+  await finalizeMetaLeadgenEvent(supabase, change.leadgenId, {
+    status: result.created ? 'ingested' : 'duplicate',
+    reason: null,
+    clinicId: integration.clinic_id,
+    integrationId: integration.id,
+    crmLeadId: result.leadId,
+    formId: change.formId ?? graphLead.formId,
+    adId: change.adId ?? graphLead.adId,
+    platform: change.platform,
   })
 
   return {
@@ -352,19 +480,15 @@ export async function processMetaLeadgenWebhook(
   let failed = 0
 
   for (const change of changes) {
-    try {
-      const result = await processLeadgenChange(supabase, change)
-      results.push(result)
-      if (result.skipped) skipped += 1
-      else if (result.duplicate) {
-        duplicates += 1
-        processed += 1
-      } else if (result.handled && result.created) processed += 1
-      else if (result.reason) failed += 1
-    } catch (error) {
-      // Repropaga falha temporária da Graph após o primeiro lead (Meta reenvia)
-      throw error
-    }
+    // Falha temporária da Graph propaga (Meta reenvia o webhook)
+    const result = await processLeadgenChange(supabase, change, { source: 'webhook' })
+    results.push(result)
+    if (result.skipped) skipped += 1
+    else if (result.duplicate) {
+      duplicates += 1
+      processed += 1
+    } else if (result.handled && result.created) processed += 1
+    else if (result.reason) failed += 1
   }
 
   return { results, processed, duplicates, skipped, failed }

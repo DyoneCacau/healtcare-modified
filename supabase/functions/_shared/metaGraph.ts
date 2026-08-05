@@ -1,8 +1,8 @@
 /**
- * Cliente mínimo da Graph API da Meta para o fluxo de conexão OAuth.
+ * Cliente mínimo da Graph API da Meta para OAuth, Página e Lead Ads.
  *
- * Não importa leads, não envia mensagens e não gerencia campanhas —
- * só autenticação, listagem de ativos e health-check do token.
+ * Autenticação, listagem de ativos, health-check, fetch de leadgen e Bulk Read.
+ * Tokens nunca são logados.
  */
 import { HttpError } from './httpError.ts'
 
@@ -343,6 +343,46 @@ export async function fetchMetaLeadById(
     adId: typeof data.ad_id === 'string' ? data.ad_id : null,
     fieldData,
   }
+}
+
+/** Lista formulários Lead Ads da Página (Bulk Read / App Review). */
+export async function listPageLeadgenForms(
+  pageId: string,
+  pageAccessToken: string,
+  limit = 25,
+): Promise<unknown> {
+  return metaGraphGet(`/${pageId}/leadgen_forms`, pageAccessToken, {
+    fields: 'id,name,status,leads_count',
+    limit: String(Math.min(Math.max(limit, 1), 50)),
+  })
+}
+
+/**
+ * Lista leads recentes de um formulário.
+ * filtering opcional por time_created (unix seconds).
+ */
+export async function listFormLeads(
+  formId: string,
+  pageAccessToken: string,
+  options?: {
+    limit?: number
+    sinceUnix?: number
+  },
+): Promise<unknown> {
+  const params: Record<string, string> = {
+    fields: 'id,created_time,ad_id,form_id',
+    limit: String(Math.min(Math.max(options?.limit ?? 25, 1), 100)),
+  }
+  if (options?.sinceUnix != null && Number.isFinite(options.sinceUnix)) {
+    params.filtering = JSON.stringify([
+      {
+        field: 'time_created',
+        operator: 'GREATER_THAN',
+        value: options.sinceUnix,
+      },
+    ])
+  }
+  return metaGraphGet(`/${formId}/leads`, pageAccessToken, params)
 }
 
 /** Health-check leve: confirma se o token ainda autentica. */

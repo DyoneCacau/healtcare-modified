@@ -141,3 +141,16 @@ describe('config lead_capture + SQL 30', () => {
     expect(SQL).toMatch(/idx_integrations_meta_page_id/);
   });
 });
+
+describe('origem CRM Lead Ads', () => {
+  it('mantém facebook|instagram + meta_origin (sem CHECK novo)', () => {
+    expect(resolveMetaLeadCrmSource('facebook')).toEqual({
+      crmSource: 'facebook',
+      originDetail: 'facebook_ads',
+    });
+    expect(resolveMetaLeadCrmSource('instagram')).toEqual({
+      crmSource: 'instagram',
+      originDetail: 'instagram_ads',
+    });
+  });
+});
