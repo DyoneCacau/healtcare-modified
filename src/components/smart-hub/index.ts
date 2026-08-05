@@ -54,4 +54,10 @@ export type {
   SocialNetworkId,
   ContactMethodId,
 } from './buttonIntentOptions';
+export {
+  ButtonIconPicker,
+  BUTTON_ICON_OPTIONS,
+  isKnownButtonIcon,
+  resolveButtonIconComponent,
+} from './buttonIconOptions';
 

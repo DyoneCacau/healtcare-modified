@@ -1,22 +1,10 @@
 import { memo, type MouseEvent } from 'react';
-import {
-  ExternalLink,
-  MessageCircle,
-  Phone,
-  Mail,
-  MapPin,
-  Instagram,
-  Facebook,
-  Youtube,
-  Globe,
-  Calendar,
-  Info,
-  Link2,
-} from 'lucide-react';
+import { ExternalLink } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import type { SmartHubButton } from '@/types/smartHub';
 import { buildDestinationUrl } from '@/services/smartHub/buttonDestinations';
 import { resolveDisplayTextColor } from '@/services/smartHub/imageUtils';
+import { resolveButtonIconComponent } from './buttonIconOptions';
 
 interface HubButtonProps {
   button: SmartHubButton;
@@ -30,31 +18,8 @@ interface HubButtonProps {
 }
 
 function TypeIcon({ type, className }: { type: string; className?: string }) {
-  const props = { className: cn('h-5 w-5 shrink-0', className) };
-  switch (type) {
-    case 'whatsapp':
-      return <MessageCircle {...props} />;
-    case 'phone':
-      return <Phone {...props} />;
-    case 'email':
-      return <Mail {...props} />;
-    case 'map':
-      return <MapPin {...props} />;
-    case 'instagram':
-      return <Instagram {...props} />;
-    case 'facebook':
-      return <Facebook {...props} />;
-    case 'youtube':
-      return <Youtube {...props} />;
-    case 'site':
-      return <Globe {...props} />;
-    case 'appointment':
-      return <Calendar {...props} />;
-    case 'info':
-      return <Info {...props} />;
-    default:
-      return <Link2 {...props} />;
-  }
+  const Icon = resolveButtonIconComponent(type);
+  return <Icon className={cn('h-5 w-5 shrink-0', className)} />;
 }
 
 export const HubButton = memo(function HubButton({

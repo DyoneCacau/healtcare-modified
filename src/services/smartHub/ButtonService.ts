@@ -5,6 +5,7 @@ import type {
   SmartHubButton,
   SmartHubButtonInsert,
   SmartHubButtonUpdate,
+  SmartHubClickAction,
 } from '@/types/smartHub';
 import { validateButtonInput } from './buttonUtils';
 
@@ -25,6 +26,7 @@ export const ButtonService = {
       title: payload.title,
       type: payload.type || 'link',
       url: payload.url,
+      click_action: (payload.click_action as SmartHubClickAction | undefined) ?? null,
     });
     if (!check.valid) throw new Error(check.error);
 
@@ -49,6 +51,7 @@ export const ButtonService = {
         title: payload.title?.trim() || 'Botão',
         type: payload.type,
         url: payload.url,
+        click_action: (payload.click_action as SmartHubClickAction | undefined) ?? null,
       });
       if (!check.valid) throw new Error(check.error);
     }
@@ -90,6 +93,11 @@ export const ButtonService = {
         order_index: button.order_index + 1,
         track_click: button.track_click,
         status: button.status,
+        click_action: button.click_action,
+        capture_config: button.capture_config,
+        visual_variant: button.visual_variant,
+        whatsapp_message: button.whatsapp_message,
+        image_alt: button.image_alt,
       },
       userId
     );

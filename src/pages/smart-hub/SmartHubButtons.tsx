@@ -10,6 +10,7 @@ import {
   FieldHint,
   ButtonEditorPreview,
   ContrastPairAlert,
+  ButtonIconPicker,
 } from '@/components/smart-hub';
 import {
   BUTTON_FIELD_HELP,
@@ -161,6 +162,7 @@ export default function SmartHubButtons() {
   const [socialNetwork, setSocialNetwork] = useState<SocialNetworkId>('instagram');
   const [contactMethod, setContactMethod] = useState<ContactMethodId>('form');
   const [advancedOpen, setAdvancedOpen] = useState(false);
+  const [technicalOpen, setTechnicalOpen] = useState(false);
 
   const effectiveAction = resolveClickAction(form.click_action, form.type);
   const availableActions = useMemo(() => {
@@ -279,6 +281,7 @@ export default function SmartHubButtons() {
     setSocialNetwork('instagram');
     setContactMethod(defaultMethod);
     setAdvancedOpen(false);
+    setTechnicalOpen(false);
     setForm({
       ...emptyForm,
       order_index: buttons.length,
@@ -306,6 +309,7 @@ export default function SmartHubButtons() {
     setSocialNetwork(inferred.socialNetwork || 'instagram');
     setContactMethod(inferred.contactMethod || (hasCrm ? 'form' : 'link'));
     setAdvancedOpen(unlocked);
+    setTechnicalOpen(false);
     setForm({
       title: btn.title,
       subtitle: btn.subtitle || '',
@@ -956,7 +960,10 @@ export default function SmartHubButtons() {
         />
       </div>
 
-      <ButtonEditorPreview model={previewModel} showActualColors />
+      {/* Prévia no mobile fica abaixo; no desktop é renderizada na coluna direita do Dialog. */}
+      <div className="lg:hidden">
+        <ButtonEditorPreview model={previewModel} showActualColors />
+      </div>
 
       <Collapsible open={advancedOpen} onOpenChange={setAdvancedOpen}>
         <div className="rounded-lg border px-3 py-2">
@@ -1148,19 +1155,17 @@ export default function SmartHubButtons() {
             </div>
 
             <div className="space-y-2">
-              <FieldHelpLabel htmlFor="btn-icon" label="Ícone" help={BUTTON_FIELD_HELP.icon} />
-              <Input
-                id="btn-icon"
+              <FieldHelpLabel label="Ícone" help={BUTTON_FIELD_HELP.icon} />
+              <ButtonIconPicker
                 value={form.icon}
-                onChange={(e) => setForm((f) => ({ ...f, icon: e.target.value }))}
-                placeholder="message-circle, calendar, phone…"
+                onChange={(next) => setForm((f) => ({ ...f, icon: next }))}
               />
             </div>
 
-            {editing?.id ? (
-              <div className="space-y-2">
-                <FieldHelpLabel label="Imagem do botão" help={BUTTON_FIELD_HELP.image} />
-                {clinicId && hub && (
+            <div className="space-y-2">
+              <FieldHelpLabel label="Imagem do botão (opcional)" help={BUTTON_FIELD_HELP.image} />
+              {editing?.id && clinicId && hub ? (
+                <>
                   <SmartHubImageUpload
                     kind="button"
                     currentUrl={form.image || null}
@@ -1170,171 +1175,222 @@ export default function SmartHubButtons() {
                     onUpload={handleButtonImageUpload}
                     onRemove={handleButtonImageRemove}
                   />
-                )}
-                <div className="space-y-2">
-                  <FieldHelpLabel
-                    htmlFor="img-alt"
-                    label="Texto alternativo da imagem"
-                    help={BUTTON_FIELD_HELP.image_alt}
-                  />
-                  <Input
-                    id="img-alt"
-                    value={form.image_alt}
-                    onChange={(e) => setForm((f) => ({ ...f, image_alt: e.target.value }))}
-                  />
-                </div>
-              </div>
-            ) : (
-              <div className="space-y-2">
-                <FieldHelpLabel
-                  htmlFor="img-url"
-                  label="URL da imagem (opcional)"
-                  help={BUTTON_FIELD_HELP.image}
-                />
-                <Input
-                  id="img-url"
-                  value={form.image}
-                  onChange={(e) => setForm((f) => ({ ...f, image: e.target.value }))}
-                  placeholder="https://… ou envie após salvar"
-                />
-                <FieldHint>Após criar o botão, edite-o para enviar pelo upload.</FieldHint>
-              </div>
-            )}
-
-            <div className="space-y-3">
-              <p className="text-sm font-medium">Configuração técnica</p>
-              <p className="text-xs text-muted-foreground">{BUTTON_FIELD_HELP.advanced_type}</p>
-              {!customActions && buttonIntent !== 'advanced' ? (
-                <div className="space-y-3 rounded-md border bg-muted/20 px-3 py-3 text-sm">
-                  <div className="space-y-0.5">
-                    <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
-                      Tipo técnico
-                    </p>
-                    <p className="font-medium">
-                      {SMART_HUB_BUTTON_TYPE_LABELS[form.type] || form.type}
-                    </p>
-                  </div>
-                  <div className="space-y-0.5">
-                    <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
-                      Ação ao clicar
-                    </p>
-                    <p className="font-medium">
-                      {SMART_HUB_CLICK_ACTION_LABELS[form.click_action] || form.click_action}
-                    </p>
-                  </div>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    onClick={() => {
-                      setCustomActions(true);
-                      setAdvancedOpen(true);
-                    }}
-                  >
-                    Alterar configuração técnica
-                  </Button>
-                </div>
-              ) : (
-                <>
                   <div className="space-y-2">
-                    <FieldHelpLabel label="Tipo técnico" help={BUTTON_FIELD_HELP.type_tooltip} />
-                    <Select
-                      value={form.type}
-                      onValueChange={(v) => {
-                        const nextType = v as SmartHubButtonType;
-                        const keepAction =
-                          customActions ||
-                          (actionManuallySet && isActionCompatible(nextType, form.click_action));
-                        const nextAction = keepAction
-                          ? form.click_action
-                          : getRecommendedAction(nextType);
-                        if (!keepAction && actionManuallySet) {
-                          setActionManuallySet(false);
-                        }
-                        const inferred = inferButtonIntent(nextType, nextAction, { hasCrm });
-                        setButtonIntent(inferred.intent);
-                        if (inferred.socialNetwork) setSocialNetwork(inferred.socialNetwork);
-                        if (inferred.contactMethod) setContactMethod(inferred.contactMethod);
-                        setForm((f) => ({ ...f, type: nextType, click_action: nextAction }));
-                      }}
-                    >
-                      <SelectTrigger>
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent position="popper" className="max-h-72">
-                        {BUTTON_TYPES.map((t) => (
-                          <SelectItem key={t} value={t}>
-                            {SMART_HUB_BUTTON_TYPE_LABELS[t]}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                    {form.type === 'internal' ? (
-                      <FieldHint>{BUTTON_FIELD_HELP.type_internal}</FieldHint>
-                    ) : null}
+                    <FieldHelpLabel
+                      htmlFor="img-alt"
+                      label="Texto alternativo da imagem"
+                      help={BUTTON_FIELD_HELP.image_alt}
+                    />
+                    <Input
+                      id="img-alt"
+                      value={form.image_alt}
+                      onChange={(e) => setForm((f) => ({ ...f, image_alt: e.target.value }))}
+                    />
                   </div>
+                </>
+              ) : (
+                <div className="space-y-2 rounded-md border border-dashed bg-muted/20 px-3 py-3">
+                  <p className="text-sm text-muted-foreground">
+                    Salve o botão primeiro para enviar uma imagem pelo upload.
+                  </p>
+                  <Button type="button" variant="outline" size="sm" disabled>
+                    Adicionar imagem após salvar
+                  </Button>
+                  {form.image ? (
+                    <div className="space-y-2 pt-1">
+                      <img
+                        src={form.image}
+                        alt={form.image_alt || form.title || 'Prévia da imagem'}
+                        className="h-16 w-16 rounded-md border object-cover"
+                      />
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        className="h-auto px-0 text-destructive"
+                        onClick={() => setForm((f) => ({ ...f, image: '', image_alt: '' }))}
+                      >
+                        Remover imagem
+                      </Button>
+                    </div>
+                  ) : null}
+                </div>
+              )}
+            </div>
+
+            <Collapsible open={technicalOpen} onOpenChange={setTechnicalOpen}>
+              <div className="rounded-md border px-3 py-2">
+                <CollapsibleTrigger asChild>
+                  <button
+                    type="button"
+                    className="flex w-full items-center justify-between gap-2 text-left text-sm font-medium"
+                  >
+                    Configuração técnica
+                    {technicalOpen ? (
+                      <ChevronUp className="h-4 w-4 shrink-0" />
+                    ) : (
+                      <ChevronDown className="h-4 w-4 shrink-0" />
+                    )}
+                  </button>
+                </CollapsibleTrigger>
+                <CollapsibleContent className="mt-3 space-y-5 border-t pt-3">
+                  <p className="text-xs text-muted-foreground">{BUTTON_FIELD_HELP.advanced_type}</p>
+                  {!customActions && buttonIntent !== 'advanced' ? (
+                    <div className="space-y-3 rounded-md border bg-muted/20 px-3 py-3 text-sm">
+                      <div className="space-y-0.5">
+                        <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+                          Tipo técnico
+                        </p>
+                        <p className="font-medium">
+                          {SMART_HUB_BUTTON_TYPE_LABELS[form.type] || form.type}
+                        </p>
+                      </div>
+                      <div className="space-y-0.5">
+                        <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+                          Ação ao clicar
+                        </p>
+                        <p className="font-medium">
+                          {SMART_HUB_CLICK_ACTION_LABELS[form.click_action] || form.click_action}
+                        </p>
+                      </div>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={() => {
+                          setCustomActions(true);
+                          setAdvancedOpen(true);
+                          setTechnicalOpen(true);
+                        }}
+                      >
+                        Alterar configuração técnica
+                      </Button>
+                    </div>
+                  ) : (
+                    <>
+                      <div className="space-y-2">
+                        <FieldHelpLabel label="Tipo técnico" help={BUTTON_FIELD_HELP.type_tooltip} />
+                        <Select
+                          value={form.type}
+                          onValueChange={(v) => {
+                            const nextType = v as SmartHubButtonType;
+                            const keepAction =
+                              customActions ||
+                              (actionManuallySet &&
+                                isActionCompatible(nextType, form.click_action));
+                            const nextAction = keepAction
+                              ? form.click_action
+                              : getRecommendedAction(nextType);
+                            if (!keepAction && actionManuallySet) {
+                              setActionManuallySet(false);
+                            }
+                            const inferred = inferButtonIntent(nextType, nextAction, { hasCrm });
+                            setButtonIntent(inferred.intent);
+                            if (inferred.socialNetwork) setSocialNetwork(inferred.socialNetwork);
+                            if (inferred.contactMethod) setContactMethod(inferred.contactMethod);
+                            setForm((f) => ({
+                              ...f,
+                              type: nextType,
+                              click_action: nextAction,
+                            }));
+                          }}
+                        >
+                          <SelectTrigger>
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent position="popper" className="max-h-72">
+                            {BUTTON_TYPES.map((t) => (
+                              <SelectItem key={t} value={t}>
+                                {SMART_HUB_BUTTON_TYPE_LABELS[t]}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                        {form.type === 'internal' ? (
+                          <FieldHint>{BUTTON_FIELD_HELP.type_internal}</FieldHint>
+                        ) : null}
+                      </div>
+
+                      <div className="space-y-2">
+                        <FieldHelpLabel
+                          label="Ação ao clicar (técnica)"
+                          help={BUTTON_FIELD_HELP.click_action}
+                        />
+                        <Select
+                          value={
+                            availableActions.includes(form.click_action)
+                              ? form.click_action
+                              : availableActions[0] || form.click_action
+                          }
+                          onValueChange={(v) => {
+                            const nextAction = v as SmartHubClickAction;
+                            setActionManuallySet(true);
+                            setForm((f) => ({ ...f, click_action: nextAction }));
+                            const inferred = inferButtonIntent(form.type, nextAction, { hasCrm });
+                            setButtonIntent(inferred.intent);
+                            if (inferred.contactMethod) setContactMethod(inferred.contactMethod);
+                          }}
+                        >
+                          <SelectTrigger>
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent position="popper" className="max-h-72">
+                            {availableActions.map((a) => (
+                              <SelectItem key={a} value={a} disabled={a === 'form' && !hasCrm}>
+                                {SMART_HUB_CLICK_ACTION_LABELS[a]}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                        {actionIsSuggested ? (
+                          <FieldHint>{BUTTON_FIELD_HELP.action_suggested}</FieldHint>
+                        ) : (
+                          <FieldHint>{actionHelp.description}</FieldHint>
+                        )}
+                        <div className="flex items-center justify-between gap-2 rounded-md border px-3 py-2">
+                          <div className="min-w-0 space-y-0.5">
+                            <p className="text-sm font-medium">Configuração personalizada</p>
+                            <p className="text-xs text-muted-foreground">
+                              {BUTTON_FIELD_HELP.action_custom}
+                            </p>
+                          </div>
+                          <Switch
+                            checked={customActions}
+                            onCheckedChange={(v) => {
+                              setCustomActions(v);
+                              if (!v && !isActionCompatible(form.type, form.click_action)) {
+                                setActionManuallySet(false);
+                                setForm((f) => ({
+                                  ...f,
+                                  click_action: getRecommendedAction(f.type),
+                                }));
+                              }
+                            }}
+                          />
+                        </div>
+                      </div>
+                    </>
+                  )}
 
                   <div className="space-y-2">
                     <FieldHelpLabel
-                      label="Ação ao clicar (técnica)"
-                      help={BUTTON_FIELD_HELP.click_action}
+                      htmlFor="img-url-advanced"
+                      label="URL da imagem (avançado)"
+                      help={BUTTON_FIELD_HELP.image}
                     />
-                    <Select
-                      value={
-                        availableActions.includes(form.click_action)
-                          ? form.click_action
-                          : availableActions[0] || form.click_action
-                      }
-                      onValueChange={(v) => {
-                        const nextAction = v as SmartHubClickAction;
-                        setActionManuallySet(true);
-                        setForm((f) => ({ ...f, click_action: nextAction }));
-                        const inferred = inferButtonIntent(form.type, nextAction, { hasCrm });
-                        setButtonIntent(inferred.intent);
-                        if (inferred.contactMethod) setContactMethod(inferred.contactMethod);
-                      }}
-                    >
-                      <SelectTrigger>
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent position="popper" className="max-h-72">
-                        {availableActions.map((a) => (
-                          <SelectItem key={a} value={a} disabled={a === 'form' && !hasCrm}>
-                            {SMART_HUB_CLICK_ACTION_LABELS[a]}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                    {actionIsSuggested ? (
-                      <FieldHint>{BUTTON_FIELD_HELP.action_suggested}</FieldHint>
-                    ) : (
-                      <FieldHint>{actionHelp.description}</FieldHint>
-                    )}
-                    <div className="flex items-center justify-between gap-2 rounded-md border px-3 py-2">
-                      <div className="min-w-0 space-y-0.5">
-                        <p className="text-sm font-medium">Configuração personalizada</p>
-                        <p className="text-xs text-muted-foreground">
-                          {BUTTON_FIELD_HELP.action_custom}
-                        </p>
-                      </div>
-                      <Switch
-                        checked={customActions}
-                        onCheckedChange={(v) => {
-                          setCustomActions(v);
-                          if (!v && !isActionCompatible(form.type, form.click_action)) {
-                            setActionManuallySet(false);
-                            setForm((f) => ({
-                              ...f,
-                              click_action: getRecommendedAction(f.type),
-                            }));
-                          }
-                        }}
-                      />
-                    </div>
+                    <Input
+                      id="img-url-advanced"
+                      value={form.image}
+                      onChange={(e) => setForm((f) => ({ ...f, image: e.target.value }))}
+                      placeholder="Somente se precisar colar uma URL existente"
+                    />
+                    <FieldHint>
+                      Preferível usar o upload acima. Este campo é só para casos técnicos.
+                    </FieldHint>
                   </div>
-                </>
-              )}
-            </div>
+                </CollapsibleContent>
+              </div>
+            </Collapsible>
           </CollapsibleContent>
         </div>
       </Collapsible>
@@ -1436,7 +1492,7 @@ export default function SmartHubButtons() {
         <DialogContent
           className={cn(
             'flex max-h-[min(92vh,100dvh)] flex-col gap-0 overflow-hidden p-0',
-            'w-[calc(100vw-1.5rem)] sm:max-w-lg'
+            'w-[calc(100vw-1.5rem)] max-w-lg sm:max-w-3xl lg:max-w-4xl'
           )}
         >
           <DialogHeader className="shrink-0 space-y-1 border-b px-4 py-3 text-left sm:px-5 sm:py-4">
@@ -1447,7 +1503,12 @@ export default function SmartHubButtons() {
           </DialogHeader>
 
           <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 py-4 sm:px-5">
-            {formFields}
+            <div className="flex flex-col gap-5 lg:grid lg:grid-cols-[minmax(0,1.85fr)_minmax(0,1fr)] lg:items-start lg:gap-6">
+              <div className="min-w-0">{formFields}</div>
+              <div className="hidden min-w-0 lg:sticky lg:top-0 lg:block lg:self-start">
+                <ButtonEditorPreview model={previewModel} showActualColors />
+              </div>
+            </div>
           </div>
 
           <DialogFooter

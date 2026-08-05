@@ -1,4 +1,4 @@
-import type { SmartHubButtonType, SmartHubStatus } from '@/types/smartHub';
+import type { SmartHubButtonType, SmartHubClickAction, SmartHubStatus } from '@/types/smartHub';
 import { SMART_HUB_STATUS_LABELS as STATUS_LABELS_FROM_TYPES } from '@/types/smartHub';
 import { buildDestinationUrl } from './buttonDestinations';
 
@@ -74,34 +74,82 @@ export function buildButtonHref(
   return buildDestinationUrl(type, raw, whatsappMessage, emailSubject);
 }
 
+/**
+ * Destino externo (URL/telefone) não é necessário para fluxos internos:
+ * formulário, agendamento online (booking) e info.
+ * Com click_action `auto`, appointment/procedure/form/info seguem o padrão sem URL.
+ */
+export function buttonRequiresDestination(
+  type: SmartHubButtonType,
+  clickAction?: SmartHubClickAction | null
+): boolean {
+  const action = clickAction && clickAction !== 'auto' ? clickAction : null;
+
+  if (action === 'form' || action === 'booking' || action === 'info') {
+    return false;
+  }
+
+  if (!action) {
+    if (type === 'info' || type === 'form') return false;
+    // Padrão de appointment/procedure = formulário (sem URL externa).
+    if (type === 'appointment' || type === 'procedure') return false;
+  }
+
+  return true;
+}
+
 export function validateButtonInput(input: {
   title: string;
   type: SmartHubButtonType;
   url?: string | null;
+  click_action?: SmartHubClickAction | null;
 }): { valid: boolean; error?: string } {
   if (!input.title.trim()) {
     return { valid: false, error: 'Informe o título do botão.' };
   }
-  if (input.type === 'info') {
+
+  if (!buttonRequiresDestination(input.type, input.click_action)) {
     return { valid: true };
   }
+
   if (!input.url?.trim()) {
     return { valid: false, error: 'Informe o destino do botão.' };
   }
   if (isUnsafeUrl(input.url)) {
     return { valid: false, error: 'Este link não é permitido.' };
   }
-  if (input.type === 'email' && !isValidEmail(input.url.replace(/^mailto:/i, ''))) {
+  if (
+    (input.type === 'email' || input.click_action === 'email') &&
+    !isValidEmail(input.url.replace(/^mailto:/i, ''))
+  ) {
     return { valid: false, error: 'Informe um e-mail válido.' };
   }
-  if (input.type === 'whatsapp') {
+  if (input.type === 'whatsapp' || input.click_action === 'whatsapp') {
     const digits = digitsOnly(input.url);
     const isWaLink = input.url.includes('wa.me') || input.url.includes('whatsapp');
     if (!isWaLink && digits.length < 10) {
       return { valid: false, error: 'Informe um WhatsApp válido com DDI e DDD.' };
     }
   }
-  if (['site', 'link', 'map', 'youtube', 'facebook', 'appointment', 'procedure'].includes(input.type)) {
+
+  const resolvedAction =
+    input.click_action && input.click_action !== 'auto' ? input.click_action : null;
+  const skipHttpUrlCheck =
+    resolvedAction === 'whatsapp' ||
+    resolvedAction === 'phone' ||
+    resolvedAction === 'email' ||
+    input.type === 'whatsapp' ||
+    input.type === 'phone' ||
+    input.type === 'email';
+
+  if (
+    !skipHttpUrlCheck &&
+    (resolvedAction === 'link' ||
+      resolvedAction === 'map' ||
+      ['site', 'link', 'map', 'youtube', 'facebook', 'appointment', 'procedure'].includes(
+        input.type
+      ))
+  ) {
     try {
       const href = buildButtonHref(input.type, input.url);
       if (!href) return { valid: false, error: 'URL inválida.' };
