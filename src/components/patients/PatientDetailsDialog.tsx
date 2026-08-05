@@ -39,8 +39,11 @@ import { usePatientEvolutions } from '@/hooks/usePatientEvolutions';
 import { usePatientFileMutations, usePatientFiles } from '@/hooks/usePatientFiles';
 import { useAppointmentMaterials } from '@/hooks/useProcedureMaterials';
 import { formatQuantity } from '@/lib/quantityInput';
-import { format, parseISO, differenceInYears } from 'date-fns';
-import { ptBR } from 'date-fns/locale';
+import {
+  formatOptionalAge,
+  formatOptionalDate,
+  formatOptionalText,
+} from '@/lib/optionalDate';
 
 interface PatientDetailsDialogProps {
   open: boolean;
@@ -100,7 +103,8 @@ export const PatientDetailsDialog = ({
     }
   };
 
-  const age = differenceInYears(new Date(), parseISO(patient.birthDate));
+  const ageLabel = formatOptionalAge(patient.birthDate);
+  const cpfLabel = formatOptionalText(patient.cpf);
   const completedAppointments = appointments.filter((a) => a.status === 'completed').length;
   const upcomingAppointments = appointments.filter(
     (a) => a.status === 'confirmed' || a.status === 'pending'
@@ -135,7 +139,9 @@ export const PatientDetailsDialog = ({
             <div className="min-w-0 flex-1">
               <DialogTitle className="text-xl leading-normal break-words">{patient.name}</DialogTitle>
               <p className="text-muted-foreground">
-                {age} anos - CPF: {patient.cpf}
+                {ageLabel === 'Não informado'
+                  ? `Idade não informada • CPF: ${cpfLabel}`
+                  : `${ageLabel} • CPF: ${cpfLabel}`}
               </p>
             </div>
             <Badge
@@ -181,15 +187,15 @@ export const PatientDetailsDialog = ({
                 <CardContent className="space-y-3">
                   <div className="flex items-center gap-3">
                     <Phone className="h-4 w-4 text-muted-foreground" />
-                    <span>{patient.phone}</span>
+                    <span>{formatOptionalText(patient.phone)}</span>
                   </div>
                   <div className="flex items-center gap-3">
                     <Mail className="h-4 w-4 text-muted-foreground" />
-                    <span>{patient.email || 'Não informado'}</span>
+                    <span>{formatOptionalText(patient.email)}</span>
                   </div>
                   <div className="flex items-start gap-3">
                     <MapPin className="h-4 w-4 text-muted-foreground mt-0.5" />
-                    <span>{patient.address || 'Não informado'}</span>
+                    <span>{formatOptionalText(patient.address)}</span>
                   </div>
                 </CardContent>
               </Card>
@@ -205,20 +211,21 @@ export const PatientDetailsDialog = ({
                     <Calendar className="h-4 w-4 text-muted-foreground" />
                     <span>
                       Nascimento:{' '}
-                      {format(parseISO(patient.birthDate), "dd 'de' MMMM 'de' yyyy", {
-                        locale: ptBR,
-                      })}
+                      {formatOptionalDate(
+                        patient.birthDate,
+                        "dd 'de' MMMM 'de' yyyy"
+                      )}
                     </span>
                   </div>
                   <div className="flex items-center gap-3">
                     <User className="h-4 w-4 text-muted-foreground" />
-                    <span>Idade: {age} anos</span>
+                    <span>Idade: {ageLabel}</span>
                   </div>
                   <div className="flex items-center gap-3">
                     <Calendar className="h-4 w-4 text-muted-foreground" />
                     <span>
                       Cadastro:{' '}
-                      {format(parseISO(patient.createdAt), "dd/MM/yyyy", { locale: ptBR })}
+                      {formatOptionalDate(patient.createdAt, 'dd/MM/yyyy')}
                     </span>
                   </div>
                   {patient.leadSource && (
@@ -291,7 +298,7 @@ export const PatientDetailsDialog = ({
 
             <TabsContent value="clinical" className="mt-0 space-y-4">
             <div className="space-y-4">
-              {patient.allergies.length > 0 && (
+              {Array.isArray(patient.allergies) && patient.allergies.length > 0 && (
                 <Card className="border-destructive/50">
                   <CardHeader className="pb-2">
                     <CardTitle className="text-sm font-medium leading-normal flex items-center gap-2 text-destructive">
@@ -385,9 +392,7 @@ export const PatientDetailsDialog = ({
                                     </div>
                                     <div className="shrink-0 text-right text-sm">
                                       <p className="font-medium">
-                                        {format(parseISO(appointment.date), "dd 'de' MMM", {
-                                          locale: ptBR,
-                                        })}
+                                        {formatOptionalDate(appointment.date, "dd 'de' MMM")}
                                       </p>
                                       <p className="text-muted-foreground">{appointment.time}</p>
                                     </div>
@@ -429,9 +434,7 @@ export const PatientDetailsDialog = ({
                                 </div>
                                 <div className="shrink-0 text-right text-sm">
                                   <p className="font-medium">
-                                    {format(parseISO(proc.date), "dd 'de' MMM", {
-                                      locale: ptBR,
-                                    })}
+                                    {formatOptionalDate(proc.date, "dd 'de' MMM")}
                                   </p>
                                 </div>
                               </div>
