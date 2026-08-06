@@ -12,7 +12,7 @@ import {
 } from "@/components/ui/popover";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { cn, getClinicDisplayName } from "@/lib/utils";
-import { formatNotificationMessageForDisplay } from "@/lib/notificationMessage";
+import { formatNotificationMessageForDisplay, buildAgendaFocusPath } from "@/lib/notificationMessage";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { useSubscription } from "@/hooks/useSubscription";
@@ -212,7 +212,9 @@ export function NotificationBell({ collapsed }: NotificationBellProps) {
         logNotificationError("Marcação de notificação como lida", error);
       }
     }
-    if (n.type === "appointment_created" && n.reference_id) navigate("/agenda");
+    if (n.type === "appointment_created" && n.reference_id) {
+      navigate(buildAgendaFocusPath(n.reference_id, n.clinic_id));
+    }
     if (n.type === "payment_confirmed" || n.type === "payment_overdue" || n.type === "clinic_created") {
       navigate("/billing");
     }
@@ -361,6 +363,9 @@ export function NotificationBell({ collapsed }: NotificationBellProps) {
                       {formatNotificationMessageForDisplay(n.message)}
                     </p>
                   )}
+                  {n.type === "appointment_created" && n.reference_id ? (
+                    <p className="mt-1 text-[11px] font-medium text-primary">Visualizar</p>
+                  ) : null}
                   <p className="mt-1 text-[11px] text-muted-foreground/70">
                     {formatDistanceToNow(new Date(n.created_at), { addSuffix: true, locale: ptBR })}
                   </p>

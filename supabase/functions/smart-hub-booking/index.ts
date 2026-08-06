@@ -845,6 +845,52 @@ async function handleConfirm(
     throw new HttpError(500, 'Erro ao registrar lead do agendamento', 'internal_error')
   }
 
+  // Notificação interna (fail-soft). Só no create real — retry idempotente não chega aqui.
+  try {
+    const dateLabel = (() => {
+      const [y, m, d] = date.split('-')
+      if (!y || !m || !d) return date
+      return `${d}/${m}/${y}`
+    })()
+    const timeLabel = normalizeTime(startTime)
+    const notifyMessage = `${patientName} agendou ${procedure.name} com ${professional.name} para ${dateLabel} às ${timeLabel}.`
+    // Nome/procedimento/profissional: procedure e professional vêm do banco
+    // (assertProcedure/assertProfessional). patientName já sanitizado no confirm.
+    const { error: notifyError } = await supabase.rpc(
+      'notify_clinic_users_on_smart_hub_booking',
+      {
+        p_clinic_id: hub.clinic_id,
+        p_title: 'Novo agendamento online',
+        p_message: notifyMessage,
+        p_reference_id: appointmentId,
+        p_metadata: {
+          clinic_id: hub.clinic_id,
+          appointment_id: appointmentId,
+          patient_id: patientId,
+          professional_id: professional.id,
+          date,
+          start_time: startTime,
+          source: 'smart_hub',
+        },
+      },
+    )
+    if (notifyError) {
+      logBooking('warn', {
+        step: 'notify_clinic',
+        request_id: requestId,
+        // Sem PII: só códigos técnicos
+        message: notifyError.message,
+        code: notifyError.code,
+      })
+    }
+  } catch (notifyErr) {
+    logBooking('warn', {
+      step: 'notify_clinic',
+      request_id: requestId,
+      message: notifyErr instanceof Error ? notifyErr.message : 'notify_failed',
+    })
+  }
+
   return json(
     req,
     {

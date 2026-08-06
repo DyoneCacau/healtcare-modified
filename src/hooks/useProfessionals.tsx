@@ -19,8 +19,11 @@ export interface ProfessionalData {
   updated_at: string;
 }
 
-export function useProfessionals() {
-  const { clinicId } = useClinic();
+export function useProfessionals(overrideClinicId?: string | null) {
+  const { clinicId: sidebarClinicId } = useClinic();
+  const clinicId = overrideClinicId !== undefined && overrideClinicId !== null
+    ? overrideClinicId || null
+    : sidebarClinicId;
   const { data: professionals, isLoading, error, refetch } = useQuery({
     queryKey: ['professionals', clinicId],
     queryFn: async () => {

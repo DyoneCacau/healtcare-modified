@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect } from 'react';
+import { useState, useMemo, useEffect, useRef } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { format, parseISO, startOfWeek, endOfWeek, startOfMonth, endOfMonth } from 'date-fns';
 import { Plus, Clock } from 'lucide-react';
@@ -30,6 +30,7 @@ import { prepareAgendaWhatsAppMessage } from '@/utils/whatsapp';
 import { remainingAfterBookingFee } from '@/lib/bookingFee';
 import { useProcedureMaterialMutations } from '@/hooks/useProcedureMaterials';
 import type { AppointmentMaterialUsageInput } from '@/types/procedureMaterial';
+import { resolveAgendaFocusTarget } from '@/lib/agendaClinicLock';
 
 export default function Agenda() {
   const [searchParams, setSearchParams] = useSearchParams();
@@ -48,6 +49,7 @@ export default function Agenda() {
   const [prefillNotes, setPrefillNotes] = useState('');
   const [crmLeadId, setCrmLeadId] = useState<string | null>(null);
   const [crmTargetStage, setCrmTargetStage] = useState<'scheduled' | 'won'>('scheduled');
+  const handledFocusKeyRef = useRef<string | null>(null);
   const [prefillSlotDate, setPrefillSlotDate] = useState<Date | null>(null);
   const [prefillSlotStartTime, setPrefillSlotStartTime] = useState<string | null>(null);
   const [completeDialogOpen, setCompleteDialogOpen] = useState(false);
@@ -163,6 +165,7 @@ export default function Agenda() {
       referralName: apt.referral_name ?? undefined,
       bookingFee: apt.booking_fee ?? undefined,
       bookingFeePaymentMethod: apt.booking_fee_payment_method ?? undefined,
+      bookingIdempotencyKey: apt.booking_idempotency_key ?? null,
     }));
   }, [rawAppointments, clinic]);
 
@@ -347,30 +350,58 @@ export default function Agenda() {
     setEditMaterialsOpen(true);
   };
 
-  // Abrir direto um agendamento especifico (ex: clique em "Próximas Consultas"
-  // no Dashboard) já na tela de edição, ou já no fluxo de finalizar.
+  // Abrir direto um agendamento específico (notificação / dashboard).
+  // Abre uma vez, limpa a URL e valida acesso à clínica do registro.
   useEffect(() => {
     const focusId = searchParams.get('focusAppointmentId');
-    if (!focusId) return;
+    if (!focusId) {
+      handledFocusKeyRef.current = null;
+      return;
+    }
     if (isLoadingAppointments) return;
 
-    const target = appointments.find((apt) => apt.id === focusId);
+    const focusClinicId = searchParams.get('clinicId');
+    const focusAction = searchParams.get('focusAction');
+    const focusKey = `${focusId}:${focusClinicId || ''}`;
+    if (handledFocusKeyRef.current === focusKey) return;
+
+    const accessibleClinicIds = clinics.map((c) => c.id);
+    const resolved = resolveAgendaFocusTarget({
+      focusAppointmentId: focusId,
+      focusClinicId,
+      appointments,
+      accessibleClinicIds,
+    });
+
+    // Limpa params cedo para não reabrir em re-renders / back-forward.
+    handledFocusKeyRef.current = focusKey;
+    setSearchParams({}, { replace: true });
+
+    if (resolved.ok === false) {
+      if (resolved.reason === 'not_found') {
+        toast.error('Agendamento não encontrado');
+      } else if (resolved.reason === 'forbidden_clinic') {
+        toast.error('Você não tem acesso a este agendamento');
+      }
+      return;
+    }
+
+    const target = appointments.find((apt) => apt.id === resolved.appointment.id);
     if (!target) {
       toast.error('Agendamento não encontrado');
-      setSearchParams({}, { replace: true });
       return;
     }
 
     setSelectedDate(parseISO(target.date));
     setView('day');
-    if (searchParams.get('focusAction') === 'complete' && (target.status === 'pending' || target.status === 'confirmed')) {
+    setSelectedClinic(target.clinic.id);
+    if (focusAction === 'complete' && (target.status === 'pending' || target.status === 'confirmed')) {
       handleComplete(target);
     } else {
       handleEdit(target);
     }
-    setSearchParams({}, { replace: true });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [searchParams, appointments, isLoadingAppointments]);
+  }, [searchParams, appointments, isLoadingAppointments, clinics]);
 
   const handleCompleteConfirm = async (
     appointment: AgendaAppointment,
@@ -530,7 +561,8 @@ export default function Agenda() {
 
   const handleSave = async (data: Partial<AgendaAppointment>) => {
     if (data.id) {
-      // Edit existing
+      // Edição: NUNCA envia clinic_id — impede mover appointment entre unidades
+      // mesmo se o formulário tentar (Smart Hub locked ou payload adulterado).
       await updateAppointment.mutateAsync({
         id: data.id,
         patient_id: data.patientId,

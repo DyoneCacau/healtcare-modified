@@ -47,6 +47,8 @@ export interface AgendaAppointment {
   bookingFee?: number | null;
   /** Forma de pagamento da taxa (dinheiro, PIX, cartão). */
   bookingFeePaymentMethod?: 'cash' | 'pix' | 'credit' | 'debit' | null;
+  /** Presente só em bookings públicos do Smart Hub (idempotência). */
+  bookingIdempotencyKey?: string | null;
 }
 
 export type AgendaView = 'day' | 'week' | 'month';

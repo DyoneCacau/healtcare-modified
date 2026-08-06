@@ -40,8 +40,16 @@ import { LeadSourceLabel } from '@/components/crm/LeadSourceBadge';
 import { Clinic } from '@/types/clinic';
 import { usePatients } from '@/hooks/usePatients';
 import { useClinicProcedures } from '@/hooks/useClinicProcedures';
+import { useProfessionals } from '@/hooks/useProfessionals';
 import { PROCEDURE_OPTIONS } from '@/lib/procedures';
 import { DEFAULT_BOOKING_FEE } from '@/lib/bookingFee';
+import {
+  CLINIC_CHANGE_RESET_CONFIRM,
+  SMART_HUB_CLINIC_HINT,
+  isSmartHubOriginAppointment,
+  resolveClinicIdForSave,
+  shouldApplyClinicChange,
+} from '@/lib/agendaClinicLock';
 import { ProcedureMaterialsPreview } from '@/components/agenda/ProcedureMaterialsPreview';
 import { toast } from 'sonner';
 
@@ -132,8 +140,29 @@ export function AppointmentFormDialog({
   // as clinicas" na Agenda), o paciente nao aparece na lista e o campo some.
   const { patients } = usePatients(clinicId);
   const { activeProcedures, error: proceduresError } = useClinicProcedures(clinicId);
+  // Só consulta profissionais se a clínica do form é autorizada neste contexto
+  // (lista do seletor ou clínica original do appointment). RLS também restringe.
+  const professionalsClinicId =
+    clinicId &&
+    (clinics.some((c) => c.id === clinicId) || appointment?.clinic?.id === clinicId)
+      ? clinicId
+      : null;
+  const { activeProfessionals: clinicProfessionals } = useProfessionals(professionalsClinicId);
+
+  const formProfessionals: Professional[] = clinicProfessionals.map((p) => ({
+    id: p.id,
+    name: p.name,
+    specialty: p.specialty,
+    cro: p.cro,
+  }));
 
   const isEditing = !!appointment;
+  const clinicLocked =
+    isEditing &&
+    isSmartHubOriginAppointment({
+      leadSource: appointment?.leadSource ?? leadSource,
+      bookingIdempotencyKey: appointment?.bookingIdempotencyKey,
+    });
   const prevOpenRef = useRef(false);
 
   // Só carrega dados quando o diálogo ABRE (transição closed → open)
@@ -244,8 +273,18 @@ export function AppointmentFormDialog({
     }
 
     const patient = patients.find((p) => p.id === patientId);
-    const professional = professionals.find((p) => p.id === professionalId);
-    const clinic = clinics.find((c) => c.id === clinicId);
+    const professional =
+      formProfessionals.find((p) => p.id === professionalId) ||
+      professionals.find((p) => p.id === professionalId) ||
+      (appointment?.professional.id === professionalId ? appointment.professional : undefined);
+    const resolvedClinicId = resolveClinicIdForSave({
+      clinicLocked,
+      formClinicId: clinicId,
+      appointmentClinicId: appointment?.clinic?.id,
+    });
+    const clinic =
+      clinics.find((c) => c.id === resolvedClinicId) ||
+      (appointment?.clinic.id === resolvedClinicId ? appointment.clinic : undefined);
 
     if (!patient || !professional || !clinic) {
       toast.error('Dados inválidos');
@@ -342,14 +381,28 @@ export function AppointmentFormDialog({
   };
 
   const handleClinicChange = (value: string) => {
-    if (value !== clinicId) {
-      // Procedimentos pertencem à unidade. Ao trocar a clínica, evita
-      // gravar um procedure_id de outra unidade no novo agendamento.
-      setProcedure('');
-      setProcedureId(null);
-      setProcedurePrice(null);
-      setCustomProcedure('');
+    if (clinicLocked) return;
+    if (value === clinicId) return;
+
+    const hasDependentSelection = Boolean(professionalId || procedureId || procedure);
+    if (hasDependentSelection) {
+      const confirmed = window.confirm(CLINIC_CHANGE_RESET_CONFIRM);
+      if (
+        !shouldApplyClinicChange({
+          hasDependentSelection: true,
+          userConfirmed: confirmed,
+        })
+      ) {
+        return;
+      }
     }
+
+    // Procedimentos e profissionais pertencem à unidade.
+    setProcedure('');
+    setProcedureId(null);
+    setProcedurePrice(null);
+    setCustomProcedure('');
+    setProfessionalId('');
     setClinicId(value);
   };
 
@@ -433,7 +486,11 @@ export function AppointmentFormDialog({
 
             <div className="grid gap-2">
               <Label htmlFor="clinic">Clínica *</Label>
-              <Select value={clinicId} onValueChange={handleClinicChange}>
+              <Select
+                value={clinicId}
+                onValueChange={handleClinicChange}
+                disabled={clinicLocked}
+              >
                 <SelectTrigger>
                   <SelectValue placeholder="Selecione" />
                 </SelectTrigger>
@@ -443,8 +500,16 @@ export function AppointmentFormDialog({
                       {getClinicDisplayName(clinic)}
                     </SelectItem>
                   ))}
+                  {clinicId && !clinics.some((c) => c.id === clinicId) && appointment?.clinic ? (
+                    <SelectItem value={appointment.clinic.id}>
+                      {getClinicDisplayName(appointment.clinic)}
+                    </SelectItem>
+                  ) : null}
                 </SelectContent>
               </Select>
+              {clinicLocked ? (
+                <p className="text-xs text-muted-foreground">{SMART_HUB_CLINIC_HINT}</p>
+              ) : null}
             </div>
           </div>
 
@@ -496,12 +561,12 @@ export function AppointmentFormDialog({
                 <SelectValue placeholder="Selecione o profissional" />
               </SelectTrigger>
               <SelectContent>
-                {professionals.length === 0 ? (
+                {formProfessionals.length === 0 ? (
                   <SelectItem value="none" disabled>
                     Nenhum profissional cadastrado
                   </SelectItem>
                 ) : (
-                  professionals.map((prof) => (
+                  formProfessionals.map((prof) => (
                     <SelectItem key={prof.id} value={prof.id}>
                       {prof.name} - {prof.specialty}
                     </SelectItem>

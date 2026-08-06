@@ -30,6 +30,7 @@ Execute no SQL Editor, na ordem, apenas o que ainda não estiver aplicado:
 9. `PRODUCAO_38_SMART_HUB_CLICK_ACTION_BOOKING.sql`
 10. `PRODUCAO_39_PROFESSIONAL_PROCEDURES.sql`
 11. `PRODUCAO_40_SMART_HUB_PUBLIC_PAYLOAD.sql` (whitelist de `get_public_smart_hub`)
+12. `PRODUCAO_41_SMART_HUB_BOOKING_NOTIFY.sql` (notificação interna do booking)
 
 Pré-requisitos frequentes fora da cadeia Hub: procedimentos (`PRODUCAO_09` / `10`), módulos (`PRODUCAO_16`).
 

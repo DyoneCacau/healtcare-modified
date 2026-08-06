@@ -3302,6 +3302,7 @@ export type Database = {
           id: string
           is_read: boolean | null
           message: string | null
+          metadata: Record<string, unknown>
           reference_id: string | null
           title: string
           type: string
@@ -3313,6 +3314,7 @@ export type Database = {
           id?: string
           is_read?: boolean | null
           message?: string | null
+          metadata?: Record<string, unknown>
           reference_id?: string | null
           title: string
           type?: string
@@ -3324,6 +3326,7 @@ export type Database = {
           id?: string
           is_read?: boolean | null
           message?: string | null
+          metadata?: Record<string, unknown>
           reference_id?: string | null
           title?: string
           type?: string
@@ -3570,6 +3573,16 @@ export type Database = {
           p_title: string
         }
         Returns: undefined
+      }
+      notify_clinic_users_on_smart_hub_booking: {
+        Args: {
+          p_clinic_id: string
+          p_title: string
+          p_message: string
+          p_reference_id: string
+          p_metadata?: Record<string, unknown>
+        }
+        Returns: number
       }
       register_payment: {
         Args: {
