@@ -756,6 +756,11 @@ export default function SmartHubButtons() {
               </SelectItem>
             </SelectContent>
           </Select>
+          {!bookingEnabled ? (
+            <p className="text-xs text-muted-foreground">
+              Agendamento online desativado. Ative em Smart Hub → Configurações.
+            </p>
+          ) : null}
         </div>
       ) : null}
 

@@ -14,6 +14,7 @@ import { useSmartHub } from '@/hooks/useSmartHub';
 import { useHubButtons } from '@/hooks/useHubButtons';
 import { useClinic } from '@/hooks/useClinic';
 import { useAuth } from '@/hooks/useAuth';
+import { usePermissions } from '@/hooks/usePermissions';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -44,6 +45,9 @@ import {
   CaptureService,
   assertValidOwnerInput,
   normalizeOwnerUserId,
+  fetchBookingReadiness,
+  formatBookingReadinessChecklist,
+  type BookingReadinessItem,
 } from '@/services/smartHub';
 import {
   SMART_HUB_STYLE_PRESET_LABELS,
@@ -77,8 +81,12 @@ export default function SmartHubSettings() {
   const { clinicId } = useClinic();
   const { user } = useAuth();
   const { hasFeature } = useSubscription();
+  const { can, isLoading: permissionsLoading } = usePermissions();
   const { staff } = useClinicStaffOptions();
   const hasCrm = hasFeature('crm');
+  const hasAgenda = hasFeature('agenda');
+  const hasSmartHubModule = hasFeature('smart_hub');
+  const canEditHub = permissionsLoading ? false : can('smart_hub', 'can_edit');
   const {
     hub,
     theme,
@@ -116,6 +124,11 @@ export default function SmartHubSettings() {
   const [captureConfig, setCaptureConfig] = useState<SmartHubCaptureConfig>(
     defaultCaptureConfig()
   );
+  const [publicBookingEnabled, setPublicBookingEnabled] = useState(false);
+  const [bookingChecklist, setBookingChecklist] = useState<BookingReadinessItem[] | null>(
+    null
+  );
+  const [bookingCheckBusy, setBookingCheckBusy] = useState(false);
   const [previewDevice, setPreviewDevice] = useState<SmartHubPreviewDevice>('mobile');
   const [mobilePreviewOpen, setMobilePreviewOpen] = useState(false);
   const [imageBusy, setImageBusy] = useState(false);
@@ -142,6 +155,7 @@ export default function SmartHubSettings() {
     setContactAddress(hub.contact_address || '');
     setMapEmbedUrl(hub.map_embed_url || '');
     setCaptureConfig(mergeCaptureConfig(hub.capture_config));
+    setPublicBookingEnabled(hub.public_booking_enabled === true);
   }, [hub]);
 
   const previewPayload = useMemo((): PublicSmartHubPayload | null => {
@@ -171,6 +185,7 @@ export default function SmartHubSettings() {
         seo_title: seoTitle || null,
         seo_description: seoDescription || null,
         capture_config: captureConfig,
+        public_booking_enabled: publicBookingEnabled,
       },
       theme: theme
         ? {
@@ -209,6 +224,7 @@ export default function SmartHubSettings() {
     seoTitle,
     seoDescription,
     captureConfig,
+    publicBookingEnabled,
   ]);
 
   const patchVisual = (patch: Partial<SmartHubVisualConfig>) => {
@@ -317,39 +333,130 @@ export default function SmartHubSettings() {
   };
 
   const saveSettings = async () => {
+    if (!canEditHub) {
+      toast.error('Você não tem permissão para editar o Smart Hub.');
+      return;
+    }
     const ownerCheck = assertValidOwnerInput(captureConfig.default_owner_user_id);
     if (ownerCheck.ok === false) {
       toast.error(ownerCheck.message);
       return;
     }
+
+    const enablingBooking =
+      publicBookingEnabled === true && hub?.public_booking_enabled !== true;
+
+    if (enablingBooking) {
+      if (!clinicId) {
+        toast.error('Clínica não encontrada.');
+        return;
+      }
+      setBookingCheckBusy(true);
+      try {
+        const readiness = await fetchBookingReadiness({
+          clinicId,
+          hasSmartHubModule,
+          hasAgendaModule: hasAgenda,
+        });
+        setBookingChecklist(readiness.items);
+        if (!readiness.ok) {
+          setPublicBookingEnabled(false);
+          toast.error('Não é possível ativar o agendamento online.', {
+            description: formatBookingReadinessChecklist(readiness.items),
+          });
+          return;
+        }
+      } catch (err) {
+        setPublicBookingEnabled(hub?.public_booking_enabled === true);
+        toast.error(
+          err instanceof Error
+            ? err.message
+            : 'Não foi possível validar os requisitos do agendamento online.'
+        );
+        return;
+      } finally {
+        setBookingCheckBusy(false);
+      }
+    }
+
     const sanitizedCapture: SmartHubCaptureConfig = {
       ...captureConfig,
       default_owner_user_id: normalizeOwnerUserId(ownerCheck.owner),
       initial_stage: captureConfig.initial_stage || 'new',
     };
-    // Nome público e slug são enviados em campos separados — nunca sobrescrever um pelo outro.
-    await updateHub.mutateAsync({
-      title: title.trim(),
-      subtitle: subtitle || null,
-      description: description || null,
-      slug: slug.trim(),
-      seo_title: seoTitle || null,
-      seo_description: seoDescription || null,
-      logo_url: logoUrl || null,
-      banner_url: bannerUrl || null,
-      profile_url: profileUrl || null,
-      primary_color: primaryColor,
-      secondary_color: secondaryColor,
-      style_preset: stylePreset,
-      visual_config: visualConfig,
-      whatsapp_number: whatsappNumber || null,
-      contact_phone: contactPhone || null,
-      contact_email: contactEmail || null,
-      contact_address: contactAddress || null,
-      map_embed_url: mapEmbedUrl || null,
-      capture_config: sanitizedCapture,
-    });
-    await refreshHubQueries();
+
+    try {
+      // Nome público e slug são enviados em campos separados — nunca sobrescrever um pelo outro.
+      await updateHub.mutateAsync({
+        title: title.trim(),
+        subtitle: subtitle || null,
+        description: description || null,
+        slug: slug.trim(),
+        seo_title: seoTitle || null,
+        seo_description: seoDescription || null,
+        logo_url: logoUrl || null,
+        banner_url: bannerUrl || null,
+        profile_url: profileUrl || null,
+        primary_color: primaryColor,
+        secondary_color: secondaryColor,
+        style_preset: stylePreset,
+        visual_config: visualConfig,
+        whatsapp_number: whatsappNumber || null,
+        contact_phone: contactPhone || null,
+        contact_email: contactEmail || null,
+        contact_address: contactAddress || null,
+        map_embed_url: mapEmbedUrl || null,
+        capture_config: sanitizedCapture,
+        public_booking_enabled: publicBookingEnabled,
+      });
+      setBookingChecklist(null);
+      await refreshHubQueries();
+    } catch {
+      // Toast único vem de updateHub.onError; restaura o switch ao valor persistido.
+      setPublicBookingEnabled(hub?.public_booking_enabled === true);
+    }
+  };
+
+  const handlePublicBookingToggle = async (next: boolean) => {
+    if (!canEditHub) {
+      toast.error('Você não tem permissão para editar o Smart Hub.');
+      return;
+    }
+    if (!next) {
+      setPublicBookingEnabled(false);
+      setBookingChecklist(null);
+      return;
+    }
+    if (!clinicId) {
+      toast.error('Clínica não encontrada.');
+      return;
+    }
+    setBookingCheckBusy(true);
+    try {
+      const readiness = await fetchBookingReadiness({
+        clinicId,
+        hasSmartHubModule,
+        hasAgendaModule: hasAgenda,
+      });
+      setBookingChecklist(readiness.items);
+      if (!readiness.ok) {
+        setPublicBookingEnabled(false);
+        toast.error('Não é possível ativar o agendamento online.', {
+          description: formatBookingReadinessChecklist(readiness.items),
+        });
+        return;
+      }
+      setPublicBookingEnabled(true);
+    } catch (err) {
+      setPublicBookingEnabled(hub?.public_booking_enabled === true);
+      toast.error(
+        err instanceof Error
+          ? err.message
+          : 'Não foi possível validar os requisitos do agendamento online.'
+      );
+    } finally {
+      setBookingCheckBusy(false);
+    }
   };
 
   const previewBody = previewPayload ? (
@@ -705,6 +812,55 @@ export default function SmartHubSettings() {
 
       <div className="space-y-6 rounded-lg border bg-card p-4 sm:p-6">
         <div>
+          <h3 className="text-sm font-semibold">Agendamento online</h3>
+          <p className="text-xs text-muted-foreground">
+            Controle se o visitante pode marcar horários diretamente pela página pública.
+          </p>
+        </div>
+        <div className="flex items-start justify-between gap-3 rounded-lg border px-3 py-3">
+          <div className="space-y-1 pr-2">
+            <Label htmlFor="public_booking_enabled">
+              Permitir agendamento online pelo Smart Hub
+            </Label>
+            <p className="text-xs text-muted-foreground">
+              Permite que o visitante escolha procedimento, profissional, data e horário
+              disponíveis e confirme o agendamento diretamente na agenda da clínica.
+            </p>
+            {!publicBookingEnabled ? (
+              <p className="text-xs text-muted-foreground">
+                Com esta opção desligada, a opção “Agendamento online” fica indisponível no
+                editor de botões.
+              </p>
+            ) : null}
+            {!canEditHub ? (
+              <p className="text-xs text-amber-800">
+                Sua permissão atual não permite alterar esta configuração.
+              </p>
+            ) : null}
+          </div>
+          <Switch
+            id="public_booking_enabled"
+            checked={publicBookingEnabled}
+            disabled={!canEditHub || bookingCheckBusy || updateHub.isPending || imageBusy}
+            onCheckedChange={(v) => void handlePublicBookingToggle(v)}
+          />
+        </div>
+        {bookingChecklist ? (
+          <ul className="space-y-1 rounded-md border bg-muted/40 px-3 py-2 text-xs">
+            {bookingChecklist.map((item) => (
+              <li
+                key={item.id}
+                className={item.ok ? 'text-muted-foreground' : 'text-destructive'}
+              >
+                {item.ok ? '✓' : '✗'} {item.label}
+              </li>
+            ))}
+          </ul>
+        ) : null}
+      </div>
+
+      <div className="space-y-6 rounded-lg border bg-card p-4 sm:p-6">
+        <div>
           <h3 className="text-sm font-semibold">Formulário e CRM</h3>
           <p className="text-xs text-muted-foreground">
             Configure como os contatos recebidos pelos formulários serão organizados no CRM.
@@ -961,8 +1117,11 @@ export default function SmartHubSettings() {
       </div>
 
       <div className="flex flex-wrap gap-2">
-        <Button disabled={updateHub.isPending || imageBusy} onClick={() => void saveSettings()}>
-          Salvar configurações
+        <Button
+          disabled={!canEditHub || updateHub.isPending || imageBusy || bookingCheckBusy}
+          onClick={() => void saveSettings()}
+        >
+          {updateHub.isPending || bookingCheckBusy ? 'Salvando…' : 'Salvar configurações'}
         </Button>
         <Button
           type="button"

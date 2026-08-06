@@ -19,6 +19,19 @@ export * from './professionalProcedureEligibility';
 export { validatePublishReadiness } from './PublishService';
 export type { PublishValidationResult, PublishReadinessItem } from './PublishService';
 export {
+  evaluateBookingReadiness,
+  fetchBookingReadiness,
+  formatBookingReadinessChecklist,
+  isValidBookingDuration,
+  BOOKING_MIN_DURATION_MINUTES,
+  BOOKING_MAX_DURATION_MINUTES,
+} from './bookingReadiness';
+export type {
+  BookingReadinessItem,
+  BookingReadinessResult,
+  BookingReadinessSnapshot,
+} from './bookingReadiness';
+export {
   BookingService,
   BOOKING_PUBLIC_ERROR_MESSAGES,
   BOOKING_INITIAL_WINDOW_DAYS,

@@ -148,7 +148,8 @@ export const CONTACT_METHOD_ONLINE_BOOKING = {
   description:
     'Permite que o visitante escolha procedimento, profissional, data e horário disponíveis e confirme o agendamento diretamente na agenda da clínica.',
   badgeEnabled: null as string | null,
-  badgeDisabled: 'Em breve',
+  /** Exibido no editor quando public_booking_enabled = false. */
+  badgeDisabled: 'Desativado',
 };
 
 /** @deprecated Use CONTACT_METHOD_ONLINE_BOOKING — mantido para imports existentes. */

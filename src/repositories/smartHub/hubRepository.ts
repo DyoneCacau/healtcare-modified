@@ -284,6 +284,7 @@ function normalizePublicPayload(raw: unknown): PublicSmartHubPayload {
         hub?.capture_config && typeof hub.capture_config === 'object' && !Array.isArray(hub.capture_config)
           ? hub.capture_config
           : {},
+      public_booking_enabled: hub?.public_booking_enabled === true,
     },
     buttons: Array.isArray(data.buttons)
       ? data.buttons.map((b) => ({

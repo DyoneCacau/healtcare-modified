@@ -26,6 +26,11 @@ describe('Smart Hub Fase D — booking intent / editor gate', () => {
     expect(isPublicBookingEnabled(null)).toBe(false);
   });
 
+  it('badge do agendamento online não usa “Em breve”', () => {
+    expect(CONTACT_METHOD_ONLINE_BOOKING.badgeDisabled).toBe('Desativado');
+    expect(CONTACT_METHOD_ONLINE_BOOKING.badgeDisabled.toLowerCase()).not.toContain('breve');
+  });
+
   it('applyButtonIntent mapeia online_booking → click_action booking', () => {
     expect(
       applyButtonIntent('appointment', { contactMethod: 'online_booking' })
