@@ -32,6 +32,15 @@ export type {
   BookingReadinessSnapshot,
 } from './bookingReadiness';
 export {
+  buildPublicHubJson,
+  sanitizePublicCaptureConfig,
+  findForbiddenPublicKeys,
+  PUBLIC_HUB_ALLOWED_KEYS,
+  PUBLIC_HUB_FORBIDDEN_KEYS,
+  PUBLIC_CAPTURE_FORBIDDEN_KEYS,
+  PUBLIC_ASSET_FORBIDDEN_KEYS,
+} from './publicSmartHubContract';
+export {
   BookingService,
   BOOKING_PUBLIC_ERROR_MESSAGES,
   BOOKING_INITIAL_WINDOW_DAYS,

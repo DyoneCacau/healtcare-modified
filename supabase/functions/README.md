@@ -29,6 +29,8 @@ Asaas opcional por clínica. Mercado Pago permanece removido.
 | `integrations-webhook` | Webhook genérico de entrada por integração; cria lead no CRM | `SUPABASE_SERVICE_ROLE_KEY`, `APP_URL`, `META_APP_SECRET` (provedores Meta) |
 | `integrations-api` | API REST do tenant (leads, fluxos, logs) para n8n / Make / Zapier / ERPs | `SUPABASE_SERVICE_ROLE_KEY`, `APP_URL` |
 | `integrations-dispatch` | Ações do app: testar conexão, disparar fluxo, reprocessar webhook | `SUPABASE_SERVICE_ROLE_KEY`, `APP_URL` |
+| `smart-hub-capture` | Captação pública do Smart Hub → CRM (visitante anônimo) | `SUPABASE_SERVICE_ROLE_KEY`, `APP_URL` |
+| `smart-hub-booking` | Catálogo, disponibilidade e confirmação de agendamento online | `SUPABASE_SERVICE_ROLE_KEY`, `APP_URL` |
 
 ## Legado (não usar em vendas diretas)
 
@@ -66,6 +68,10 @@ supabase functions deploy integrations-dispatch
 supabase functions deploy meta-oauth --no-verify-jwt
 supabase functions deploy meta-connection
 supabase functions deploy meta-leadgen-webhook --no-verify-jwt
+
+# Smart Hub (visitante anônimo; clinic_id só pelo slug no banco)
+supabase functions deploy smart-hub-capture --no-verify-jwt
+supabase functions deploy smart-hub-booking --no-verify-jwt
 ```
 
 `integrations-webhook`, `integrations-api` e o callback de `meta-oauth` sobem

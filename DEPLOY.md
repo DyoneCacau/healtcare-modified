@@ -108,3 +108,26 @@ Antes do primeiro deploy público:
 A chave Asaas nunca deve usar prefixo `VITE_`, ser enviada ao navegador ou
 aparecer no repositório. A troca para produção só ocorre após a homologação,
 com uma chave nova configurada diretamente no Supabase.
+
+---
+
+## 9. Smart Hub (página pública, captação e agendamento online)
+
+O frontend do Hub sobe com o deploy da Vercel. SQL e Edge Functions são manuais.
+
+1. Execute no SQL Editor a cadeia Smart Hub na ordem documentada em
+   `docs/SMART_HUB_GO_LIVE.md` (inclui `PRODUCAO_36` … `PRODUCAO_40`).
+   **Atenção:** existem `PRODUCAO_29` e `PRODUCAO_30` duplicados (Hub vs Meta) —
+   use o nome completo do arquivo.
+2. Publique as Edge Functions:
+
+```bash
+npx supabase functions deploy smart-hub-capture --no-verify-jwt
+npx supabase functions deploy smart-hub-booking --no-verify-jwt
+```
+
+3. Ative a feature `smart_hub` no plano da clínica (`agenda` também, se for usar booking).
+4. No painel: configure e publique o Hub; use **Configurações → Agendamento online**
+   para ligar/desligar o booking (valida requisitos; sem SQL). Rollback: mesmo toggle
+   ou `UPDATE smart_hubs SET public_booking_enabled = false`.
+5. Runbook operacional: `docs/SMART_HUB_GO_LIVE.md`.
