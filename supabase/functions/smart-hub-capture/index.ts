@@ -255,13 +255,21 @@ Deno.serve(async (req) => {
       if (userErr || !userData?.user) {
         throw new HttpError(401, 'Autenticação necessária para o teste.', 'unauthorized')
       }
-      const { data: membership } = await supabase
-        .from('clinic_users')
-        .select('user_id')
-        .eq('clinic_id', hub.clinic_id)
-        .eq('user_id', userData.user.id)
-        .maybeSingle()
-      if (!membership) {
+      const [{ data: membership }, { data: superadminRole }] = await Promise.all([
+        supabase
+          .from('clinic_users')
+          .select('user_id')
+          .eq('clinic_id', hub.clinic_id)
+          .eq('user_id', userData.user.id)
+          .maybeSingle(),
+        supabase
+          .from('user_roles')
+          .select('role')
+          .eq('user_id', userData.user.id)
+          .eq('role', 'superadmin')
+          .maybeSingle(),
+      ])
+      if (!membership && !superadminRole) {
         throw new HttpError(403, 'Sem permissão para testar este hub.', 'forbidden')
       }
     }
