@@ -1,13 +1,18 @@
 import { describe, expect, it } from 'vitest';
 import { SURI_DEFAULT_CANCEL_KEYWORDS, SURI_DEFAULT_CONFIRM_KEYWORDS } from '@/lib/suriConfig';
 import {
+  defaultModelExamples,
   fillModelBody,
   findModelForTemplate,
   findTemplatesForModel,
+  isTemplateTitleTaken,
+  linkApprovedModelTemplates,
+  modelBodyExamples,
   modelFields,
   modelSuriBody,
+  modelTemplateExample,
   SURI_TEMPLATE_MODELS,
-} from '@/lib/suriTemplateModels';
+} from '../../supabase/functions/_shared/suriTemplateModels.ts';
 
 const consulta = SURI_TEMPLATE_MODELS.find((m) => m.id === 'consulta_padrao')!;
 
@@ -73,6 +78,54 @@ describe('suriTemplateModels', () => {
     expect(
       findModelForTemplate({ title: 'confirmacao_consulta', body: 'x {{1}} y', parameters: 1 }),
     ).toBeNull();
+  });
+
+  it('monta templateExample e bodyExamples no formato da API da Suri', () => {
+    const values = defaultModelExamples('consultation');
+    expect(modelTemplateExample(consulta, values)).toBe(
+      'Olá, [Maria]! Passando para lembrar da sua consulta hoje, [15/10/2026], às [14:30], com [Dra. Ana Souza] na [Clínica Sorriso].\n\nVocê confirma sua presença?',
+    );
+    expect(modelBodyExamples(consulta, values)).toEqual([
+      'Maria',
+      '15/10/2026',
+      '14:30',
+      'Dra. Ana Souza',
+      'Clínica Sorriso',
+    ]);
+  });
+
+  it('reconhece título já usado na Suri (acentos e espaços ignorados)', () => {
+    expect(isTemplateTitleTaken('confirmacao_consulta', [{ title: 'Confirmação Consulta' }])).toBe(true);
+    expect(isTemplateTitleTaken('confirmacao_exame', [{ title: 'confirmacao_consulta' }])).toBe(false);
+  });
+
+  describe('linkApprovedModelTemplates', () => {
+    const exame = SURI_TEMPLATE_MODELS.find((m) => m.id === 'exame_padrao')!;
+    const tpl = (id: string, model: typeof consulta, status: number | null) => ({
+      message_id: id,
+      title: model.suggestedName,
+      body: modelSuriBody(model),
+      parameters: modelFields(model).length,
+      status,
+      channel_id: 'wp1',
+    });
+    const empty = { consultation_template: null, exam_template: null };
+
+    it('liga só templates aprovados, com as variáveis do modelo', () => {
+      const links = linkApprovedModelTemplates(empty, [tpl('c1', consulta, 0), tpl('e1', exame, 1)]);
+      expect(links.consultation?.template_id).toBe('c1');
+      expect(links.consultation?.parameters).toEqual(modelFields(consulta));
+      expect(links.exam).toBeUndefined();
+    });
+
+    it('não sobrescreve escolha da clínica nem religa tipo já ligado antes', () => {
+      const chosen = { template_id: 'x', title: 'x', body: 'x', channel_id: 'wp1', parameters: [] };
+      const templates = [tpl('c1', consulta, 0), tpl('e1', exame, 0)];
+      expect(linkApprovedModelTemplates({ ...empty, consultation_template: chosen }, templates)).toEqual({
+        exam: expect.objectContaining({ template_id: 'e1' }),
+      });
+      expect(linkApprovedModelTemplates(empty, templates, { consultation: true, exam: true })).toEqual({});
+    });
   });
 
   it('lista os templates do modelo com os aprovados primeiro', () => {

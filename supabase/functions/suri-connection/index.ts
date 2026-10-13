@@ -2,7 +2,12 @@
  * Gestão da conexão Suri da clínica (confirmação de consultas/exames).
  *
  * POST /suri-connection
- *   action: save | list_templates | test_send | run_now | rotate_webhook | disconnect
+ *   action: save | list_templates | provision_templates | test_send | run_now
+ *           | rotate_webhook | disconnect
+ *
+ * Na primeira conexão, cria na Suri os modelos prontos de confirmação
+ * (categoria Utilidade, botões Confirmar/Cancelar). Quando a Meta aprova,
+ * `list_templates` e o cron ligam cada template ao tipo correspondente.
  *
  * O token da Suri entra por aqui e vai direto para `integration_credentials`
  * (service_role). O navegador só recebe status, templates e a URL do webhook
@@ -20,7 +25,15 @@ import {
   randomNonce,
 } from '../_shared/metaConnectionCrypto.ts'
 import { listSuriTemplates, readSuriToken, sendSuriTemplate, type SuriTemplateSummary } from '../_shared/suri.ts'
-import { dispatchClinicReminders } from '../_shared/suriDispatch.ts'
+import { clinicAddress, dispatchClinicReminders } from '../_shared/suriDispatch.ts'
+import {
+  autoLinkApprovedTemplates,
+  linkPendingTemplates,
+  provisionModelTemplates,
+  readProvisioning,
+  type ClinicExampleData,
+} from '../_shared/suriProvision.ts'
+import { linkApprovedModelTemplates } from '../_shared/suriTemplateModels.ts'
 import {
   buildBodyParameters,
   isValidTimezone,
@@ -152,6 +165,21 @@ function cleanList(value: unknown, maxItems: number): string[] {
     .slice(0, maxItems)
 }
 
+/** Dados reais da clínica usados como exemplo das variáveis na aprovação da Meta. */
+async function loadClinicExamples(supabase: Supabase, clinicId: string): Promise<ClinicExampleData> {
+  const { data } = await supabase
+    .from('clinics')
+    .select('name, phone, address, address_number, neighborhood, city, state')
+    .eq('id', clinicId)
+    .maybeSingle()
+  const clinic = (data || {}) as Record<string, unknown>
+  return {
+    name: typeof clinic.name === 'string' ? clinic.name : null,
+    phone: typeof clinic.phone === 'string' ? clinic.phone : null,
+    address: clinicAddress(clinic) || null,
+  }
+}
+
 async function handleSave(
   req: Request,
   supabase: Supabase,
@@ -189,11 +217,36 @@ async function handleSave(
     : currentConfig.timezone
   if (!isValidTimezone(timezone)) throw new HttpError(400, 'Fuso horário inválido')
 
-  const consultationTemplate = resolveTemplate(settings.consultation_template, templates, 'consulta')
-  const examTemplate = resolveTemplate(settings.exam_template, templates, 'exame')
+  let consultationTemplate = resolveTemplate(settings.consultation_template, templates, 'consulta')
+  let examTemplate = resolveTemplate(settings.exam_template, templates, 'exame')
+  // Sem template ainda é aceito: o envio começa quando o modelo criado for aprovado.
   const remindersEnabled = settings.reminders_enabled === true
-  if (remindersEnabled && !consultationTemplate) {
-    throw new HttpError(400, 'Escolha o template de consulta para ativar os envios')
+
+  let provisioning = readProvisioning(existing?.config)
+  const links = linkApprovedModelTemplates(
+    { consultation_template: consultationTemplate, exam_template: examTemplate },
+    templates,
+    provisioning?.linked ?? {},
+  )
+  consultationTemplate = consultationTemplate ?? links.consultation ?? null
+  examTemplate = examTemplate ?? links.exam ?? null
+
+  if (!provisioning) {
+    provisioning = await provisionModelTemplates(
+      endpoint,
+      token,
+      templates,
+      await loadClinicExamples(supabase, clinicId),
+      null,
+    )
+  }
+  provisioning = {
+    ...provisioning,
+    linked: {
+      ...provisioning.linked,
+      ...(links.consultation ? { consultation: true } : {}),
+      ...(links.exam ? { exam: true } : {}),
+    },
   }
 
   const responseFlowId = typeof settings.response_flow_id === 'string'
@@ -211,6 +264,7 @@ async function handleSave(
     confirm_keywords: cleanList(settings.confirm_keywords, 20),
     cancel_keywords: cleanList(settings.cancel_keywords, 20),
     response_flow_id: responseFlowId || null,
+    provisioning,
   }
 
   let integrationId = existing?.id ?? null
@@ -280,7 +334,29 @@ async function handleSave(
     integration_id: integrationId,
     webhook_url: revealedWebhookUrl,
     templates_count: templates.length,
+    provisioning,
   })
+}
+
+async function handleProvision(req: Request, supabase: Supabase, clinicId: string): Promise<Response> {
+  const { integration, token, endpoint } = await requireConnection(supabase, clinicId)
+  const templates = await listSuriTemplates(endpoint, token)
+  const provisioning = await provisionModelTemplates(
+    endpoint,
+    token,
+    templates,
+    await loadClinicExamples(supabase, clinicId),
+    readProvisioning(integration.config),
+  )
+
+  const config = asRecord(integration.config)
+  const { error } = await supabase
+    .from('integrations')
+    .update({ config: { ...config, suri: { ...asRecord(config.suri), provisioning } } })
+    .eq('id', integration.id)
+    .eq('clinic_id', clinicId)
+  if (error) throw new HttpError(500, 'Não foi possível salvar o resultado da criação dos modelos')
+  return json(req, { ok: true, provisioning })
 }
 
 Deno.serve(async (req) => {
@@ -308,10 +384,14 @@ Deno.serve(async (req) => {
         return await handleSave(req, supabase, clinicId, user.id, body)
 
       case 'list_templates': {
-        const { endpoint, token } = await requireConnection(supabase, clinicId)
+        const { integration, endpoint, token } = await requireConnection(supabase, clinicId)
         const templates = await listSuriTemplates(endpoint, token)
-        return json(req, { templates })
+        const linked = await autoLinkApprovedTemplates(supabase, integration, templates)
+        return json(req, { templates, linked })
       }
+
+      case 'provision_templates':
+        return await handleProvision(req, supabase, clinicId)
 
       case 'test_send': {
         const { config, token, endpoint } = await requireConnection(supabase, clinicId)
@@ -347,6 +427,7 @@ Deno.serve(async (req) => {
       case 'run_now': {
         const integration = await loadSuriIntegration(supabase, clinicId)
         if (!integration) throw new HttpError(404, 'Suri não conectada nesta clínica')
+        await linkPendingTemplates(supabase, integration, { requireEnabled: false })
         const summary = await dispatchClinicReminders(supabase, integration, {
           now: new Date(),
           manual: true,

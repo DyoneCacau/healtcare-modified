@@ -4,13 +4,15 @@
  * Chamado de hora em hora (GitHub Actions) com `Authorization: Bearer CRON_SECRET`.
  * Cada clínica só dispara a partir do próprio horário (`config.suri.send_hour`);
  * chamadas seguintes no mesmo dia só pegam agendamentos ainda não enviados
- * e falhas com tentativas restantes.
+ * e falhas com tentativas restantes. Antes do envio, liga os templates criados
+ * a partir dos modelos que a Meta já aprovou.
  *
  * Deploy: supabase functions deploy suri-send-reminders --no-verify-jwt
  */
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.49.1'
 import { timingSafeEqualHex, sha256Hex } from '../_shared/webhookSignature.ts'
 import { dispatchClinicReminders, type DispatchSummary, type SuriIntegrationRow } from '../_shared/suriDispatch.ts'
+import { linkPendingTemplates } from '../_shared/suriProvision.ts'
 import { SURI_PROVIDER } from '../_shared/suriReminder.ts'
 
 const JSON_HEADERS = { 'Content-Type': 'application/json' }
@@ -57,6 +59,7 @@ Deno.serve(async (req) => {
 
   for (const integration of (integrations || []) as SuriIntegrationRow[]) {
     try {
+      await linkPendingTemplates(supabase, integration, { requireEnabled: true })
       results.push(await dispatchClinicReminders(supabase, integration, { now }))
     } catch (err) {
       const message = err instanceof Error ? err.message : 'erro desconhecido'

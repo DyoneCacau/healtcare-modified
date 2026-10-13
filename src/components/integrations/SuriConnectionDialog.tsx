@@ -37,6 +37,7 @@ import { SuriTemplateModels } from './SuriTemplateModels';
 import { SuriTemplatePicker, type TemplateSelectionState } from './SuriTemplatePicker';
 import { useClinicProcedures } from '@/hooks/useClinicProcedures';
 import {
+  provisioningSummary,
   useSuriConnectionMutations,
   useSuriReminders,
   useSuriTemplates,
@@ -73,7 +74,8 @@ export function SuriConnectionDialog({
   const connected = Boolean(integration && integration.status === 'connected');
   const config = useMemo(() => readSuriConfig(integration?.config), [integration?.config]);
 
-  const { save, testSend, runNow, rotateWebhook, disconnect } = useSuriConnectionMutations();
+  const { save, testSend, runNow, rotateWebhook, disconnect, provision } =
+    useSuriConnectionMutations();
   const templatesQuery = useSuriTemplates(open && connected);
   const remindersQuery = useSuriReminders(open && Boolean(integration));
   const { procedures } = useClinicProcedures();
@@ -98,7 +100,7 @@ export function SuriConnectionDialog({
     setTab(connected ? 'confirmacoes' : 'conexao');
     setEndpoint(config.endpoint_url || '');
     setToken('');
-    setEnabled(config.reminders_enabled);
+    setEnabled(integration ? config.reminders_enabled : true);
     setSendHour(config.send_hour);
     setTimezone(config.timezone);
     setConsultation(
@@ -124,6 +126,27 @@ export function SuriConnectionDialog({
   useEffect(() => {
     if (!open) setWebhookUrl(null);
   }, [open]);
+
+  // Template aprovado e ligado pelo servidor: preenche só o que está vazio no formulário.
+  const linkedConsultation = config.consultation_template;
+  const linkedExam = config.exam_template;
+  useEffect(() => {
+    if (!open || !linkedConsultation) return;
+    setConsultation((current) =>
+      current ?? {
+        template_id: linkedConsultation.template_id,
+        parameters: linkedConsultation.parameters,
+      },
+    );
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- só quando o template salvo muda; não desfaz edição
+  }, [open, linkedConsultation?.template_id]);
+  useEffect(() => {
+    if (!open || !linkedExam) return;
+    setExam((current) =>
+      current ?? { template_id: linkedExam.template_id, parameters: linkedExam.parameters },
+    );
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- só quando o template salvo muda; não desfaz edição
+  }, [open, linkedExam?.template_id]);
 
   const categories = useMemo(
     () =>
@@ -154,6 +177,9 @@ export function SuriConnectionDialog({
     });
     setToken('');
     if (result.webhook_url) setWebhookUrl(result.webhook_url);
+    if (result.provisioning && !config.provisioning) {
+      toast.message(provisioningSummary(result.provisioning));
+    }
   };
 
   const handleApplyModel = (kind: SuriModelKind, selection: TemplateSelectionState) => {
@@ -222,6 +248,19 @@ export function SuriConnectionDialog({
               </p>
             </div>
 
+            {!connected && (
+              <Alert>
+                <AlertDescription className="text-sm">
+                  Ao conectar, a plataforma cria na sua Suri os modelos prontos de confirmação
+                  (consulta e exame, categoria Utilidade, botões Confirmar e Cancelar) no primeiro
+                  número de WhatsApp da conta. Quando a Meta aprovar, eles são vinculados sozinhos
+                  e o envio automático diário começa às{' '}
+                  {`${String(sendHour).padStart(2, '0')}:00`}. Você pode editar os templates no
+                  Portal Suri e ajustar tudo na aba Confirmações.
+                </AlertDescription>
+              </Alert>
+            )}
+
             {webhookUrl ? (
               <Alert>
                 <AlertDescription className="space-y-2">
@@ -280,6 +319,9 @@ export function SuriConnectionDialog({
               consultationTemplateId={consultation?.template_id ?? null}
               examTemplateId={exam?.template_id ?? null}
               onApply={handleApplyModel}
+              provisioning={config.provisioning}
+              provisionPending={provision.isPending}
+              onProvision={connected ? () => provision.mutate() : undefined}
             />
           </TabsContent>
 
@@ -301,6 +343,16 @@ export function SuriConnectionDialog({
               </div>
               <Switch checked={enabled} onCheckedChange={setEnabled} disabled={!canEdit} />
             </div>
+
+            {enabled && !consultation && (
+              <Alert>
+                <AlertDescription className="text-sm">
+                  Aguardando um template de consulta aprovado. Se ele veio dos modelos, é vinculado
+                  automaticamente quando a Meta aprovar e os envios começam sozinhos. Acompanhe na
+                  aba Modelos.
+                </AlertDescription>
+              </Alert>
+            )}
 
             <div className="grid gap-3 sm:grid-cols-2">
               <div className="space-y-1.5">

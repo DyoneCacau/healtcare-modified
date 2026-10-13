@@ -54,6 +54,15 @@ export interface SuriTemplateConfig {
   parameters: SuriVariableField[];
 }
 
+export type SuriProvisionStatus = 'created' | 'exists' | 'failed';
+
+/** Resultado da criação automática dos modelos na Suri (`config.suri.provisioning`). */
+export interface SuriProvisioning {
+  ran_at: string;
+  channel_name: string | null;
+  results: { model_id: string; title: string; status: SuriProvisionStatus; error: string | null }[];
+}
+
 export interface SuriPublicConfig {
   endpoint_url: string | null;
   reminders_enabled: boolean;
@@ -65,6 +74,7 @@ export interface SuriPublicConfig {
   confirm_keywords: string[];
   cancel_keywords: string[];
   response_flow_id: string | null;
+  provisioning: SuriProvisioning | null;
 }
 
 /** Template como a Suri devolve em `list_templates`. */
@@ -133,6 +143,23 @@ export function readSuriConfig(config: unknown): SuriPublicConfig {
     cancel_keywords: stringList(raw.cancel_keywords, SURI_DEFAULT_CANCEL_KEYWORDS),
     response_flow_id:
       typeof raw.response_flow_id === 'string' && raw.response_flow_id ? raw.response_flow_id : null,
+    provisioning: readProvisioning(raw.provisioning),
+  };
+}
+
+function readProvisioning(value: unknown): SuriProvisioning | null {
+  const raw = asRecord(value);
+  if (typeof raw.ran_at !== 'string') return null;
+  const results = Array.isArray(raw.results) ? raw.results.map(asRecord) : [];
+  return {
+    ran_at: raw.ran_at,
+    channel_name: typeof raw.channel_name === 'string' ? raw.channel_name : null,
+    results: results.map((r) => ({
+      model_id: String(r.model_id || ''),
+      title: String(r.title || ''),
+      status: r.status === 'created' || r.status === 'exists' ? r.status : 'failed',
+      error: typeof r.error === 'string' ? r.error : null,
+    })),
   };
 }
 

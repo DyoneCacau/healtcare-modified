@@ -1,6 +1,6 @@
 import { useMemo } from 'react';
 import { format } from 'date-fns';
-import { Check, Copy } from 'lucide-react';
+import { Check, Copy, Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
@@ -10,6 +10,7 @@ import { useClinic } from '@/hooks/useClinic';
 import {
   SURI_TEMPLATE_STATUS_LABELS,
   SURI_VARIABLE_LABELS,
+  type SuriProvisioning,
   type SuriTemplateOption,
   type SuriVariableField,
 } from '@/lib/suriConfig';
@@ -31,6 +32,10 @@ interface SuriTemplateModelsProps {
   consultationTemplateId: string | null;
   examTemplateId: string | null;
   onApply: (kind: SuriModelKind, selection: TemplateSelectionState) => void;
+  provisioning: SuriProvisioning | null;
+  provisionPending: boolean;
+  /** Ausente quando a Suri ainda não está conectada. */
+  onProvision?: () => void;
 }
 
 const KIND_LABEL: Record<SuriModelKind, string> = {
@@ -63,6 +68,9 @@ export function SuriTemplateModels({
   consultationTemplateId,
   examTemplateId,
   onApply,
+  provisioning,
+  provisionPending,
+  onProvision,
 }: SuriTemplateModelsProps) {
   const { clinic } = useClinic();
 
@@ -88,11 +96,37 @@ export function SuriTemplateModels({
   return (
     <div className="space-y-4">
       <Alert>
-        <AlertDescription className="space-y-1 text-sm">
+        <AlertDescription className="space-y-2 text-sm">
           <p>
             Modelos prontos com as variáveis já mapeadas para os dados do paciente, da agenda e
-            da clínica.
+            da clínica. Ao conectar, a plataforma cria todos na sua Suri (categoria Utilidade,
+            botões Confirmar e Cancelar) e, quando a Meta aprova, vincula sozinha às
+            confirmações. Você pode editar o texto no Portal Suri depois.
           </p>
+          {provisioning && (
+            <p className="text-xs text-muted-foreground">
+              Criação automática em {format(new Date(provisioning.ran_at), 'dd/MM/yyyy HH:mm')}
+              {provisioning.channel_name ? ` no canal ${provisioning.channel_name}` : ''}.
+            </p>
+          )}
+          {onProvision && (
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              disabled={!canEdit || provisionPending}
+              onClick={onProvision}
+            >
+              {provisionPending && <Loader2 className="mr-1 h-4 w-4 animate-spin" />}
+              {provisioning ? 'Criar na Suri os modelos que faltam' : 'Criar modelos na Suri'}
+            </Button>
+          )}
+        </AlertDescription>
+      </Alert>
+
+      <details className="rounded-md border p-3 text-sm">
+        <summary className="cursor-pointer font-medium">Criar manualmente no Portal Suri</summary>
+        <div className="mt-2">
           <ol className="list-decimal space-y-0.5 pl-5 text-xs text-muted-foreground">
             <li>
               No Portal Suri, abra Mensagens Templates → novo <strong>Modelo de mensagem</strong>.
@@ -122,8 +156,8 @@ export function SuriTemplateModels({
               WhatsApp. Quando aparecer “Aprovado na Suri” aqui, clique em <strong>Usar</strong>.
             </li>
           </ol>
-        </AlertDescription>
-      </Alert>
+        </div>
+      </details>
 
       {SURI_TEMPLATE_MODELS.map((model) => (
         <ModelCard
@@ -135,6 +169,10 @@ export function SuriTemplateModels({
           canEdit={canEdit}
           inUseId={model.kind === 'exam' ? examTemplateId : consultationTemplateId}
           onApply={onApply}
+          provisionError={
+            provisioning?.results.find((r) => r.model_id === model.id && r.status === 'failed')
+              ?.error ?? null
+          }
         />
       ))}
     </div>
@@ -149,6 +187,7 @@ interface ModelCardProps {
   canEdit: boolean;
   inUseId: string | null;
   onApply: (kind: SuriModelKind, selection: TemplateSelectionState) => void;
+  provisionError: string | null;
 }
 
 function ModelCard({
@@ -159,6 +198,7 @@ function ModelCard({
   canEdit,
   inUseId,
   onApply,
+  provisionError,
 }: ModelCardProps) {
   const fields = modelFields(model);
   const suriBody = modelSuriBody(model);
@@ -199,6 +239,12 @@ function ModelCard({
           </Badge>
         </div>
       </div>
+
+      {provisionError && matches.length === 0 && (
+        <p className="rounded-md bg-destructive/10 p-2 text-xs text-destructive">
+          Não foi possível criar na Suri: {provisionError}
+        </p>
+      )}
 
       <div className="grid gap-3 md:grid-cols-2">
         <div className="space-y-1.5">

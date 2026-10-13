@@ -49,7 +49,8 @@ export function SuriCard({ connection, canCreate, canEdit, onOpen }: SuriCardPro
               {config.reminders_enabled ? `Envio automático às ${hour}` : 'Envio automático desligado'}
             </p>
             <p className="text-muted-foreground">
-              Consulta: {config.consultation_template?.title || 'template não escolhido'}
+              Consulta: {config.consultation_template?.title ||
+                (config.provisioning ? 'aguardando aprovação da Meta' : 'template não escolhido')}
             </p>
             <p className="text-muted-foreground">
               Exame: {config.exam_template?.title || 'usa o template de consulta'}

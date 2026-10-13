@@ -3,6 +3,7 @@ import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
 import { useClinic } from './useClinic';
 import { suriConnectionService, type SuriSaveInput } from '@/services/suriConnectionService';
+import type { SuriProvisioning } from '@/lib/suriConfig';
 
 const TEMPLATES_KEY = 'suri-templates';
 const REMINDERS_KEY = 'suri-reminders';
@@ -37,11 +38,28 @@ const SKIPPED_REASON_LABELS: Record<string, string> = {
   token_missing: 'falta o token da Suri',
 };
 
+export function provisioningSummary(provisioning: SuriProvisioning): string {
+  const count = (status: string) => provisioning.results.filter((r) => r.status === status).length;
+  const parts: string[] = [];
+  if (count('created') > 0) parts.push(`Modelos criados na Suri: ${count('created')} (aguardando a Meta)`);
+  if (count('exists') > 0) parts.push(`já existiam: ${count('exists')}`);
+  if (count('failed') > 0) parts.push(`com erro: ${count('failed')} (veja a aba Modelos)`);
+  return parts.join(' · ') || 'Nenhum modelo para criar';
+}
+
 export function useSuriTemplates(enabled: boolean) {
   const { clinicId } = useClinic();
+  const queryClient = useQueryClient();
   return useQuery({
     queryKey: [TEMPLATES_KEY, clinicId],
-    queryFn: () => suriConnectionService.listTemplates(clinicId!),
+    queryFn: async () => {
+      const { templates, linked } = await suriConnectionService.listTemplates(clinicId!);
+      if (linked.length > 0) {
+        queryClient.invalidateQueries({ queryKey: ['integrations', clinicId] });
+        toast.success('Template aprovado pela Meta e vinculado automaticamente às confirmações');
+      }
+      return templates;
+    },
     enabled: enabled && !!clinicId,
     retry: false,
     staleTime: 60_000,
@@ -147,5 +165,14 @@ export function useSuriConnectionMutations() {
     onError: (error: Error) => toast.error(error.message),
   });
 
-  return { save, testSend, runNow, rotateWebhook, disconnect };
+  const provision = useMutation({
+    mutationFn: () => suriConnectionService.provisionTemplates(requireClinic()),
+    onSuccess: (provisioning) => {
+      invalidate();
+      toast.message(provisioningSummary(provisioning));
+    },
+    onError: (error: Error) => toast.error(error.message),
+  });
+
+  return { save, testSend, runNow, rotateWebhook, disconnect, provision };
 }

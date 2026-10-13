@@ -97,6 +97,57 @@ export async function listSuriTemplates(
     })
 }
 
+export interface SuriChannel {
+  id: string
+  name: string
+}
+
+/** Canais WhatsApp do chatbot (`ChannelType` 1 = WhatsApp). */
+export async function listSuriWhatsAppChannels(
+  baseUrl: string,
+  token: string,
+): Promise<SuriChannel[]> {
+  const data = await suriRequest<unknown[]>(baseUrl, token, '/channels')
+  if (!Array.isArray(data)) return []
+  return data
+    .map((item) => (item && typeof item === 'object' ? item as Record<string, unknown> : {}))
+    .filter((item) => typeof item.id === 'string' && item.id && item.type === 1)
+    .map((item) => ({ id: String(item.id), name: String(item.name || item.id) }))
+}
+
+export interface CreateSuriTemplateInput {
+  title: string
+  body: string
+  channelId: string
+  category: 'UTILITY' | 'MARKETING'
+  quickReplies: string[]
+  templateExample: string
+  bodyExamples: string[]
+}
+
+/** Cria template de WhatsApp na Suri (vai para análise da Meta). Devolve o `messageId`. */
+export async function createSuriTemplate(
+  baseUrl: string,
+  token: string,
+  input: CreateSuriTemplateInput,
+): Promise<string> {
+  const data = await suriRequest<Record<string, unknown> | null>(baseUrl, token, '/templates', {
+    method: 'POST',
+    body: {
+      template: {
+        title: input.title,
+        body: input.body,
+        channelId: input.channelId,
+        category: input.category,
+        buttons: input.quickReplies.map((text) => ({ text, type: 2 })),
+      },
+      templateExample: input.templateExample,
+      bodyExamples: input.bodyExamples,
+    },
+  })
+  return data && typeof data.messageId === 'string' ? data.messageId : ''
+}
+
 export interface SendSuriTemplateInput {
   name: string
   phone: string

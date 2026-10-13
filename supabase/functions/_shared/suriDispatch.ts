@@ -60,7 +60,7 @@ interface ReminderRow {
   attempts: number
 }
 
-function clinicAddress(clinic: Record<string, unknown>): string {
+export function clinicAddress(clinic: Record<string, unknown>): string {
   const first = [clinic.address, clinic.address_number ? `nº ${clinic.address_number}` : null]
     .filter(Boolean).join(', ')
   const second = [clinic.neighborhood, clinic.city, clinic.state].filter(Boolean).join(' - ')

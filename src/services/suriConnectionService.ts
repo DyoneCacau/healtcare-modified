@@ -1,5 +1,5 @@
 import { supabase } from '@/integrations/supabase/client';
-import type { SuriTemplateOption, SuriVariableField } from '@/lib/suriConfig';
+import type { SuriProvisioning, SuriTemplateOption, SuriVariableField } from '@/lib/suriConfig';
 
 interface FunctionError {
   error?: string;
@@ -54,6 +54,7 @@ export interface SuriSaveResult {
   /** Só vem na criação: a URL contém o segredo e não é exibida de novo. */
   webhook_url: string | null;
   templates_count: number;
+  provisioning: SuriProvisioning | null;
 }
 
 export interface SuriDispatchSummary {
@@ -69,12 +70,25 @@ export const suriConnectionService = {
     return invokeSuri<SuriSaveResult>({ action: 'save', clinic_id: clinicId, ...input });
   },
 
-  async listTemplates(clinicId: string): Promise<SuriTemplateOption[]> {
-    const result = await invokeSuri<{ templates: SuriTemplateOption[] }>({
+  async listTemplates(
+    clinicId: string,
+  ): Promise<{ templates: SuriTemplateOption[]; linked: ('consultation' | 'exam')[] }> {
+    const result = await invokeSuri<{
+      templates: SuriTemplateOption[];
+      linked?: ('consultation' | 'exam')[];
+    }>({
       action: 'list_templates',
       clinic_id: clinicId,
     });
-    return result.templates || [];
+    return { templates: result.templates || [], linked: result.linked || [] };
+  },
+
+  async provisionTemplates(clinicId: string): Promise<SuriProvisioning> {
+    const result = await invokeSuri<{ provisioning: SuriProvisioning }>({
+      action: 'provision_templates',
+      clinic_id: clinicId,
+    });
+    return result.provisioning;
   },
 
   testSend(clinicId: string, phone: string, kind: 'consultation' | 'exam') {
