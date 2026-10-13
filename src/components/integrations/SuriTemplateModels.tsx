@@ -94,15 +94,32 @@ export function SuriTemplateModels({
             da clínica.
           </p>
           <ol className="list-decimal space-y-0.5 pl-5 text-xs text-muted-foreground">
-            <li>Copie o nome e o texto do modelo.</li>
             <li>
-              No Portal Suri, crie o template na categoria <strong>Utilidade</strong>, idioma
-              português, com os botões de resposta rápida indicados e os exemplos das variáveis.
+              No Portal Suri, abra Mensagens Templates → novo <strong>Modelo de mensagem</strong>.
             </li>
-            <li>Aguarde a aprovação da Meta (status “Aprovado” aqui).</li>
             <li>
-              Clique em <strong>Usar</strong>: o template e as variáveis são preenchidos
-              automaticamente na aba Confirmações. Depois, salve.
+              <strong>Título</strong>: cole o nome do modelo (o título é único na Suri e não pode
+              ser reaproveitado, mesmo apagando o template).
+            </li>
+            <li>
+              <strong>Corpo da mensagem</strong>: cole o texto; os <code>{'{{1}}'}</code>,{' '}
+              <code>{'{{2}}'}</code>… viram as variáveis.
+            </li>
+            <li>
+              Marque <strong>Mensagem Template do WhatsApp</strong>, escolha o canal, Tipo{' '}
+              <strong>Normal</strong> e Categoria <strong>Utilidade</strong> (não use Marketing).
+            </li>
+            <li>
+              <strong>Exemplos de preenchimento</strong>: preencha cada variável com o exemplo
+              indicado abaixo.
+            </li>
+            <li>
+              <strong>Continuar</strong> → aba Ações → <strong>Resposta rápida</strong>: digite
+              cada botão e clique em <strong>+ Resposta</strong>.
+            </li>
+            <li>
+              <strong>Salvar</strong> e depois <strong>Aplicar</strong> para enviar à análise do
+              WhatsApp. Quando aparecer “Aprovado na Suri” aqui, clique em <strong>Usar</strong>.
             </li>
           </ol>
         </AlertDescription>
@@ -250,13 +267,28 @@ function ModelCard({
             </div>
             <ul className="space-y-0.5 text-xs">
               {fields.map((field, i) => (
-                <li key={field}>
-                  <code className="font-semibold">{`{{${i + 1}}}`}</code>{' '}
-                  {SURI_VARIABLE_LABELS[field]}
-                  <span className="text-muted-foreground"> — ex.: {values[field] || '-'}</span>
+                <li key={field} className="flex items-center justify-between gap-2">
+                  <span>
+                    <code className="font-semibold">{`{{${i + 1}}}`}</code>{' '}
+                    {SURI_VARIABLE_LABELS[field]}
+                    <span className="text-muted-foreground"> — ex.: {values[field] || '-'}</span>
+                  </span>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon"
+                    className="h-6 w-6 shrink-0"
+                    aria-label={`Copiar exemplo da variável ${i + 1}`}
+                    onClick={() => copyText(values[field] || '-')}
+                  >
+                    <Copy className="h-3 w-3" />
+                  </Button>
                 </li>
               ))}
             </ul>
+            <p className="text-[11px] text-muted-foreground">
+              Botões de resposta rápida (aba Ações): {model.buttons.join(' e ')}.
+            </p>
           </div>
         </div>
       </div>
