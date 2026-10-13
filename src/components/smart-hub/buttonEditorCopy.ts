@@ -100,17 +100,17 @@ export const VARIANT_HELP: Record<
 > = {
   simple: {
     description:
-      'Formato tradicional e compacto. Indicado para ações secundárias ou páginas com muitos links.',
+      'Texto centralizado, sem quadro de ícone. Indicado para ações secundárias ou páginas com muitos links.',
     badge: 'Mais usado',
   },
   icon_card: {
     description:
-      'Usa um ícone para facilitar a identificação. Ideal para WhatsApp, telefone, localização e redes sociais.',
+      'Ícone em destaque à esquerda (ou a miniatura da imagem, se houver). Ideal para WhatsApp, telefone, localização e redes sociais.',
     badge: 'Ideal para contatos',
   },
   image_card: {
     description:
-      'Exibe uma imagem junto ao texto. Recomendado para procedimentos, tratamentos, serviços ou campanhas.',
+      'Imagem grande no topo e o texto embaixo. Recomendado para procedimentos, tratamentos ou campanhas.',
     badge: 'Ideal para procedimentos',
   },
   horizontal_card: {
@@ -120,7 +120,7 @@ export const VARIANT_HELP: Record<
   },
   featured_card: {
     description:
-      'Formato mais chamativo. Recomendado para a principal ação da página, como agendar uma avaliação.',
+      'Maior, com sombra e brilho na cor do botão. Use só na ação principal da página, como agendar uma avaliação.',
     badge: 'Recomendado para CTA principal',
   },
   list_item: {

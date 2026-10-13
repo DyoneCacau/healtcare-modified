@@ -1,7 +1,7 @@
-import { memo, type MouseEvent } from 'react';
-import { ExternalLink } from 'lucide-react';
+import { memo, type CSSProperties, type MouseEvent, type ReactNode } from 'react';
+import { ArrowRight, ChevronRight } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import type { SmartHubButton } from '@/types/smartHub';
+import { normalizeButtonVariant, type SmartHubButton } from '@/types/smartHub';
 import { buildDestinationUrl } from '@/services/smartHub/buttonDestinations';
 import { resolveDisplayTextColor } from '@/services/smartHub/imageUtils';
 import { resolveButtonIconComponent } from './buttonIconOptions';
@@ -20,6 +20,17 @@ interface HubButtonProps {
 function TypeIcon({ type, className }: { type: string; className?: string }) {
   const Icon = resolveButtonIconComponent(type);
   return <Icon className={cn('h-5 w-5 shrink-0', className)} />;
+}
+
+/** Fundo translúcido na cor do texto: funciona em botão claro ou escuro. */
+const ICON_TILE_STYLE: CSSProperties = {
+  backgroundColor: 'color-mix(in srgb, currentColor 15%, transparent)',
+};
+
+function glowShadow(bg: string | undefined): string | undefined {
+  return bg && /^#[0-9a-f]{6}$/i.test(bg)
+    ? `0 12px 28px -10px ${bg}cc, 0 0 0 3px ${bg}33`
+    : undefined;
 }
 
 export const HubButton = memo(function HubButton({
@@ -47,7 +58,7 @@ export const HubButton = memo(function HubButton({
       button.whatsapp_message,
       button.capture_config?.email_subject
     ) || '#';
-  const variant = button.visual_variant || 'simple';
+  const variant = normalizeButtonVariant(button.visual_variant);
   const imageAlt = button.image_alt || button.title;
   const openInNewTabPref = button.capture_config?.open_in_new_tab;
   const openInNewTab =
@@ -62,14 +73,10 @@ export const HubButton = memo(function HubButton({
     }
   };
 
-  if (variant === 'info' || button.type === 'info') {
+  if (button.visual_variant === 'info' || button.type === 'info') {
     return (
       <div
-        className={cn(
-          'w-full border px-4 py-3 text-left shadow-sm',
-          radiusClass,
-          className
-        )}
+        className={cn('w-full border px-4 py-3 text-left shadow-sm', radiusClass, className)}
         style={{ backgroundColor: bg, color }}
       >
         <div className="font-semibold">{button.title}</div>
@@ -78,84 +85,7 @@ export const HubButton = memo(function HubButton({
     );
   }
 
-  if (variant === 'horizontal_card' || variant === 'image_card') {
-    return (
-      <a
-        href={href}
-        target={openInNewTab ? '_blank' : undefined}
-        rel="noopener noreferrer"
-        onClick={handleClick}
-        aria-label={button.title}
-        className={cn(
-          'flex w-full items-stretch overflow-hidden border text-left shadow-sm transition hover:opacity-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 min-h-[44px]',
-          radiusClass,
-          className
-        )}
-        style={{ backgroundColor: bg || '#fff', color }}
-      >
-        {button.image ? (
-          <img
-            src={button.image}
-            alt={imageAlt}
-            className="h-20 w-20 shrink-0 object-cover sm:h-24 sm:w-24"
-            loading="lazy"
-          />
-        ) : (
-          <div className="flex h-20 w-20 shrink-0 items-center justify-center bg-muted sm:h-24 sm:w-24">
-            <TypeIcon type={button.icon || button.type} />
-          </div>
-        )}
-        <div className="flex min-w-0 flex-1 items-center justify-between gap-3 px-4 py-3">
-          <div className="min-w-0">
-            <div className="truncate font-semibold">{button.title}</div>
-            {button.subtitle && (
-              <div className="truncate text-sm opacity-80">{button.subtitle}</div>
-            )}
-          </div>
-          <ExternalLink className="h-4 w-4 shrink-0 opacity-70" aria-hidden />
-        </div>
-      </a>
-    );
-  }
-
-  if (variant === 'icon_card' || variant === 'featured_card' || variant === 'list_item') {
-    return (
-      <a
-        href={href}
-        target={openInNewTab ? '_blank' : undefined}
-        rel="noopener noreferrer"
-        onClick={handleClick}
-        aria-label={button.title}
-        className={cn(
-          'flex w-full items-center gap-3 border px-4 py-3 text-left shadow-sm transition hover:opacity-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 min-h-[44px]',
-          variant === 'featured_card' && 'ring-2 ring-primary/30',
-          radiusClass,
-          className
-        )}
-        style={{ backgroundColor: bg, color }}
-      >
-        {button.image ? (
-          <img
-            src={button.image}
-            alt={imageAlt}
-            className="h-10 w-10 rounded-lg object-cover"
-            loading="lazy"
-          />
-        ) : (
-          <TypeIcon type={button.icon || button.type} />
-        )}
-        <div className="min-w-0 flex-1">
-          <div className="truncate font-semibold">{button.title}</div>
-          {button.subtitle && (
-            <div className="truncate text-sm opacity-80">{button.subtitle}</div>
-          )}
-        </div>
-        <ExternalLink className="h-4 w-4 shrink-0 opacity-70" aria-hidden />
-      </a>
-    );
-  }
-
-  return (
+  const link = (content: ReactNode, linkClassName: string, style?: CSSProperties) => (
     <a
       href={href}
       target={openInNewTab ? '_blank' : undefined}
@@ -163,32 +93,90 @@ export const HubButton = memo(function HubButton({
       onClick={handleClick}
       aria-label={button.title}
       className={cn(
-        'flex w-full items-center justify-between gap-3 border px-4 py-3 text-left shadow-sm transition hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 min-h-[44px]',
+        'w-full border text-left transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 min-h-[44px]',
         radiusClass,
+        linkClassName,
         className
       )}
-      style={{ backgroundColor: bg, color }}
+      style={{ backgroundColor: bg, color, ...style }}
     >
-      <div className="flex min-w-0 items-center gap-3">
-        {(button.icon || button.image) &&
-          (button.image ? (
-            <img
-              src={button.image}
-              alt={imageAlt}
-              className="h-8 w-8 rounded-full object-cover"
-              loading="lazy"
-            />
-          ) : (
-            <TypeIcon type={button.icon || button.type} />
-          ))}
-        <div className="min-w-0 flex-1">
-          <div className="truncate font-semibold">{button.title}</div>
-          {button.subtitle && (
-            <div className="truncate text-sm opacity-80">{button.subtitle}</div>
-          )}
-        </div>
-      </div>
-      <ExternalLink className="h-4 w-4 shrink-0 opacity-70" aria-hidden />
+      {content}
     </a>
+  );
+
+  const texts = (titleClassName?: string) => (
+    <div className="min-w-0 flex-1">
+      <div className={cn('truncate font-semibold', titleClassName)}>{button.title}</div>
+      {button.subtitle && <div className="truncate text-sm opacity-80">{button.subtitle}</div>}
+    </div>
+  );
+
+  const iconTile = (sizeClassName: string, iconClassName?: string) =>
+    button.image ? (
+      <img
+        src={button.image}
+        alt={imageAlt}
+        className={cn('shrink-0 rounded-lg object-cover', sizeClassName)}
+        loading="lazy"
+      />
+    ) : (
+      <div
+        className={cn('flex shrink-0 items-center justify-center rounded-lg', sizeClassName)}
+        style={ICON_TILE_STYLE}
+      >
+        <TypeIcon type={button.icon || button.type} className={iconClassName} />
+      </div>
+    );
+
+  if (variant === 'image_card' && button.image) {
+    return link(
+      <>
+        <img
+          src={button.image}
+          alt={imageAlt}
+          className="aspect-[16/9] w-full object-cover"
+          loading="lazy"
+        />
+        <div className="flex items-center gap-3 px-4 py-3">
+          {texts()}
+          <ChevronRight className="h-5 w-5 shrink-0 opacity-70" aria-hidden />
+        </div>
+      </>,
+      'flex flex-col overflow-hidden shadow-sm hover:opacity-95'
+    );
+  }
+
+  if (variant === 'featured_card') {
+    return link(
+      <>
+        {iconTile('h-12 w-12', 'h-6 w-6')}
+        {texts('text-lg')}
+        <ArrowRight className="h-5 w-5 shrink-0" aria-hidden />
+      </>,
+      'flex items-center gap-4 border-2 px-5 py-5 shadow-lg hover:-translate-y-0.5 hover:shadow-xl',
+      { boxShadow: glowShadow(bg) }
+    );
+  }
+
+  if (variant === 'icon_card' || variant === 'image_card') {
+    return link(
+      <>
+        {iconTile('h-10 w-10')}
+        {texts()}
+        <ChevronRight className="h-5 w-5 shrink-0 opacity-70" aria-hidden />
+      </>,
+      'flex items-center gap-3 px-4 py-3 shadow-sm hover:opacity-95'
+    );
+  }
+
+  return link(
+    <div className="min-w-0 text-center">
+      <div className="flex items-center justify-center gap-2">
+        {button.icon && <TypeIcon type={button.icon} className="h-4 w-4" />}
+        <span className="truncate font-semibold">{button.title}</span>
+      </div>
+      {button.subtitle && <div className="truncate text-sm opacity-80">{button.subtitle}</div>}
+    </div>,
+    'flex items-center justify-center px-4 py-3 shadow-sm hover:opacity-90'
   );
 });

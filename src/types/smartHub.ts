@@ -485,6 +485,37 @@ export const SMART_HUB_VARIANT_LABELS: Record<SmartHubButtonVisualVariant, strin
   grid: 'Grid',
 };
 
+/** Variantes com visual próprio, oferecidas no editor. */
+export type SmartHubSelectableVariant = 'simple' | 'icon_card' | 'image_card' | 'featured_card';
+
+export const SMART_HUB_SELECTABLE_VARIANTS: SmartHubSelectableVariant[] = [
+  'simple',
+  'icon_card',
+  'image_card',
+  'featured_card',
+];
+
+/**
+ * Converte variantes legadas sem visual próprio: list_item → icon_card,
+ * horizontal_card → image_card, grid → simple.
+ */
+export function normalizeButtonVariant(
+  variant: string | null | undefined
+): SmartHubSelectableVariant {
+  switch (variant) {
+    case 'icon_card':
+    case 'list_item':
+      return 'icon_card';
+    case 'image_card':
+    case 'horizontal_card':
+      return 'image_card';
+    case 'featured_card':
+      return 'featured_card';
+    default:
+      return 'simple';
+  }
+}
+
 export const SMART_HUB_CLICK_ACTION_LABELS: Record<SmartHubClickAction, string> = {
   auto: 'Automático (conforme o tipo)',
   form: 'Abrir formulário de captação',

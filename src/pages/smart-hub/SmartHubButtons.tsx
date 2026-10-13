@@ -17,6 +17,7 @@ import {
   CLICK_ACTION_HELP,
   buttonEditorShortSummary,
   ownerFieldGuidance,
+  VARIANT_HELP,
 } from '@/components/smart-hub/buttonEditorCopy';
 import {
   getCompatibleActions,
@@ -81,8 +82,10 @@ import {
 } from '@/services/smartHub';
 import {
   SMART_HUB_BUTTON_TYPE_LABELS,
+  SMART_HUB_SELECTABLE_VARIANTS,
   SMART_HUB_VARIANT_LABELS,
   SMART_HUB_CLICK_ACTION_LABELS,
+  normalizeButtonVariant,
   type SmartHubButton,
   type SmartHubButtonType,
   type SmartHubButtonVisualVariant,
@@ -95,7 +98,7 @@ import { useSubscription } from '@/hooks/useSubscription';
 import { cn } from '@/lib/utils';
 
 const BUTTON_TYPES = Object.keys(SMART_HUB_BUTTON_TYPE_LABELS) as SmartHubButtonType[];
-const VARIANT_KEYS = Object.keys(SMART_HUB_VARIANT_LABELS) as SmartHubButtonVisualVariant[];
+const VARIANT_KEYS = SMART_HUB_SELECTABLE_VARIANTS;
 
 function storagePathFromPublicUrl(url: string | null | undefined): string | null {
   if (!url) return null;
@@ -316,7 +319,7 @@ export default function SmartHubButtons() {
       type,
       url: btn.url || '',
       whatsapp_message: btn.whatsapp_message || '',
-      visual_variant: (btn.visual_variant as SmartHubButtonVisualVariant) || 'simple',
+      visual_variant: normalizeButtonVariant(btn.visual_variant),
       click_action: concrete,
       icon: btn.icon || '',
       image: btn.image || '',
@@ -939,6 +942,15 @@ export default function SmartHubButtons() {
               ))}
             </SelectContent>
           </Select>
+          <p className="text-xs text-muted-foreground">
+            {VARIANT_HELP[normalizeButtonVariant(form.visual_variant)].description}
+          </p>
+          {normalizeButtonVariant(form.visual_variant) === 'image_card' && !form.image ? (
+            <p className="text-xs text-amber-700 dark:text-amber-400">
+              Envie a imagem em Configurações avançadas → Imagem do botão. Sem imagem, ele aparece
+              como card com ícone.
+            </p>
+          ) : null}
         </div>
         <div className="grid gap-4 sm:grid-cols-2">
           <ColorField
@@ -1453,11 +1465,7 @@ export default function SmartHubButtons() {
               <div className="flex flex-wrap items-center gap-2">
                 <Badge variant="outline">#{btn.order_index}</Badge>
                 <Badge variant="secondary">
-                  {SMART_HUB_VARIANT_LABELS[
-                    btn.visual_variant as SmartHubButtonVisualVariant
-                  ] ||
-                    btn.visual_variant ||
-                    'Simples'}
+                  {SMART_HUB_VARIANT_LABELS[normalizeButtonVariant(btn.visual_variant)]}
                 </Badge>
                 <Badge variant={btn.visible ? 'default' : 'secondary'}>
                   {btn.visible ? 'Visível' : 'Oculto'}
