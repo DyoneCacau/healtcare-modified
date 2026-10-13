@@ -26,6 +26,7 @@ describe('catálogo de provedores', () => {
         'make',
         'meta',
         'n8n',
+        'suri',
         'webhook',
         'whatsapp_business',
         'zapier',

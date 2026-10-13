@@ -14,6 +14,7 @@ export type IntegrationProvider =
   | 'facebook_lead_ads'
   | 'instagram_lead_ads'
   | 'whatsapp_business'
+  | 'suri'
   | 'landing_page'
   | 'webhook'
   | 'external_api'

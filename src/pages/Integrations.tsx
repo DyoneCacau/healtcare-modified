@@ -14,6 +14,8 @@ import { ApiTokensPanel } from '@/components/integrations/ApiTokensPanel';
 import { LeadsApiPanel } from '@/components/integrations/LeadsApiPanel';
 import { MetaCard } from '@/components/integrations/MetaCard';
 import { MetaConnectionDialog } from '@/components/integrations/MetaConnectionDialog';
+import { SuriCard } from '@/components/integrations/SuriCard';
+import { SuriConnectionDialog } from '@/components/integrations/SuriConnectionDialog';
 import { useAuth } from '@/hooks/useAuth';
 import { usePermissions } from '@/hooks/usePermissions';
 import { useIntegrations } from '@/hooks/useIntegrations';
@@ -46,6 +48,7 @@ export default function Integrations() {
   const [metaDialogOpen, setMetaDialogOpen] = useState(false);
   const [metaIntegration, setMetaIntegration] = useState<Integration | null>(null);
   const [metaAutoAssets, setMetaAutoAssets] = useState(false);
+  const [suriDialogOpen, setSuriDialogOpen] = useState(false);
 
   const canView = isSuperAdmin || can('integracoes', 'can_view');
   const canCreate = isSuperAdmin || can('integracoes', 'can_create');
@@ -57,10 +60,15 @@ export default function Integrations() {
     [integrations],
   );
 
+  const suriConnection = useMemo(
+    () => integrations.find((item) => item.provider === 'suri') ?? null,
+    [integrations],
+  );
+
   const byProvider = useMemo(() => {
     const map = new Map<string, Integration[]>();
     for (const integration of integrations) {
-      if (integration.provider === 'meta') continue;
+      if (integration.provider === 'meta' || integration.provider === 'suri') continue;
       const list = map.get(integration.provider) || [];
       list.push(integration);
       map.set(integration.provider, list);
@@ -69,7 +77,8 @@ export default function Integrations() {
   }, [integrations]);
 
   const catalogProviders = useMemo(
-    () => INTEGRATION_PROVIDERS.filter((provider) => provider.id !== 'meta'),
+    () =>
+      INTEGRATION_PROVIDERS.filter((provider) => provider.id !== 'meta' && provider.id !== 'suri'),
     [],
   );
 
@@ -195,6 +204,21 @@ export default function Integrations() {
                 </div>
               </section>
 
+              <section className="space-y-3">
+                <h2 className="flex items-center gap-2 text-sm font-semibold text-muted-foreground">
+                  <Plug className="h-4 w-4" />
+                  Confirmações por WhatsApp
+                </h2>
+                <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                  <SuriCard
+                    connection={suriConnection}
+                    canCreate={canCreate}
+                    canEdit={canEdit}
+                    onOpen={() => setSuriDialogOpen(true)}
+                  />
+                </div>
+              </section>
+
               {CATEGORY_ORDER.map((category) => {
                 const definitions = catalogProviders.filter((p) => p.category === category);
                 if (definitions.length === 0) return null;
@@ -262,6 +286,13 @@ export default function Integrations() {
         integration={metaIntegration || metaConnection}
         canEdit={canEdit}
         autoOpenAssets={metaAutoAssets}
+      />
+
+      <SuriConnectionDialog
+        open={suriDialogOpen}
+        onOpenChange={setSuriDialogOpen}
+        integration={suriConnection}
+        canEdit={suriConnection ? canEdit : canCreate}
       />
     </>
   );

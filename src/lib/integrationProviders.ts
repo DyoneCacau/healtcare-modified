@@ -79,6 +79,18 @@ export const INTEGRATION_PROVIDERS: IntegrationProviderDefinition[] = [
     docsUrl: 'https://developers.facebook.com/docs/whatsapp/cloud-api',
   },
   {
+    id: 'suri',
+    name: 'Suri',
+    category: 'messaging',
+    description:
+      'Confirmação de consultas e exames no dia, por template do WhatsApp aprovado na Suri.',
+    direction: 'bidirectional',
+    supportsInboundWebhook: true,
+    requiresCredentials: true,
+    createsLeads: false,
+    docsUrl: 'https://sejasuri.gitbook.io/manual-de-integracao',
+  },
+  {
     id: 'landing_page',
     name: 'Landing Pages',
     category: 'forms',

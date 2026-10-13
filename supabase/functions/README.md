@@ -72,6 +72,11 @@ supabase functions deploy meta-leadgen-webhook --no-verify-jwt
 # Smart Hub (visitante anônimo; clinic_id só pelo slug no banco)
 supabase functions deploy smart-hub-capture --no-verify-jwt
 supabase functions deploy smart-hub-booking --no-verify-jwt
+
+# Suri — confirmação de consultas/exames (execute antes: PRODUCAO_42)
+supabase functions deploy suri-connection
+supabase functions deploy suri-send-reminders --no-verify-jwt   # cron: CRON_SECRET
+supabase functions deploy suri-webhook --no-verify-jwt          # segredo na query string
 ```
 
 `integrations-webhook`, `integrations-api` e o callback de `meta-oauth` sobem
