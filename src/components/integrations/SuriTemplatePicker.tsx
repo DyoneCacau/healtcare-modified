@@ -14,6 +14,7 @@ import {
   type SuriTemplateOption,
   type SuriVariableField,
 } from '@/lib/suriConfig';
+import { findModelForTemplate, modelFields } from '@/lib/suriTemplateModels';
 
 const NONE = '__none__';
 
@@ -58,6 +59,7 @@ export function SuriTemplatePicker({
   onChange,
 }: SuriTemplatePickerProps) {
   const selected = value ? templates.find((t) => t.message_id === value.template_id) : undefined;
+  const model = selected ? findModelForTemplate(selected) : null;
 
   const handleTemplate = (templateId: string) => {
     if (templateId === NONE) {
@@ -65,6 +67,11 @@ export function SuriTemplatePicker({
       return;
     }
     const template = templates.find((t) => t.message_id === templateId);
+    const model = template ? findModelForTemplate(template) : null;
+    if (model) {
+      onChange({ template_id: templateId, parameters: modelFields(model) });
+      return;
+    }
     const count = template?.parameters ?? 0;
     onChange({
       template_id: templateId,
@@ -121,6 +128,11 @@ export function SuriTemplatePicker({
 
       {selected && (
         <div className="space-y-2">
+          {model && (
+            <p className="text-[11px] text-emerald-700 dark:text-emerald-400">
+              Modelo “{model.title}” reconhecido: variáveis preenchidas automaticamente.
+            </p>
+          )}
           <pre className="whitespace-pre-wrap rounded-md bg-muted/60 p-2 font-sans text-xs text-muted-foreground">
             {selected.body}
           </pre>

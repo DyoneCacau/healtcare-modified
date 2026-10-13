@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { format, parseISO } from 'date-fns';
 import { Loader2, RefreshCw, Send, Unplug } from 'lucide-react';
+import { toast } from 'sonner';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -32,6 +33,7 @@ import {
 } from '@/components/ui/table';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { SecretRevealField } from './SecretRevealField';
+import { SuriTemplateModels } from './SuriTemplateModels';
 import { SuriTemplatePicker, type TemplateSelectionState } from './SuriTemplatePicker';
 import { useClinicProcedures } from '@/hooks/useClinicProcedures';
 import {
@@ -41,6 +43,7 @@ import {
   type AppointmentReminderStatus,
 } from '@/hooks/useSuriConnection';
 import { parseKeywordList, readSuriConfig, SURI_TIMEZONES } from '@/lib/suriConfig';
+import type { SuriModelKind } from '@/lib/suriTemplateModels';
 import type { Integration } from '@/types/integration';
 
 interface SuriConnectionDialogProps {
@@ -88,9 +91,11 @@ export function SuriConnectionDialog({
   const [responseFlowId, setResponseFlowId] = useState('');
   const [webhookUrl, setWebhookUrl] = useState<string | null>(null);
   const [testPhone, setTestPhone] = useState('');
+  const [tab, setTab] = useState('conexao');
 
   useEffect(() => {
     if (!open) return;
+    setTab(connected ? 'confirmacoes' : 'conexao');
     setEndpoint(config.endpoint_url || '');
     setToken('');
     setEnabled(config.reminders_enabled);
@@ -151,6 +156,13 @@ export function SuriConnectionDialog({
     if (result.webhook_url) setWebhookUrl(result.webhook_url);
   };
 
+  const handleApplyModel = (kind: SuriModelKind, selection: TemplateSelectionState) => {
+    if (kind === 'exam') setExam(selection);
+    else setConsultation(selection);
+    setTab('confirmacoes');
+    toast.success('Template e variáveis preenchidos. Clique em “Salvar confirmações”.');
+  };
+
   const toggleCategory = (category: string, checked: boolean) => {
     setExamCategories((current) =>
       checked ? [...current, category] : current.filter((c) => c !== category),
@@ -168,9 +180,10 @@ export function SuriConnectionDialog({
           </DialogDescription>
         </DialogHeader>
 
-        <Tabs defaultValue={connected ? 'confirmacoes' : 'conexao'} className="space-y-4">
+        <Tabs value={tab} onValueChange={setTab} className="space-y-4">
           <TabsList>
             <TabsTrigger value="conexao">Conexão</TabsTrigger>
+            <TabsTrigger value="modelos">Modelos</TabsTrigger>
             <TabsTrigger value="confirmacoes" disabled={!connected}>
               Confirmações
             </TabsTrigger>
@@ -257,6 +270,17 @@ export function SuriConnectionDialog({
                 </>
               )}
             </div>
+          </TabsContent>
+
+          <TabsContent value="modelos">
+            <SuriTemplateModels
+              templates={templates}
+              templatesLoading={connected && templatesQuery.isLoading}
+              canEdit={canEdit && connected}
+              consultationTemplateId={consultation?.template_id ?? null}
+              examTemplateId={exam?.template_id ?? null}
+              onApply={handleApplyModel}
+            />
           </TabsContent>
 
           <TabsContent value="confirmacoes" className="space-y-4">
