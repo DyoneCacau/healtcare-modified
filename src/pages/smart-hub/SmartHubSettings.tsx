@@ -417,14 +417,17 @@ export default function SmartHubSettings() {
     }
   };
 
+  const persistPublicBooking = async (enabled: boolean) => {
+    if (!clinicId || !hub?.id) throw new Error('Hub não encontrado.');
+    await HubService.update(hub.id, clinicId, { public_booking_enabled: enabled }, user?.id);
+    setPublicBookingEnabled(enabled);
+    await refreshHubQueries();
+    toast.success(enabled ? 'Agendamento online ativado.' : 'Agendamento online desativado.');
+  };
+
   const handlePublicBookingToggle = async (next: boolean) => {
     if (!canEditHub) {
       toast.error('Você não tem permissão para editar o Smart Hub.');
-      return;
-    }
-    if (!next) {
-      setPublicBookingEnabled(false);
-      setBookingChecklist(null);
       return;
     }
     if (!clinicId) {
@@ -433,6 +436,11 @@ export default function SmartHubSettings() {
     }
     setBookingCheckBusy(true);
     try {
+      if (!next) {
+        setBookingChecklist(null);
+        await persistPublicBooking(false);
+        return;
+      }
       const readiness = await fetchBookingReadiness({
         clinicId,
         hasSmartHubModule,
@@ -446,7 +454,7 @@ export default function SmartHubSettings() {
         });
         return;
       }
-      setPublicBookingEnabled(true);
+      await persistPublicBooking(true);
     } catch (err) {
       setPublicBookingEnabled(hub?.public_booking_enabled === true);
       toast.error(
