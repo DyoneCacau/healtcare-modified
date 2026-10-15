@@ -50,6 +50,7 @@ const SmartHubButtons = lazyWithRetry(() => import("./pages/smart-hub/SmartHubBu
 const SmartHubAnalytics = lazyWithRetry(() => import("./pages/smart-hub/SmartHubAnalytics"));
 const SmartHubSettings = lazyWithRetry(() => import("./pages/smart-hub/SmartHubSettings"));
 const SmartHubDomain = lazyWithRetry(() => import("./pages/smart-hub/SmartHubDomain"));
+const SmartHubForm = lazyWithRetry(() => import("./pages/smart-hub/SmartHubForm"));
 const SmartHubPreview = lazyWithRetry(() => import("./pages/smart-hub/SmartHubPreview"));
 const PublicSmartHub = lazyWithRetry(() => import("./pages/smart-hub/PublicSmartHub"));
 const MarketingCrm = lazyWithRetry(() =>
@@ -474,6 +475,16 @@ function AppRoutes() {
             <RequireFeature feature="smart_hub">
               <LazyPage>
                 <SmartHubAnalytics />
+              </LazyPage>
+            </RequireFeature>
+          }
+        />
+        <Route
+          path="/smart-hub/formulario"
+          element={
+            <RequireFeature feature="smart_hub">
+              <LazyPage>
+                <SmartHubForm />
               </LazyPage>
             </RequireFeature>
           }

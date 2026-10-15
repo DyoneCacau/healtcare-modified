@@ -8,6 +8,7 @@ import {
   Settings,
   Globe,
   Eye,
+  ClipboardList,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
@@ -17,6 +18,7 @@ const NAV_ITEMS = [
   { label: 'Páginas', path: '/smart-hub/paginas', icon: FileEdit },
   { label: 'Templates', path: '/smart-hub/templates', icon: LayoutTemplate },
   { label: 'Botões', path: '/smart-hub/botoes', icon: MousePointerClick },
+  { label: 'Formulário', path: '/smart-hub/formulario', icon: ClipboardList },
   { label: 'Analytics', path: '/smart-hub/analytics', icon: BarChart3 },
   { label: 'Configurações', path: '/smart-hub/configuracoes', icon: Settings },
   { label: 'Domínio', path: '/smart-hub/dominio', icon: Globe },

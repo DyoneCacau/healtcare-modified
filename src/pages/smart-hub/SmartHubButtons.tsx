@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { SmartHubFormConfigEditor } from '@/components/smart-hub/SmartHubFormConfigEditor';
 import { ChevronDown, ChevronUp, Info, Pencil, Plus, Trash2 } from 'lucide-react';
 import { toast } from 'sonner';
 import {
@@ -166,6 +166,7 @@ export default function SmartHubButtons() {
   const [contactMethod, setContactMethod] = useState<ContactMethodId>('form');
   const [advancedOpen, setAdvancedOpen] = useState(false);
   const [technicalOpen, setTechnicalOpen] = useState(false);
+  const [formConfigOpen, setFormConfigOpen] = useState(false);
 
   const effectiveAction = resolveClickAction(form.click_action, form.type);
   const availableActions = useMemo(() => {
@@ -780,6 +781,20 @@ export default function SmartHubButtons() {
             onChange={(e) => setForm((f) => ({ ...f, capture_interest: e.target.value }))}
             placeholder="Ex.: Clareamento, Ortodontia…"
           />
+          <div className="flex flex-wrap items-center justify-between gap-3 rounded-md border bg-muted/30 px-3 py-3">
+            <div className="min-w-0 space-y-0.5">
+              <p className="text-sm font-medium">Formulário: {hubResolvedCapture.form_title}</p>
+              <p className="text-xs text-muted-foreground">
+                {hubResolvedCapture.custom_questions.length === 1
+                  ? '1 pergunta personalizada'
+                  : `${hubResolvedCapture.custom_questions.length} perguntas personalizadas`}
+                {' · '}Etapa: {stageLabel}
+              </p>
+            </div>
+            <Button type="button" variant="outline" size="sm" onClick={() => setFormConfigOpen(true)}>
+              Editar formulário
+            </Button>
+          </div>
         </div>
       ) : null}
 
@@ -1020,8 +1035,13 @@ export default function SmartHubButtons() {
                     <p className="font-medium">Padrão do Smart Hub</p>
                     <p className="text-xs text-muted-foreground">Responsável: {ownerLabel}</p>
                     <p className="text-xs text-muted-foreground">Etapa inicial: {stageLabel}</p>
-                    <Button type="button" variant="outline" size="sm" asChild>
-                      <Link to="/smart-hub/configuracoes">Ver ou editar formulário padrão</Link>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setFormConfigOpen(true)}
+                    >
+                      Ver ou editar formulário padrão
                     </Button>
                   </div>
                 ) : (
@@ -1547,6 +1567,18 @@ export default function SmartHubButtons() {
               </Button>
             </div>
           </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={formConfigOpen} onOpenChange={setFormConfigOpen}>
+        <DialogContent className="max-h-[90vh] w-[calc(100vw-1.5rem)] max-w-2xl overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Formulário do Smart Hub</DialogTitle>
+            <DialogDescription>
+              Vale para todos os botões de formulário. Também fica na aba Formulário.
+            </DialogDescription>
+          </DialogHeader>
+          <SmartHubFormConfigEditor onSaved={() => setFormConfigOpen(false)} />
         </DialogContent>
       </Dialog>
     </SmartHubLayout>

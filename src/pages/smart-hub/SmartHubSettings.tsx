@@ -40,13 +40,6 @@ import {
   STYLE_PRESETS,
   mergeVisualConfig,
   generateSlugFromTitle,
-  defaultCaptureConfig,
-  mergeCaptureConfig,
-  CaptureService,
-  assertValidOwnerInput,
-  normalizeOwnerUserId,
-  normalizeCustomQuestions,
-  customQuestionsIssues,
   fetchBookingReadiness,
   formatBookingReadinessChecklist,
   type BookingReadinessItem,
@@ -55,15 +48,12 @@ import {
   SMART_HUB_STYLE_PRESET_LABELS,
   type PublicSmartHubPayload,
   type SmartHubAssetKind,
-  type SmartHubCaptureConfig,
   type SmartHubStylePreset,
   type SmartHubVisualConfig,
 } from '@/types/smartHub';
 import type { SmartHubPreviewDevice } from '@/components/smart-hub/SmartHubDevicePreview';
-import { CustomQuestionsEditor } from '@/components/smart-hub/CustomQuestionsEditor';
+import { Link } from 'react-router-dom';
 import { useSubscription } from '@/hooks/useSubscription';
-import { useClinicStaffOptions } from '@/hooks/useClinicStaffOptions';
-import { CRM_STAGES } from '@/types/crm';
 const STYLE_PRESET_KEYS = Object.keys(SMART_HUB_STYLE_PRESET_LABELS) as SmartHubStylePreset[];
 
 function storagePathFromPublicUrl(url: string | null | undefined): string | null {
@@ -85,8 +75,6 @@ export default function SmartHubSettings() {
   const { user } = useAuth();
   const { hasFeature } = useSubscription();
   const { can, isLoading: permissionsLoading } = usePermissions();
-  const { staff } = useClinicStaffOptions();
-  const hasCrm = hasFeature('crm');
   const hasAgenda = hasFeature('agenda');
   const hasSmartHubModule = hasFeature('smart_hub');
   const canEditHub = permissionsLoading ? false : can('smart_hub', 'can_edit');
@@ -124,9 +112,6 @@ export default function SmartHubSettings() {
   const [contactEmail, setContactEmail] = useState('');
   const [contactAddress, setContactAddress] = useState('');
   const [mapEmbedUrl, setMapEmbedUrl] = useState('');
-  const [captureConfig, setCaptureConfig] = useState<SmartHubCaptureConfig>(
-    defaultCaptureConfig()
-  );
   const [publicBookingEnabled, setPublicBookingEnabled] = useState(false);
   const [bookingChecklist, setBookingChecklist] = useState<BookingReadinessItem[] | null>(
     null
@@ -157,7 +142,6 @@ export default function SmartHubSettings() {
     setContactEmail(hub.contact_email || '');
     setContactAddress(hub.contact_address || '');
     setMapEmbedUrl(hub.map_embed_url || '');
-    setCaptureConfig(mergeCaptureConfig(hub.capture_config));
     setPublicBookingEnabled(hub.public_booking_enabled === true);
   }, [hub]);
 
@@ -187,7 +171,6 @@ export default function SmartHubSettings() {
         map_embed_url: mapEmbedUrl || null,
         seo_title: seoTitle || null,
         seo_description: seoDescription || null,
-        capture_config: captureConfig,
         public_booking_enabled: publicBookingEnabled,
       },
       theme: theme
@@ -226,7 +209,6 @@ export default function SmartHubSettings() {
     mapEmbedUrl,
     seoTitle,
     seoDescription,
-    captureConfig,
     publicBookingEnabled,
   ]);
 
@@ -340,19 +322,6 @@ export default function SmartHubSettings() {
       toast.error('Você não tem permissão para editar o Smart Hub.');
       return;
     }
-    const ownerCheck = assertValidOwnerInput(captureConfig.default_owner_user_id);
-    if (ownerCheck.ok === false) {
-      toast.error(ownerCheck.message);
-      return;
-    }
-    const questionIssues = customQuestionsIssues(captureConfig.custom_questions ?? []);
-    if (questionIssues.length > 0) {
-      toast.error('Revise as perguntas personalizadas.', {
-        description: questionIssues.join('\n'),
-      });
-      return;
-    }
-
     const enablingBooking =
       publicBookingEnabled === true && hub?.public_booking_enabled !== true;
 
@@ -389,13 +358,6 @@ export default function SmartHubSettings() {
       }
     }
 
-    const sanitizedCapture: SmartHubCaptureConfig = {
-      ...captureConfig,
-      default_owner_user_id: normalizeOwnerUserId(ownerCheck.owner),
-      initial_stage: captureConfig.initial_stage || 'new',
-      custom_questions: normalizeCustomQuestions(captureConfig.custom_questions),
-    };
-
     try {
       // Nome público e slug são enviados em campos separados — nunca sobrescrever um pelo outro.
       await updateHub.mutateAsync({
@@ -417,7 +379,6 @@ export default function SmartHubSettings() {
         contact_email: contactEmail || null,
         contact_address: contactAddress || null,
         map_embed_url: mapEmbedUrl || null,
-        capture_config: sanitizedCapture,
         public_booking_enabled: publicBookingEnabled,
       });
       setBookingChecklist(null);
@@ -878,246 +839,16 @@ export default function SmartHubSettings() {
         ) : null}
       </div>
 
-      <div className="space-y-6 rounded-lg border bg-card p-4 sm:p-6">
+      <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border bg-card p-4 sm:p-6">
         <div>
           <h3 className="text-sm font-semibold">Formulário e CRM</h3>
           <p className="text-xs text-muted-foreground">
-            Configure como os contatos recebidos pelos formulários serão organizados no CRM.
+            Campos, perguntas personalizadas e destino no CRM ficam na aba Formulário.
           </p>
         </div>
-
-        {!hasCrm ? (
-          <div className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">
-            O módulo CRM no plano é necessário para receber leads pelos formulários do Smart Hub.
-            Botões com ação “Abrir WhatsApp” continuam funcionando normalmente.
-          </div>
-        ) : (
-          <div className="grid gap-4 sm:grid-cols-2">
-            <div className="space-y-2">
-              <Label>Etapa inicial padrão</Label>
-              <Select
-                value={captureConfig.initial_stage || 'new'}
-                onValueChange={(v) =>
-                  setCaptureConfig((prev) => ({
-                    ...prev,
-                    initial_stage: v as SmartHubCaptureConfig['initial_stage'],
-                  }))
-                }
-              >
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {CRM_STAGES.map((s) => (
-                    <SelectItem key={s.id} value={s.id}>
-                      {s.label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              <p className="text-xs text-muted-foreground">
-                Etapa do Kanban em que o lead entra após o formulário.
-              </p>
-            </div>
-            <div className="space-y-2">
-              <Label>Responsável padrão</Label>
-              <Select
-                value={captureConfig.default_owner_user_id || '__none__'}
-                onValueChange={(v) =>
-                  setCaptureConfig((prev) => ({
-                    ...prev,
-                    default_owner_user_id: v === '__none__' ? null : v,
-                  }))
-                }
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="Sem responsável" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="__none__">Sem responsável</SelectItem>
-                  {staff.map((s) => (
-                    <SelectItem key={s.id} value={s.id}>
-                      {s.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="space-y-2 sm:col-span-2">
-              <Label>Título do formulário</Label>
-              <Input
-                value={captureConfig.form_title || ''}
-                onChange={(e) =>
-                  setCaptureConfig((prev) => ({ ...prev, form_title: e.target.value }))
-                }
-              />
-            </div>
-            <div className="space-y-2 sm:col-span-2">
-              <Label>Descrição do formulário</Label>
-              <Textarea
-                value={captureConfig.form_description || ''}
-                onChange={(e) =>
-                  setCaptureConfig((prev) => ({ ...prev, form_description: e.target.value }))
-                }
-                rows={2}
-              />
-            </div>
-            <div className="space-y-2">
-              <Label>Texto do botão Enviar</Label>
-              <Input
-                value={captureConfig.submit_label || ''}
-                onChange={(e) =>
-                  setCaptureConfig((prev) => ({ ...prev, submit_label: e.target.value }))
-                }
-              />
-            </div>
-            <div className="space-y-2">
-              <Label>URL opcional após envio</Label>
-              <Input
-                value={captureConfig.redirect_url || ''}
-                onChange={(e) =>
-                  setCaptureConfig((prev) => ({ ...prev, redirect_url: e.target.value || null }))
-                }
-                placeholder="https://..."
-              />
-            </div>
-            <div className="flex items-center justify-between gap-3 rounded-lg border px-3 py-2 sm:col-span-2">
-              <div>
-                <Label>Exigir aceite de privacidade</Label>
-              </div>
-              <Switch
-                checked={captureConfig.require_privacy_accept !== false}
-                onCheckedChange={(v) =>
-                  setCaptureConfig((prev) => ({ ...prev, require_privacy_accept: v }))
-                }
-              />
-            </div>
-            <div className="space-y-2 sm:col-span-2">
-              <Label>Texto do consentimento</Label>
-              <Textarea
-                value={captureConfig.privacy_text || ''}
-                onChange={(e) =>
-                  setCaptureConfig((prev) => ({ ...prev, privacy_text: e.target.value }))
-                }
-                rows={2}
-              />
-            </div>
-            <div className="space-y-2 sm:col-span-2">
-              <Label>Mensagem de confirmação</Label>
-              <Input
-                value={captureConfig.success_message || ''}
-                onChange={(e) =>
-                  setCaptureConfig((prev) => ({ ...prev, success_message: e.target.value }))
-                }
-              />
-            </div>
-            <div className="sm:col-span-2">
-              <CustomQuestionsEditor
-                value={captureConfig.custom_questions ?? []}
-                onChange={(next) =>
-                  setCaptureConfig((prev) => ({ ...prev, custom_questions: next }))
-                }
-                disabled={!canEditHub}
-              />
-            </div>
-            <div className="flex items-center justify-between gap-3 rounded-lg border px-3 py-2 sm:col-span-2">
-              <div>
-                <Label>Abrir WhatsApp após envio</Label>
-                <p className="text-xs text-muted-foreground">
-                  Só abre o WhatsApp depois de confirmar o salvamento no CRM.
-                </p>
-              </div>
-              <Switch
-                checked={Boolean(captureConfig.redirect_whatsapp_after_submit)}
-                onCheckedChange={(v) =>
-                  setCaptureConfig((prev) => ({ ...prev, redirect_whatsapp_after_submit: v }))
-                }
-              />
-            </div>
-            {captureConfig.redirect_whatsapp_after_submit ? (
-              <>
-                <div className="space-y-2">
-                  <Label>Telefone do WhatsApp</Label>
-                  <Input
-                    value={captureConfig.whatsapp_phone || whatsappNumber || ''}
-                    onChange={(e) =>
-                      setCaptureConfig((prev) => ({
-                        ...prev,
-                        whatsapp_phone: e.target.value || null,
-                      }))
-                    }
-                    placeholder={whatsappNumber || '5511999999999'}
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label>Mensagem do WhatsApp</Label>
-                  <Input
-                    value={
-                      captureConfig.whatsapp_followup_message ||
-                      captureConfig.whatsapp_message ||
-                      ''
-                    }
-                    onChange={(e) =>
-                      setCaptureConfig((prev) => ({
-                        ...prev,
-                        whatsapp_followup_message: e.target.value || null,
-                      }))
-                    }
-                    placeholder="Olá! Acabei de enviar o formulário…"
-                  />
-                </div>
-              </>
-            ) : null}
-
-            <div className="flex flex-wrap gap-2 sm:col-span-2">
-              <Button
-                type="button"
-                variant="outline"
-                disabled={!hub?.slug || !hasCrm}
-                onClick={async () => {
-                  if (!hub?.slug) return;
-                  const result = await CaptureService.validateCapture(hub.slug);
-                  if (result.ready || result.ok) {
-                    toast.success(result.message || 'Formulário pronto para receber contatos.');
-                  } else {
-                    const issues = result.issues?.length
-                      ? result.issues.join(' ')
-                      : result.error || 'Corrija a configuração.';
-                    toast.error(result.message || 'Corrija os seguintes itens:', {
-                      description: issues,
-                    });
-                  }
-                }}
-              >
-                Verificar configuração
-              </Button>
-              <Button
-                type="button"
-                variant="secondary"
-                disabled={!hub?.slug || !hasCrm || hub.status !== 'published'}
-                onClick={async () => {
-                  if (!hub?.slug) return;
-                  const result = await CaptureService.submitTestLead(hub.slug);
-                  if (!result.ok) {
-                    toast.error(result.error || 'Falha no teste', {
-                      description: result.request_id
-                        ? `Código: ${result.request_id}`
-                        : undefined,
-                    });
-                    return;
-                  }
-                  toast.success(result.message || 'Lead de teste criado.', {
-                    description: result.stage
-                      ? `Etapa: ${result.stage}. Procure no CRM por “TESTE Smart Hub”.`
-                      : 'Procure no CRM por “TESTE Smart Hub”.',
-                  });
-                }}
-              >
-                Enviar lead de teste
-              </Button>
-            </div>
-          </div>
-        )}
+        <Button variant="outline" size="sm" asChild>
+          <Link to="/smart-hub/formulario">Abrir formulário</Link>
+        </Button>
       </div>
 
       <div className="space-y-6 rounded-lg border bg-card p-4 sm:p-6">

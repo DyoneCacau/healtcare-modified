@@ -26,6 +26,7 @@ export const ROUTE_PRELOADERS: Record<string, () => Promise<unknown>> = {
   '/smart-hub/templates': () => import('@/pages/smart-hub/SmartHubTemplates'),
   '/smart-hub/botoes': () => import('@/pages/smart-hub/SmartHubButtons'),
   '/smart-hub/analytics': () => import('@/pages/smart-hub/SmartHubAnalytics'),
+  '/smart-hub/formulario': () => import('@/pages/smart-hub/SmartHubForm'),
   '/smart-hub/configuracoes': () => import('@/pages/smart-hub/SmartHubSettings'),
   '/smart-hub/dominio': () => import('@/pages/smart-hub/SmartHubDomain'),
 };
