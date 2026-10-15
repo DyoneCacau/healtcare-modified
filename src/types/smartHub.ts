@@ -1,5 +1,9 @@
 /** Tipos do módulo Healthcare Smart Hub (Fase 1 + 2 + 2.1) */
 
+import type { CustomQuestion } from '../../supabase/functions/_shared/smartHubCustomQuestions.ts';
+
+export type SmartHubCustomQuestion = CustomQuestion;
+
 export type SmartHubStatus = 'draft' | 'published' | 'offline' | 'archived';
 export type SmartHubPageStatus = 'draft' | 'published' | 'archived';
 export type SmartHubButtonType =
@@ -84,6 +88,8 @@ export interface SmartHubCaptureConfig {
   privacy_url?: string | null;
   privacy_version?: string;
   fields?: SmartHubFormFieldConfig[];
+  /** Perguntas extras criadas pela clínica (também usadas no cadastro manual do CRM). */
+  custom_questions?: SmartHubCustomQuestion[];
   dedupe_mode?: 'update' | 'activity' | 'create' | 'block';
   manual_copy_message?: string | null;
 }

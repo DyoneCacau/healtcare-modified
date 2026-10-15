@@ -44,6 +44,9 @@ import { useCrmLeads, useCrmLeadMutations } from '@/hooks/useCrmLeads';
 import { useClinicStaffOptions } from '@/hooks/useClinicStaffOptions';
 import { usePatientMutations } from '@/hooks/usePatients';
 import { useClinic } from '@/hooks/useClinic';
+import { useClinicCustomQuestions } from '@/hooks/useSmartHub';
+import { CustomQuestionFields } from '@/components/smart-hub/CustomQuestionFields';
+import { collectCustomAnswers, formatCustomAnswersNotes } from '@/services/smartHub/customQuestions';
 import { formatCurrencyBRL } from '@/lib/currency';
 import { leadSourceLabels, type LeadSource } from '@/types/agenda';
 import {
@@ -105,6 +108,8 @@ export default function Crm() {
   const [dragOverStage, setDragOverStage] = useState<CrmLeadStage | null>(null);
   const [formError, setFormError] = useState('');
   const [whatsappLeadMode, setWhatsappLeadMode] = useState(false);
+  const customQuestions = useClinicCustomQuestions();
+  const [customAnswers, setCustomAnswers] = useState<Record<string, string>>({});
 
   const today = startOfDay(new Date());
 
@@ -146,6 +151,7 @@ export default function Crm() {
       ...emptyForm,
       owner_user_id: user?.id || '',
     });
+    setCustomAnswers({});
     setNewAllergy('');
     setDialogOpen(true);
   };
@@ -161,6 +167,7 @@ export default function Crm() {
       owner_user_id: user?.id || '',
       notes: 'Cadastro manual a partir de atendimento WhatsApp (Smart Hub).',
     });
+    setCustomAnswers({});
     setNewAllergy('');
     setDialogOpen(true);
   };
@@ -207,6 +214,10 @@ export default function Crm() {
       return;
     }
     setFormError('');
+    const answersNotes = editing
+      ? null
+      : formatCustomAnswersNotes(collectCustomAnswers(customQuestions, customAnswers).answers);
+    const notes = [form.notes.trim(), answersNotes].filter(Boolean).join('\n\n');
     const payload = {
       name: form.name.trim(),
       cpf: form.cpf.replace(/\D/g, '') ? form.cpf.trim() : null,
@@ -218,7 +229,7 @@ export default function Crm() {
       interest: form.interest || null,
       estimated_value: form.estimated_value > 0 ? form.estimated_value : null,
       next_follow_up: form.next_follow_up || null,
-      notes: form.notes || null,
+      notes: notes || null,
       allergies: form.allergies,
       owner_user_id: form.owner_user_id || user?.id || null,
       lost_reason: form.stage === 'lost' ? form.lost_reason || null : null,
@@ -713,6 +724,24 @@ export default function Crm() {
                 Também vai automaticamente para o cadastro do paciente ao converter o lead.
               </p>
             </div>
+            {!editing && customQuestions.length > 0 ? (
+              <div className="space-y-3 rounded-lg border p-3">
+                <div>
+                  <p className="text-sm font-medium">Perguntas do formulário</p>
+                  <p className="text-xs text-muted-foreground">
+                    Mesmas perguntas do Smart Hub. Opcionais aqui; as respostas vão para as
+                    observações do lead.
+                  </p>
+                </div>
+                <CustomQuestionFields
+                  questions={customQuestions}
+                  values={customAnswers}
+                  onChange={(id, value) => setCustomAnswers((prev) => ({ ...prev, [id]: value }))}
+                  showRequired={false}
+                  idPrefix="crm-cq"
+                />
+              </div>
+            ) : null}
             <div className="space-y-2">
               <Label>Observações</Label>
               <Textarea

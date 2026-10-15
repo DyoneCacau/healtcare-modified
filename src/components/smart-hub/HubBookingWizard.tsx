@@ -427,6 +427,15 @@ export function HubBookingWizard({
               <p className="text-sm text-muted-foreground">
                 {BOOKING_PUBLIC_ERROR_MESSAGES.booking_disabled}
               </p>
+              {preview ? (
+                <p className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900">
+                  {!bookingOn
+                    ? 'Prévia: ative "Permitir agendamento online pelo Smart Hub" em Configurações e salve.'
+                    : hub.status !== 'published'
+                      ? 'Prévia: o agendamento online só funciona com o Smart Hub publicado. Clique em Publicar e teste pela página pública.'
+                      : 'Prévia: verifique se o agendamento online continua ativo em Configurações.'}
+                </p>
+              ) : null}
               <Button type="button" className="h-12 w-full" onClick={() => handleClose(false)}>
                 Voltar ao Smart Hub
               </Button>

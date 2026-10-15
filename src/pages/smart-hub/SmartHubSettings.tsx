@@ -45,6 +45,8 @@ import {
   CaptureService,
   assertValidOwnerInput,
   normalizeOwnerUserId,
+  normalizeCustomQuestions,
+  customQuestionsIssues,
   fetchBookingReadiness,
   formatBookingReadinessChecklist,
   type BookingReadinessItem,
@@ -58,6 +60,7 @@ import {
   type SmartHubVisualConfig,
 } from '@/types/smartHub';
 import type { SmartHubPreviewDevice } from '@/components/smart-hub/SmartHubDevicePreview';
+import { CustomQuestionsEditor } from '@/components/smart-hub/CustomQuestionsEditor';
 import { useSubscription } from '@/hooks/useSubscription';
 import { useClinicStaffOptions } from '@/hooks/useClinicStaffOptions';
 import { CRM_STAGES } from '@/types/crm';
@@ -342,6 +345,13 @@ export default function SmartHubSettings() {
       toast.error(ownerCheck.message);
       return;
     }
+    const questionIssues = customQuestionsIssues(captureConfig.custom_questions ?? []);
+    if (questionIssues.length > 0) {
+      toast.error('Revise as perguntas personalizadas.', {
+        description: questionIssues.join('\n'),
+      });
+      return;
+    }
 
     const enablingBooking =
       publicBookingEnabled === true && hub?.public_booking_enabled !== true;
@@ -383,6 +393,7 @@ export default function SmartHubSettings() {
       ...captureConfig,
       default_owner_user_id: normalizeOwnerUserId(ownerCheck.owner),
       initial_stage: captureConfig.initial_stage || 'new',
+      custom_questions: normalizeCustomQuestions(captureConfig.custom_questions),
     };
 
     try {
@@ -998,6 +1009,15 @@ export default function SmartHubSettings() {
                 onChange={(e) =>
                   setCaptureConfig((prev) => ({ ...prev, success_message: e.target.value }))
                 }
+              />
+            </div>
+            <div className="sm:col-span-2">
+              <CustomQuestionsEditor
+                value={captureConfig.custom_questions ?? []}
+                onChange={(next) =>
+                  setCaptureConfig((prev) => ({ ...prev, custom_questions: next }))
+                }
+                disabled={!canEditHub}
               />
             </div>
             <div className="flex items-center justify-between gap-3 rounded-lg border px-3 py-2 sm:col-span-2">

@@ -64,6 +64,7 @@ export const PUBLIC_CAPTURE_ALLOWED_KEYS = [
   'privacy_url',
   'privacy_version',
   'fields',
+  'custom_questions',
   'manual_copy_message',
 ] as const;
 

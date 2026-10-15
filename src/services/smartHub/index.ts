@@ -13,6 +13,7 @@ export * from './imageUtils';
 export * from './buttonDestinations';
 export * from './captureDefaults';
 export * from './resolveCaptureConfig';
+export * from './customQuestions';
 export { CaptureService } from './CaptureService';
 export * from './buttonUtils';
 export * from './professionalProcedureEligibility';

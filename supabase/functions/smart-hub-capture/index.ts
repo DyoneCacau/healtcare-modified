@@ -18,6 +18,11 @@ import {
   normalizePhoneDigits,
   resolveCaptureConfigEdge,
 } from '../_shared/smartHubCaptureResolve.ts'
+import {
+  collectCustomAnswers,
+  formatCustomAnswersNotes,
+  normalizeCustomQuestions,
+} from '../_shared/smartHubCustomQuestions.ts'
 
 const MAX_BODY_BYTES = 50_000
 const RATE_LIMIT = 20
@@ -299,6 +304,20 @@ Deno.serve(async (req) => {
     const preferredTime = sanitizeText(body.preferred_time ?? body.melhor_horario, 120)
     const preferredDate = sanitizeText(body.preferred_date ?? body.data_preferida, 40)
 
+    const hubCapture =
+      hub.capture_config && typeof hub.capture_config === 'object' && !Array.isArray(hub.capture_config)
+        ? (hub.capture_config as Record<string, unknown>)
+        : {}
+    const customQuestions = normalizeCustomQuestions(hubCapture.custom_questions)
+    const { answers: customAnswers, missing: missingAnswers } = collectCustomAnswers(
+      customQuestions,
+      body.custom_answers,
+    )
+    if (!isTest && missingAnswers.length > 0) {
+      throw new HttpError(400, `Responda: ${missingAnswers[0].label}`, 'invalid_payload')
+    }
+    const customAnswersNotes = formatCustomAnswersNotes(customAnswers)
+
     const stage = resolved.initial_stage
     const ownerUserId = resolved.owner_user_id
 
@@ -307,6 +326,7 @@ Deno.serve(async (req) => {
       message ? `Mensagem: ${message}` : null,
       preferredTime ? `Melhor horário: ${preferredTime}` : null,
       preferredDate ? `Data preferida: ${preferredDate}` : null,
+      customAnswersNotes,
       buttonTitle ? `Botão: ${buttonTitle}` : null,
       `Origem: Smart Hub (${hub.slug})`,
     ].filter(Boolean)
@@ -337,6 +357,7 @@ Deno.serve(async (req) => {
       privacy_version: resolved.privacy_version,
       preferred_time: preferredTime,
       preferred_date: preferredDate,
+      custom_answers: customAnswers,
       is_test: isTest,
     }
 

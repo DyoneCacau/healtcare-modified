@@ -11,6 +11,8 @@ export interface SmartHubCaptureSubmitInput {
   message?: string;
   preferred_time?: string;
   preferred_date?: string;
+  /** Respostas das perguntas personalizadas, por id da pergunta. */
+  custom_answers?: Record<string, string>;
   privacy_accepted: boolean;
   referrer?: string;
   landing_url?: string;

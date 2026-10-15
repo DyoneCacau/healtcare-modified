@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import { useAuth } from '@/hooks/useAuth';
@@ -10,6 +10,8 @@ import {
   TemplateService,
   DomainService,
   ButtonService,
+  normalizeCustomQuestions,
+  type CustomQuestion,
 } from '@/services/smartHub';
 import type {
   PublicSmartHubPayload,
@@ -243,6 +245,24 @@ export function usePublicSmartHub(slug: string | undefined) {
     staleTime: 15_000,
     refetchOnWindowFocus: true,
   });
+}
+
+/** Perguntas personalizadas do Smart Hub da clínica (vazio se não houver hub/módulo). */
+export function useClinicCustomQuestions(): CustomQuestion[] {
+  const { clinicId } = useClinic();
+  const { data } = useQuery({
+    queryKey: ['smart-hub', clinicId],
+    queryFn: async () => {
+      if (!clinicId) return null;
+      return HubService.getByClinicId(clinicId);
+    },
+    enabled: !!clinicId,
+    retry: false,
+  });
+  return useMemo(
+    () => normalizeCustomQuestions(data?.capture_config?.custom_questions),
+    [data],
+  );
 }
 
 /**

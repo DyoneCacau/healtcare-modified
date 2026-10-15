@@ -11,9 +11,10 @@ import {
   SheetHeader,
   SheetTitle,
 } from '@/components/ui/sheet';
-import { CaptureService, resolveCaptureConfig } from '@/services/smartHub';
-import type { SmartHub, SmartHubButton } from '@/types/smartHub';
+import { CaptureService, collectCustomAnswers, resolveCaptureConfig } from '@/services/smartHub';
+import type { SmartHub, SmartHubButton, SmartHubFormFieldConfig } from '@/types/smartHub';
 import { cn } from '@/lib/utils';
+import { CustomQuestionFields } from './CustomQuestionFields';
 
 interface HubCaptureFormProps {
   hub: SmartHub;
@@ -73,6 +74,7 @@ export function HubCaptureForm({
   const [preferredTime, setPreferredTime] = useState('');
   const [preferredDate, setPreferredDate] = useState('');
   const [privacyAccepted, setPrivacyAccepted] = useState(false);
+  const [customAnswers, setCustomAnswers] = useState<Record<string, string>>({});
   const [honeypot, setHoneypot] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [fieldError, setFieldError] = useState<string | null>(null);
@@ -88,6 +90,7 @@ export function HubCaptureForm({
     setPreferredTime('');
     setPreferredDate('');
     setPrivacyAccepted(false);
+    setCustomAnswers({});
     setHoneypot('');
     setFieldError(null);
     setRequestId(null);
@@ -116,6 +119,11 @@ export function HubCaptureForm({
       setFieldError('Informe um WhatsApp válido.');
       return;
     }
+    const { missing } = collectCustomAnswers(config.custom_questions, customAnswers);
+    if (missing.length > 0) {
+      setFieldError(`Responda: ${missing[0].label}`);
+      return;
+    }
     if (config.require_privacy_accept && !privacyAccepted) {
       setFieldError('Autorize o uso dos dados para continuar.');
       return;
@@ -139,6 +147,7 @@ export function HubCaptureForm({
         message: message.trim() || undefined,
         preferred_time: preferredTime.trim() || undefined,
         preferred_date: preferredDate.trim() || undefined,
+        custom_answers: customAnswers,
         privacy_accepted: privacyAccepted,
         referrer: typeof document !== 'undefined' ? document.referrer : undefined,
         landing_url: typeof window !== 'undefined' ? window.location.href : undefined,
@@ -191,6 +200,96 @@ export function HubCaptureForm({
     }
   };
 
+  const renderField = (field: SmartHubFormFieldConfig) => {
+    if (field.key === 'privacy') {
+      return (
+        <div key={field.key} className="flex items-start gap-2">
+          <Checkbox
+            id="privacy"
+            checked={privacyAccepted}
+            disabled={submitting || Boolean(success)}
+            onCheckedChange={(v) => setPrivacyAccepted(Boolean(v))}
+          />
+          <Label htmlFor="privacy" className="text-sm font-normal leading-snug">
+            {field.label || config.privacy_text}
+            {config.privacy_url && (
+              <>
+                {' '}
+                <a
+                  href={config.privacy_url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="underline"
+                >
+                  Política de Privacidade
+                </a>
+              </>
+            )}
+          </Label>
+        </div>
+      );
+    }
+
+    if (field.key === 'message') {
+      return (
+        <div key={field.key} className="space-y-1.5">
+          <Label htmlFor={field.key}>
+            {field.label}
+            {field.required ? ' *' : ''}
+          </Label>
+          <Textarea
+            id={field.key}
+            value={message}
+            onChange={(e) => setMessage(e.target.value)}
+            placeholder={field.placeholder}
+            rows={3}
+            required={field.required}
+            disabled={submitting || Boolean(success)}
+          />
+        </div>
+      );
+    }
+
+    const valueMap: Record<string, { value: string; set: (v: string) => void }> = {
+      name: { value: name, set: setName },
+      whatsapp: { value: phone, set: setPhone },
+      email: { value: email, set: setEmail },
+      interest: { value: interest, set: setInterest },
+      preferred_time: { value: preferredTime, set: setPreferredTime },
+      preferred_date: { value: preferredDate, set: setPreferredDate },
+    };
+    const ctrl = valueMap[field.key];
+    if (!ctrl) return null;
+
+    return (
+      <div key={field.key} className="space-y-1.5">
+        <Label htmlFor={field.key}>
+          {field.label}
+          {field.required ? ' *' : ''}
+        </Label>
+        <Input
+          id={field.key}
+          type={field.key === 'email' ? 'email' : field.key === 'preferred_date' ? 'date' : 'text'}
+          value={ctrl.value}
+          onChange={(e) => ctrl.set(e.target.value)}
+          placeholder={field.placeholder}
+          required={field.required}
+          disabled={submitting || Boolean(success)}
+          inputMode={field.key === 'whatsapp' ? 'tel' : undefined}
+          autoComplete={
+            field.key === 'name'
+              ? 'name'
+              : field.key === 'whatsapp'
+                ? 'tel'
+                : field.key === 'email'
+                  ? 'email'
+                  : undefined
+          }
+        />
+      </div>
+    );
+  };
+
   const formBody = (
     <form onSubmit={onSubmit} className={cn('space-y-4', className)} noValidate>
       <div className="space-y-1">
@@ -212,95 +311,16 @@ export function HubCaptureForm({
         />
       </div>
 
-      {fields.map((field) => {
-        if (field.key === 'privacy') {
-          return (
-            <div key={field.key} className="flex items-start gap-2">
-              <Checkbox
-                id="privacy"
-                checked={privacyAccepted}
-                disabled={submitting || Boolean(success)}
-                onCheckedChange={(v) => setPrivacyAccepted(Boolean(v))}
-              />
-              <Label htmlFor="privacy" className="text-sm font-normal leading-snug">
-                {field.label || config.privacy_text}
-                {config.privacy_url && (
-                  <>
-                    {' '}
-                    <a
-                      href={config.privacy_url}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="underline"
-                    >
-                      Política de Privacidade
-                    </a>
-                  </>
-                )}
-              </Label>
-            </div>
-          );
-        }
+      {fields.filter((f) => f.key !== 'privacy').map(renderField)}
 
-        if (field.key === 'message') {
-          return (
-            <div key={field.key} className="space-y-1.5">
-              <Label htmlFor={field.key}>
-                {field.label}
-                {field.required ? ' *' : ''}
-              </Label>
-              <Textarea
-                id={field.key}
-                value={message}
-                onChange={(e) => setMessage(e.target.value)}
-                placeholder={field.placeholder}
-                rows={3}
-                required={field.required}
-                disabled={submitting || Boolean(success)}
-              />
-            </div>
-          );
-        }
+      <CustomQuestionFields
+        questions={config.custom_questions}
+        values={customAnswers}
+        onChange={(id, value) => setCustomAnswers((prev) => ({ ...prev, [id]: value }))}
+        disabled={submitting || Boolean(success)}
+      />
 
-        const valueMap: Record<string, { value: string; set: (v: string) => void }> = {
-          name: { value: name, set: setName },
-          whatsapp: { value: phone, set: setPhone },
-          email: { value: email, set: setEmail },
-          interest: { value: interest, set: setInterest },
-          preferred_time: { value: preferredTime, set: setPreferredTime },
-          preferred_date: { value: preferredDate, set: setPreferredDate },
-        };
-        const ctrl = valueMap[field.key];
-        if (!ctrl) return null;
-
-        return (
-          <div key={field.key} className="space-y-1.5">
-            <Label htmlFor={field.key}>
-              {field.label}
-              {field.required ? ' *' : ''}
-            </Label>
-            <Input
-              id={field.key}
-              type={field.key === 'email' ? 'email' : field.key === 'preferred_date' ? 'date' : 'text'}
-              value={ctrl.value}
-              onChange={(e) => ctrl.set(e.target.value)}
-              placeholder={field.placeholder}
-              required={field.required}
-              disabled={submitting || Boolean(success)}
-              inputMode={field.key === 'whatsapp' ? 'tel' : undefined}
-              autoComplete={
-                field.key === 'name'
-                  ? 'name'
-                  : field.key === 'whatsapp'
-                    ? 'tel'
-                    : field.key === 'email'
-                      ? 'email'
-                      : undefined
-              }
-            />
-          </div>
-        );
-      })}
+      {fields.filter((f) => f.key === 'privacy').map(renderField)}
 
       {fieldError && (
         <div className="space-y-1">
