@@ -54,6 +54,7 @@ import {
   Eye,
   EyeOff,
 } from 'lucide-react';
+import { createClient } from '@supabase/supabase-js';
 import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
 import type { Database } from '@/integrations/supabase/types';
@@ -64,34 +65,44 @@ import { SPECIALTIES } from '@/lib/specialties';
 type UserRole = Database['public']['Enums']['app_role'];
 type AssignableSystemRole = Exclude<UserRole, 'superadmin'>;
 
-async function restoreAdminSession(
-  adminSession: { user: { id: string }; access_token: string; refresh_token: string } | null,
-) {
-  if (!adminSession) return;
-  const { data: { session: currentSession } } = await supabase.auth.getSession();
-  if (currentSession && currentSession.user.id !== adminSession.user.id) {
-    const { error } = await supabase.auth.setSession({
-      access_token: adminSession.access_token,
-      refresh_token: adminSession.refresh_token,
-    });
-    if (error) throw error;
-  }
+const memoryAuthStorage = {
+  getItem: () => null,
+  setItem: () => {},
+  removeItem: () => {},
+};
+
+/** Cadastro isolado: signUp no cliente principal troca o login de quem está usando o painel. */
+function createSignupClient() {
+  const url = import.meta.env.VITE_SUPABASE_URL;
+  const key = import.meta.env.VITE_SUPABASE_ANON_KEY || import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
+  return createClient(url, key, {
+    auth: {
+      persistSession: false,
+      autoRefreshToken: false,
+      detectSessionInUrl: false,
+      storage: memoryAuthStorage,
+    },
+  });
 }
 
-/** Troca a função do sistema. UPDATE sozinho não grava: não há política de UPDATE e, sem linha, afeta 0 registros. */
+/** Grava a função sem apagar superadmin e sem mexer na sessão de quem está logado. */
 async function assignSystemRole(userId: string, role: AssignableSystemRole) {
-  const { error: deleteError } = await supabase
+  if (!userId) throw new Error('Usuário inválido para definir a função.');
+
+  const { data: updated, error: updateError } = await supabase
     .from('user_roles')
-    .delete()
+    .update({ role })
     .eq('user_id', userId)
-    .neq('role', 'superadmin');
-  if (deleteError) throw deleteError;
+    .neq('role', 'superadmin')
+    .select('id');
+  if (updateError) throw updateError;
+  if (updated && updated.length > 0) return;
 
   const { error: insertError } = await supabase.from('user_roles').insert({
     user_id: userId,
     role,
   });
-  if (insertError) throw insertError;
+  if (insertError && insertError.code !== '23505') throw insertError;
 }
 
 interface SystemUser {
@@ -321,10 +332,9 @@ export function UserManagement({ users, onRefresh, isSuperAdmin }: UserManagemen
           return;
         }
 
-        // Create new user (skip_auto_clinic: trigger não criará clínica nova; usuário entra na(s) clínica(s) marcada(s))
-        const { data: { session: adminSession } } = await supabase.auth.getSession();
-
-        const { data: authData, error: authError } = await supabase.auth.signUp({
+        // Cliente separado: o signUp não pode gravar sessão no navegador de quem está no painel.
+        const signupClient = createSignupClient();
+        const { data: authData, error: authError } = await signupClient.auth.signUp({
           email: formData.email,
           password: formData.password,
           options: {
@@ -332,12 +342,9 @@ export function UserManagement({ users, onRefresh, isSuperAdmin }: UserManagemen
             data: { name: formData.name, skip_auto_clinic: 'true' },
           },
         });
+        await signupClient.auth.signOut();
 
         if (authError) throw authError;
-
-        // signUp pode trocar a sessão para o usuário novo. Restaurar o admin
-        // antes de gravar clínica e função, senão o banco recusa a função.
-        await restoreAdminSession(adminSession);
 
         if (authData.user) {
           // 1) Vincular às clínicas marcadas PRIMEIRO (RLS em user_roles exige que o user_id já esteja na clínica)
@@ -396,17 +403,6 @@ export function UserManagement({ users, onRefresh, isSuperAdmin }: UserManagemen
                 'Usuário criado, mas houve erro ao criar o registro em Profissionais. Cadastre manualmente na aba Profissionais.'
               );
             }
-          }
-        }
-
-        // signUp pode trocar a sessão para o usuário criado — restaurar admin
-        if (adminSession) {
-          const { data: { session: currentSession } } = await supabase.auth.getSession();
-          if (currentSession && currentSession.user.id !== adminSession.user.id) {
-            await supabase.auth.setSession({
-              access_token: adminSession.access_token,
-              refresh_token: adminSession.refresh_token,
-            });
           }
         }
 
