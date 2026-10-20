@@ -49,14 +49,14 @@ export function usePermissions() {
       }
 
       // Buscar role do sistema (user_roles)
-      const { data: roleRow } = await supabase
+      const { data: roleRows } = await supabase
         .from('user_roles')
         .select('role')
         .eq('user_id', user.id)
-        .in('role', ['admin', 'receptionist', 'seller', 'professional'])
-        .maybeSingle();
+        .in('role', ['admin', 'receptionist', 'seller', 'professional']);
 
-      const role = roleRow?.role as string | undefined;
+      const roles = (roleRows || []).map((row) => row.role as string);
+      const role = roles.includes('admin') ? 'admin' : roles[0];
       if (!role) return null;
 
       const { data: perms } = await supabase
@@ -108,13 +108,13 @@ export function usePermissions() {
       const { data: cu } = await supabase.from('clinic_users').select('clinic_id').eq('user_id', user.id);
       if (!cu?.length) return false;
       const clinicIds = cu.map((r: { clinic_id: string }) => r.clinic_id);
-      const { data: roleRow } = await supabase
+      const { data: roleRows } = await supabase
         .from('user_roles')
         .select('role')
         .eq('user_id', user.id)
-        .in('role', ['admin', 'receptionist', 'seller', 'professional'])
-        .maybeSingle();
-      const role = roleRow?.role as string | undefined;
+        .in('role', ['admin', 'receptionist', 'seller', 'professional']);
+      const roles = (roleRows || []).map((row) => row.role as string);
+      const role = roles.includes('admin') ? 'admin' : roles[0];
       if (!role) return false;
       const { data: perms } = await supabase
         .from('clinic_role_permissions')

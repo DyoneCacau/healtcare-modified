@@ -129,15 +129,19 @@ export function Sidebar({ mobile = false, onNavigate }: SidebarProps = {}) {
   const usePermissionMatrix = typeof permissionMatrix === "object" && permissionMatrix !== null;
 
   const canSeeItem = (item: MenuItem): { visible: boolean; locked: boolean } => {
-    if (usePermissionMatrix && item.feature && !canPermission(item.feature, "can_view")) {
-      return { visible: false, locked: false };
-    }
-    const isLocked = !usePermissionMatrix && !!item.feature && !hasFeature(item.feature);
+    if (isSuperAdmin) return { visible: true, locked: false };
+    const clinicHasFeature = !item.feature || hasFeature(item.feature);
+    // Matriz antiga não pode esconder um módulo que a clínica liberou do administrador
+    // (plano ou presente temporário). Os outros papéis continuam respeitando a matriz.
+    const deniedByRole =
+      usePermissionMatrix &&
+      !!item.feature &&
+      !canPermission(item.feature, "can_view") &&
+      !(isAdmin && clinicHasFeature);
+    if (deniedByRole) return { visible: false, locked: false };
     const isAdminPage = item.path === "/administracao";
-    const isAdminLocked = isAdminPage && !isAdmin && !isSuperAdmin;
-    if ((isLocked && !isSuperAdmin) || isAdminLocked) {
-      return { visible: true, locked: true };
-    }
+    const isAdminLocked = isAdminPage && !isAdmin;
+    if (!clinicHasFeature || isAdminLocked) return { visible: true, locked: true };
     return { visible: true, locked: false };
   };
 

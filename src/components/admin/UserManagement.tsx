@@ -64,6 +64,36 @@ import { SPECIALTIES } from '@/lib/specialties';
 type UserRole = Database['public']['Enums']['app_role'];
 type AssignableSystemRole = Exclude<UserRole, 'superadmin'>;
 
+async function restoreAdminSession(
+  adminSession: { user: { id: string }; access_token: string; refresh_token: string } | null,
+) {
+  if (!adminSession) return;
+  const { data: { session: currentSession } } = await supabase.auth.getSession();
+  if (currentSession && currentSession.user.id !== adminSession.user.id) {
+    const { error } = await supabase.auth.setSession({
+      access_token: adminSession.access_token,
+      refresh_token: adminSession.refresh_token,
+    });
+    if (error) throw error;
+  }
+}
+
+/** Troca a função do sistema. UPDATE sozinho não grava: não há política de UPDATE e, sem linha, afeta 0 registros. */
+async function assignSystemRole(userId: string, role: AssignableSystemRole) {
+  const { error: deleteError } = await supabase
+    .from('user_roles')
+    .delete()
+    .eq('user_id', userId)
+    .neq('role', 'superadmin');
+  if (deleteError) throw deleteError;
+
+  const { error: insertError } = await supabase.from('user_roles').insert({
+    user_id: userId,
+    role,
+  });
+  if (insertError) throw insertError;
+}
+
 interface SystemUser {
   id: string;
   name: string;
@@ -210,19 +240,25 @@ export function UserManagement({ users, onRefresh, isSuperAdmin }: UserManagemen
         if (profileError) throw profileError;
 
         if (clinicId) {
-          await supabase.from('user_clinic_custom_roles').delete().eq('user_id', editingUser.id).eq('clinic_id', clinicId);
+          const { error: clearCustomError } = await supabase
+            .from('user_clinic_custom_roles')
+            .delete()
+            .eq('user_id', editingUser.id)
+            .eq('clinic_id', clinicId);
+          if (clearCustomError) throw clearCustomError;
           if (isSystemRole(formData.role)) {
-            await supabase.from('user_roles').update({ role: formData.role }).eq('user_id', editingUser.id);
+            await assignSystemRole(editingUser.id, formData.role);
           } else {
-            await supabase.from('user_roles').update({ role: 'receptionist' }).eq('user_id', editingUser.id);
-            await supabase.from('user_clinic_custom_roles').insert({
+            await assignSystemRole(editingUser.id, 'receptionist');
+            const { error: customErr } = await supabase.from('user_clinic_custom_roles').insert({
               user_id: editingUser.id,
               clinic_id: clinicId,
               clinic_custom_role_id: formData.role,
             });
+            if (customErr) throw customErr;
           }
         } else if (isSystemRole(formData.role)) {
-          await supabase.from('user_roles').update({ role: formData.role }).eq('user_id', editingUser.id);
+          await assignSystemRole(editingUser.id, formData.role);
         }
         toast.success('Usuário atualizado com sucesso!');
       } else {
@@ -299,6 +335,10 @@ export function UserManagement({ users, onRefresh, isSuperAdmin }: UserManagemen
 
         if (authError) throw authError;
 
+        // signUp pode trocar a sessão para o usuário novo. Restaurar o admin
+        // antes de gravar clínica e função, senão o banco recusa a função.
+        await restoreAdminSession(adminSession);
+
         if (authData.user) {
           // 1) Vincular às clínicas marcadas PRIMEIRO (RLS em user_roles exige que o user_id já esteja na clínica)
           const { error: clinicError } = await supabase.from('clinic_users').insert(
@@ -309,13 +349,9 @@ export function UserManagement({ users, onRefresh, isSuperAdmin }: UserManagemen
           // 2) Role: sistema ou função personalizada
           const roleValue = formData.role;
           if (isSystemRole(roleValue)) {
-            const { error: roleError } = await supabase.from('user_roles').insert({
-              user_id: authData.user.id,
-              role: roleValue,
-            });
-            if (roleError) throw roleError;
+            await assignSystemRole(authData.user.id, roleValue);
           } else {
-            await supabase.from('user_roles').insert({ user_id: authData.user.id, role: 'receptionist' });
+            await assignSystemRole(authData.user.id, 'receptionist');
             // Função personalizada é específica da clínica atual; nas demais clínicas
             // marcadas, o usuário usa a permissão padrão (fallback) até definir uma função lá.
             const { error: customErr } = await supabase.from('user_clinic_custom_roles').insert({
