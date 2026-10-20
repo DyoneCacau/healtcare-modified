@@ -21,13 +21,13 @@ export function useDashboardStats() {
       const yesterday = format(subDays(now, 1), 'yyyy-MM-dd');
       const startOfMonth = format(startOfMonthFn(now), 'yyyy-MM-dd');
 
-      // Today's appointments (cancelados não contam no card nem no comparativo)
+      // Todos os status do dia: o card geral ignora cancelados; os três
+      // indicadores (confirmado, aguardando, cancelado) usam a lista completa.
       const { data: todayAppointments, error: todayError } = await supabase
         .from('appointments')
         .select('id, status')
         .eq('clinic_id', clinicId)
-        .eq('date', today)
-        .neq('status', 'cancelled');
+        .eq('date', today);
 
       if (todayError) throw todayError;
 
@@ -80,7 +80,8 @@ export function useDashboardStats() {
       const todayBalance = netBalance(todayTransactions || []);
 
       // Calculate trends
-      const todayCount = (todayAppointments || []).length;
+      const todayRows = todayAppointments || [];
+      const todayCount = todayRows.filter((a) => a.status !== 'cancelled').length;
       const yesterdayCount = (yesterdayAppointments || []).length;
       const appointmentTrend = yesterdayCount > 0
         ? Math.round(((todayCount - yesterdayCount) / yesterdayCount) * 100)
@@ -89,9 +90,10 @@ export function useDashboardStats() {
       return {
         appointmentsToday: todayCount,
         appointmentsByStatus: {
-          confirmed: (todayAppointments || []).filter((a) => a.status === 'confirmed').length,
-          pending: (todayAppointments || []).filter((a) => a.status === 'pending').length,
-          completed: (todayAppointments || []).filter((a) => a.status === 'completed').length,
+          confirmed: todayRows.filter((a) => a.status === 'confirmed').length,
+          pending: todayRows.filter((a) => a.status === 'pending').length,
+          cancelled: todayRows.filter((a) => a.status === 'cancelled').length,
+          completed: todayRows.filter((a) => a.status === 'completed').length,
         },
         appointmentTrend,
         totalPatients: (monthPatients || []).length,

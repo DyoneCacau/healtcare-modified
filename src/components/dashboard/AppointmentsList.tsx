@@ -13,33 +13,39 @@ import {
 
 const statusStyles = {
   confirmed: {
-    bg: "bg-success/10",
-    text: "text-success",
+    bg: "bg-emerald-500/10",
+    text: "text-emerald-700 dark:text-emerald-400",
+    border: "border-emerald-500",
     label: "Confirmado",
   },
   pending: {
-    bg: "bg-warning/10",
-    text: "text-warning",
-    label: "Pendente",
+    bg: "bg-amber-400/15",
+    text: "text-amber-700 dark:text-amber-400",
+    border: "border-amber-400",
+    label: "Aguardando",
   },
   return: {
-    bg: "bg-info/10",
-    text: "text-info",
+    bg: "bg-sky-500/10",
+    text: "text-sky-700 dark:text-sky-400",
+    border: "border-sky-400",
     label: "Retorno",
   },
   completed: {
     bg: "bg-muted",
     text: "text-muted-foreground",
+    border: "border-border",
     label: "Concluído",
   },
   cancelled: {
-    bg: "bg-destructive/10",
-    text: "text-destructive",
+    bg: "bg-red-500/10",
+    text: "text-red-700 dark:text-red-400",
+    border: "border-red-500",
     label: "Cancelado",
   },
   no_show: {
     bg: "bg-orange-500/10",
     text: "text-orange-600",
+    border: "border-orange-500",
     label: "Faltou",
   },
 };
@@ -52,8 +58,8 @@ export function AppointmentsList() {
     return (
       <div className="rounded-xl border border-border bg-card shadow-card">
         <div className="border-b border-border p-4">
-          <h3 className="font-semibold text-foreground">Próximas Consultas</h3>
-          <p className="text-sm text-muted-foreground">Agendamentos de hoje</p>
+          <h3 className="font-semibold text-foreground">Agenda de hoje</h3>
+          <p className="text-sm text-muted-foreground">Confirmado, aguardando e cancelado</p>
         </div>
         <div className="divide-y divide-border">
           {[1, 2, 3].map((i) => (
@@ -70,19 +76,18 @@ export function AppointmentsList() {
     );
   }
 
-  // Filter out cancelled, completed and no_show - show only active appointments
-  const activeAppointments = appointments.filter(
-    apt => apt.status !== 'cancelled' && apt.status !== 'completed' && apt.status !== 'no_show'
-  ).slice(0, 5);
+  const visibleAppointments = appointments
+    .filter((apt) => apt.status === 'confirmed' || apt.status === 'pending' || apt.status === 'return' || apt.status === 'cancelled')
+    .slice(0, 8);
 
   return (
     <div className="rounded-xl border border-border bg-card shadow-card">
       <div className="border-b border-border p-4">
-        <h3 className="font-semibold text-foreground">Próximas Consultas</h3>
-        <p className="text-sm text-muted-foreground">Agendamentos de hoje</p>
+        <h3 className="font-semibold text-foreground">Agenda de hoje</h3>
+        <p className="text-sm text-muted-foreground">Confirmado, aguardando e cancelado</p>
       </div>
       
-      {activeAppointments.length === 0 ? (
+      {visibleAppointments.length === 0 ? (
         <div className="flex flex-col items-center justify-center py-12 text-center">
           <CalendarX className="h-12 w-12 text-muted-foreground mb-3" />
           <p className="text-muted-foreground">Nenhum agendamento para hoje</p>
@@ -92,8 +97,8 @@ export function AppointmentsList() {
         </div>
       ) : (
         <>
-          <div className="divide-y divide-border">
-            {activeAppointments.map((appointment) => {
+          <div className="space-y-2 p-3">
+            {visibleAppointments.map((appointment) => {
               const statusKey = appointment.status as keyof typeof statusStyles;
               const status = statusStyles[statusKey] || statusStyles.pending;
               const canComplete = appointment.status === 'pending' || appointment.status === 'confirmed';
@@ -103,7 +108,10 @@ export function AppointmentsList() {
                   key={appointment.id}
                   role="button"
                   tabIndex={0}
-                  className="group flex items-center gap-4 p-4 transition-colors hover:bg-muted/50 cursor-pointer"
+                  className={cn(
+                    "group flex items-center gap-4 rounded-lg border-2 bg-card p-3 transition-colors hover:bg-muted/40 cursor-pointer",
+                    status.border,
+                  )}
                   onClick={() => navigate(`/agenda?focusAppointmentId=${appointment.id}`)}
                   onKeyDown={(e) => {
                     if (e.key === 'Enter' || e.key === ' ') {

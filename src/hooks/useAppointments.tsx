@@ -55,6 +55,7 @@ function dateFilterKey(dateFilter: AppointmentsDateFilter): string {
 export function useAppointments(
   dateFilter?: AppointmentsDateFilter,
   clinicIdsOverride?: string[],
+  options?: { refetchInterval?: number },
 ) {
   const { clinicId } = useClinic();
 
@@ -93,6 +94,7 @@ export function useAppointments(
       return data || [];
     },
     enabled: effectiveClinicIds.length > 0,
+    refetchInterval: options?.refetchInterval,
   });
 
   return { 
@@ -142,7 +144,7 @@ export function useTodayAppointments() {
   // `toISOString()` usaria o dia em UTC, o que faz "hoje" pular pro dia
   // seguinte entre ~21h e 23h59 no horário do Brasil (UTC-3).
   const today = format(new Date(), 'yyyy-MM-dd');
-  return useAppointments(today);
+  return useAppointments(today, undefined, { refetchInterval: 60_000 });
 }
 
 export function useAppointmentMutations() {

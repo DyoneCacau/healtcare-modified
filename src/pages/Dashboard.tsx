@@ -1,4 +1,4 @@
-import { Calendar, Users, Stethoscope, DollarSign } from "lucide-react";
+import { Calendar, Users, Stethoscope, DollarSign, CheckCircle2, Clock3, XCircle } from "lucide-react";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { Header } from "@/components/layout/Header";
@@ -93,6 +93,33 @@ export default function Dashboard() {
             } : undefined}
             variant="warning"
           />
+        </div>
+
+        <div className="mb-6 grid gap-4 sm:grid-cols-3">
+          <div className="rounded-xl border-2 border-emerald-500 bg-card p-4 shadow-card">
+            <div className="flex items-center justify-between">
+              <p className="text-sm font-medium text-emerald-700 dark:text-emerald-400">Confirmados</p>
+              <CheckCircle2 className="h-5 w-5 text-emerald-600" />
+            </div>
+            <p className="mt-2 text-3xl font-bold text-foreground">{stats?.appointmentsByStatus.confirmed || 0}</p>
+            <p className="mt-1 text-xs text-muted-foreground">paciente confirmou presença</p>
+          </div>
+          <div className="rounded-xl border-2 border-amber-400 bg-card p-4 shadow-card">
+            <div className="flex items-center justify-between">
+              <p className="text-sm font-medium text-amber-700 dark:text-amber-400">Aguardando</p>
+              <Clock3 className="h-5 w-5 text-amber-500" />
+            </div>
+            <p className="mt-2 text-3xl font-bold text-foreground">{stats?.appointmentsByStatus.pending || 0}</p>
+            <p className="mt-1 text-xs text-muted-foreground">ainda sem resposta</p>
+          </div>
+          <div className="rounded-xl border-2 border-red-500 bg-card p-4 shadow-card">
+            <div className="flex items-center justify-between">
+              <p className="text-sm font-medium text-red-700 dark:text-red-400">Cancelados</p>
+              <XCircle className="h-5 w-5 text-red-600" />
+            </div>
+            <p className="mt-2 text-3xl font-bold text-foreground">{stats?.appointmentsByStatus.cancelled || 0}</p>
+            <p className="mt-1 text-xs text-muted-foreground">paciente cancelou</p>
+          </div>
         </div>
 
         {/* Main Content Grid: chart + ações à esquerda; próximas consultas + alertas à direita */}
