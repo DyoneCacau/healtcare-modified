@@ -30,6 +30,9 @@ verify_jwt = true
 [functions.create-complete-client]
 verify_jwt = true
 
+[functions.set-user-role]
+verify_jwt = true
+
 [functions.add-clinic-unit]
 verify_jwt = false
 

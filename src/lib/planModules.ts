@@ -80,10 +80,23 @@ export interface FeatureGrant {
   note?: string | null;
 }
 
+function asArray(raw: unknown): unknown[] {
+  if (Array.isArray(raw)) return raw;
+  if (typeof raw === 'string' && raw.trim()) {
+    try {
+      const parsed = JSON.parse(raw);
+      return Array.isArray(parsed) ? parsed : [];
+    } catch {
+      return [];
+    }
+  }
+  return [];
+}
+
 export function parseFeatureGrants(raw: unknown): FeatureGrant[] {
-  if (!Array.isArray(raw)) return [];
+  const list = asArray(raw);
   const out: FeatureGrant[] = [];
-  for (const item of raw) {
+  for (const item of list) {
     if (!item || typeof item !== 'object') continue;
     const row = item as Record<string, unknown>;
     if (typeof row.feature !== 'string' || !row.feature.trim()) continue;
@@ -116,9 +129,7 @@ export function resolveClinicFeatures(opts: {
   featuresOverride?: unknown;
   featureGrants?: unknown;
 }): string[] {
-  const override = Array.isArray(opts.featuresOverride)
-    ? opts.featuresOverride.filter((f): f is string => typeof f === 'string')
-    : [];
+  const override = asArray(opts.featuresOverride).filter((f): f is string => typeof f === 'string');
   const base = override.length > 0 ? override : opts.planFeatures;
   const grants = activeGrantFeatures(parseFeatureGrants(opts.featureGrants));
   return expandFeatureAliases(ensureAlwaysIncluded([...base, ...grants]));

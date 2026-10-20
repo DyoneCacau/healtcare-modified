@@ -159,8 +159,8 @@ export function Sidebar({ mobile = false, onNavigate }: SidebarProps = {}) {
     [location.pathname],
   );
 
-  const [financeOpen, setFinanceOpen] = useState(financeChildActive);
-  const [marketingOpen, setMarketingOpen] = useState(marketingChildActive);
+  const [financeOpen, setFinanceOpen] = useState(true);
+  const [marketingOpen, setMarketingOpen] = useState(true);
 
   useEffect(() => {
     if (financeChildActive) setFinanceOpen(true);

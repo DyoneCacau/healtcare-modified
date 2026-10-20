@@ -85,9 +85,21 @@ function createSignupClient() {
   });
 }
 
-/** Grava a função sem apagar superadmin e sem mexer na sessão de quem está logado. */
+/** Grava a função no servidor, sem trocar o login de quem está no painel. */
 async function assignSystemRole(userId: string, role: AssignableSystemRole) {
   if (!userId) throw new Error('Usuário inválido para definir a função.');
+
+  const { data: { session } } = await supabase.auth.getSession();
+  const { data, error } = await supabase.functions.invoke('set-user-role', {
+    body: { action: 'set', user_id: userId, role },
+    headers: session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {},
+  });
+  if (!error && !data?.error) return;
+  const invokeMessage = data?.error || error?.message || '';
+  const missingFunction =
+    /not found|404|Failed to send/i.test(invokeMessage) ||
+    (Boolean(error) && !data?.error);
+  if (!missingFunction) throw new Error(invokeMessage || 'Não foi possível gravar a função.');
 
   const { error: rpcError } = await supabase.rpc('set_user_system_role' as never, {
     p_user_id: userId,
@@ -722,7 +734,7 @@ export function UserManagement({ users, onRefresh, isSuperAdmin }: UserManagemen
               <div className="space-y-2">
                 <Label htmlFor="role">Função *</Label>
                 <Select
-                  value={formData.role}
+                  value={formData.role || undefined}
                   onValueChange={(v) => {
                     if (v === '__new__') {
                       setNewRoleDialogOpen(true);

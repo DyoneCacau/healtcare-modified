@@ -182,6 +182,17 @@ export default function Administration() {
 
     let rolesData: { user_id: string; role: string }[] | null = null;
     if (clinicId) {
+      const { data: { session } } = await supabase.auth.getSession();
+      const { data: listed, error: listError } = await supabase.functions.invoke('set-user-role', {
+        body: { action: 'list', clinic_id: clinicId },
+        headers: session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {},
+      });
+      if (!listError && !listed?.error && Array.isArray(listed?.roles)) {
+        rolesData = listed.roles as { user_id: string; role: string }[];
+      }
+    }
+
+    if (!rolesData && clinicId) {
       const { data: rpcRoles, error: rpcRolesError } = await supabase.rpc(
         'list_clinic_user_roles' as never,
         { p_clinic_id: clinicId } as never,
