@@ -206,7 +206,7 @@ export default function Administration() {
       let rolesQuery = supabase
         .from('user_roles')
         .select('user_id, role')
-        .in('role', ['admin', 'receptionist', 'seller', 'professional']);
+        .in('role', ['admin', 'receptionist', 'seller', 'professional', 'superadmin']);
 
       if (allowedUserIds) {
         rolesQuery = rolesQuery.in('user_id', allowedUserIds);
@@ -221,12 +221,16 @@ export default function Administration() {
       receptionist: 'Recepcionista',
       seller: 'Vendedor',
       professional: 'Profissional',
+      superadmin: 'SuperAdmin',
     };
 
     if (profilesData && clinicId) {
       const rolesByUser = (rolesData || []).reduce((acc: Record<string, { role: string }>, r: any) => {
         const current = acc[r.user_id]?.role;
-        if (!current || r.role === 'admin') acc[r.user_id] = { role: r.role };
+        if (!current || r.role === 'admin' || r.role === 'superadmin') {
+          if (current === 'superadmin' && r.role !== 'superadmin') return acc;
+          acc[r.user_id] = { role: r.role };
+        }
         return acc;
       }, {});
       const userIds = allowedUserIds ?? (profilesData || []).map((p: any) => p.user_id);
@@ -266,6 +270,7 @@ export default function Administration() {
         receptionist: 'Recepcionista',
         seller: 'Vendedor',
         professional: 'Profissional',
+        superadmin: 'SuperAdmin',
       };
       const usersWithRoles: SystemUser[] = [];
       for (const role of rolesData) {

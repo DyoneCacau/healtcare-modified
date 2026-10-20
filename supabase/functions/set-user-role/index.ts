@@ -1,15 +1,24 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.49.1'
 
 const corsHeaders = {
-  'Access-Control-Allow-Origin': Deno.env.get('APP_URL') || 'null',
+  'Access-Control-Allow-Origin': Deno.env.get('APP_URL') || 'https://www.healthcare.app.br',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, x-supabase-client-platform',
+}
+
+function withCors(req: Request) {
+  const origin = req.headers.get('Origin') || ''
+  const allowed = origin.endsWith('healthcare.app.br') || origin === 'http://localhost:8080'
+    ? origin
+    : (Deno.env.get('APP_URL') || 'https://www.healthcare.app.br')
+  return { ...corsHeaders, 'Access-Control-Allow-Origin': allowed }
 }
 
 const ASSIGNABLE = ['admin', 'receptionist', 'seller', 'professional'] as const
 
 Deno.serve(async (req) => {
+  activeRequest = req
   if (req.method === 'OPTIONS') {
-    return new Response(null, { headers: corsHeaders })
+    return new Response(null, { headers: withCors(req) })
   }
 
   try {
@@ -139,9 +148,9 @@ Deno.serve(async (req) => {
         .from('user_roles')
         .select('user_id, role')
         .in('user_id', userIds)
-        .in('role', [...ASSIGNABLE])
-      if (rolesError) return json({ error: rolesError.message }, 500)
-      return json({ roles: roles || [] })
+        .in('role', [...ASSIGNABLE, 'superadmin'])
+      if (rolesError) return json({ error: rolesError.message }, 500, req)
+      return json({ roles: roles || [] }, 200, req)
     }
 
     const userId = typeof body?.user_id === 'string' ? body.user_id : ''
@@ -176,20 +185,33 @@ Deno.serve(async (req) => {
       .from('user_roles')
       .insert({ user_id: userId, role })
     if (insertError && insertError.code !== '23505') {
-      return json({ error: insertError.message }, 500)
+      return json({ error: insertError.message }, 500, req)
     }
 
-    return json({ success: true, user_id: userId, role })
+    const { data: saved, error: savedError } = await supabase
+      .from('user_roles')
+      .select('role')
+      .eq('user_id', userId)
+      .eq('role', role)
+      .maybeSingle()
+    if (savedError || !saved) {
+      return json({ error: 'A função não ficou gravada.' }, 500, req)
+    }
+
+    return json({ success: true, user_id: userId, role: saved.role }, 200, req)
   } catch (error) {
     console.error('set-user-role', error)
-    return json({ error: 'Erro interno' }, 500)
+    return json({ error: 'Erro interno' }, 500, req)
   }
 })
 
-function json(body: unknown, status = 200) {
+let activeRequest: Request | null = null
+
+function json(body: unknown, status = 200, req?: Request) {
+  const source = req || activeRequest
   return new Response(JSON.stringify(body), {
     status,
-    headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+    headers: { ...(source ? withCors(source) : corsHeaders), 'Content-Type': 'application/json' },
   })
 }
 

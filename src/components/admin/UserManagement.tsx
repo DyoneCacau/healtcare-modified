@@ -77,6 +77,7 @@ function createSignupClient() {
   const key = import.meta.env.VITE_SUPABASE_ANON_KEY || import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
   return createClient(url, key, {
     auth: {
+      storageKey: 'sb-signup-isolated',
       persistSession: false,
       autoRefreshToken: false,
       detectSessionInUrl: false,
@@ -85,7 +86,7 @@ function createSignupClient() {
   });
 }
 
-/** Grava a função no servidor, sem trocar o login de quem está no painel. */
+/** Grava a função no servidor e só aceita sucesso se o banco confirmar. */
 async function assignSystemRole(userId: string, role: AssignableSystemRole) {
   if (!userId) throw new Error('Usuário inválido para definir a função.');
 
@@ -94,40 +95,19 @@ async function assignSystemRole(userId: string, role: AssignableSystemRole) {
     body: { action: 'set', user_id: userId, role },
     headers: session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {},
   });
-  if (!error && !data?.error) return;
-  const invokeMessage = data?.error || error?.message || '';
-  const missingFunction =
-    /not found|404|Failed to send/i.test(invokeMessage) ||
-    (Boolean(error) && !data?.error);
-  if (!missingFunction) throw new Error(invokeMessage || 'Não foi possível gravar a função.');
+  if (!error && data?.success === true && data?.role === role) return;
 
-  const { error: rpcError } = await supabase.rpc('set_user_system_role' as never, {
-    p_user_id: userId,
-    p_role: role,
-  } as never);
-  if (!rpcError) return;
-
-  const missingRpc = rpcError.code === 'PGRST202' || /set_user_system_role/i.test(rpcError.message || '');
-  if (!missingRpc) throw rpcError;
-
-  const { data: updated, error: updateError } = await supabase
-    .from('user_roles')
-    .update({ role })
-    .eq('user_id', userId)
-    .neq('role', 'superadmin')
-    .select('id');
-  if (updateError) throw updateError;
-  if (updated && updated.length > 0) return;
-
-  const { error: insertError } = await supabase.from('user_roles').insert({
-    user_id: userId,
-    role,
-  });
-  if (insertError && insertError.code !== '23505') {
-    throw new Error(
-      'Não foi possível gravar a função. Rode o script supabase/PRODUCAO_48_FUNCAO_E_MODULOS.sql no SQL Editor do Supabase.',
-    );
+  let message = data?.error || error?.message || 'Não foi possível gravar a função.';
+  const context = (error as { context?: { json?: () => Promise<{ error?: string }> } } | null)?.context;
+  if (context && typeof context.json === 'function') {
+    try {
+      const body = await context.json();
+      if (body?.error) message = body.error;
+    } catch {
+      // mantém a mensagem já lida
+    }
   }
+  throw new Error(message);
 }
 
 interface SystemUser {
@@ -274,6 +254,14 @@ export function UserManagement({ users, onRefresh, isSuperAdmin }: UserManagemen
           })
           .eq('user_id', editingUser.id);
         if (profileError) throw profileError;
+
+        if (formData.role === 'superadmin') {
+          toast.success('Conta de superadmin mantida.');
+          setDialogOpen(false);
+          onRefresh();
+          setIsLoading(false);
+          return;
+        }
 
         if (!formData.role || formData.role === 'Sem função') {
           toast.error('Selecione a função antes de salvar.');
