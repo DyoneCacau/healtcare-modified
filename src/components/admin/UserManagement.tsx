@@ -363,6 +363,40 @@ export function UserManagement({ users, onRefresh, isSuperAdmin }: UserManagemen
           return;
         }
 
+        // Se o e-mail já existe, o Herbet não vê o perfil (outra clínica / RLS).
+        // O servidor vincula a conta nesta clínica em vez de tentar criar de novo.
+        const { data: { session } } = await supabase.auth.getSession();
+        const { data: attached, error: attachError } = await supabase.functions.invoke('set-user-role', {
+          body: {
+            action: 'attach',
+            email: formData.email.trim(),
+            role: isSystemRole(formData.role) ? formData.role : 'receptionist',
+            clinic_ids: selectedClinicIds,
+            name: nameTrimmed,
+            phone: formData.phone?.trim() || '',
+          },
+          headers: session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {},
+        });
+        if (attachError && !attached) {
+          throw new Error(attachError.message || 'Não foi possível verificar se o e-mail já existe.');
+        }
+        if (attached?.error) throw new Error(attached.error);
+        if (attached?.attached) {
+          if (!isSystemRole(formData.role) && clinicId) {
+            const { error: customErr } = await supabase.from('user_clinic_custom_roles').insert({
+              user_id: attached.user_id,
+              clinic_id: clinicId,
+              clinic_custom_role_id: formData.role,
+            });
+            if (customErr && customErr.code !== '23505') throw customErr;
+          }
+          toast.success('Este e-mail já tinha conta. Ele foi liberado nesta clínica com a função escolhida.');
+          setDialogOpen(false);
+          onRefresh();
+          setIsLoading(false);
+          return;
+        }
+
         // Cliente separado: o signUp não pode gravar sessão no navegador de quem está no painel.
         const signupClient = createSignupClient();
         const { data: authData, error: authError } = await signupClient.auth.signUp({
@@ -375,7 +409,13 @@ export function UserManagement({ users, onRefresh, isSuperAdmin }: UserManagemen
         });
         await signupClient.auth.signOut();
 
-        if (authError) throw authError;
+        if (authError) {
+          const already = /already registered|already been registered|User already registered/i.test(authError.message || '');
+          if (already) {
+            throw new Error('Este e-mail já está cadastrado. Atualize a página e confira se ele apareceu na lista. Se não aparecer, saia e entre de novo.');
+          }
+          throw authError;
+        }
 
         if (authData.user) {
           // 1) Vincular às clínicas marcadas PRIMEIRO (RLS em user_roles exige que o user_id já esteja na clínica)
