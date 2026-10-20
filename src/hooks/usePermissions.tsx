@@ -58,6 +58,9 @@ export function usePermissions() {
       const roles = (roleRows || []).map((row) => row.role as string);
       const role = roles.includes('admin') ? 'admin' : roles[0];
       if (!role) return null;
+      // Administrador da clínica enxerga os módulos liberados no plano ou no avulso.
+      // Uma matriz antiga não pode esconder Contas a receber, Comissões, CRM etc.
+      if (role === 'admin') return 'full';
 
       const { data: perms } = await supabase
         .from('clinic_role_permissions')

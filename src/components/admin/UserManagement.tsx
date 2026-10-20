@@ -89,6 +89,15 @@ function createSignupClient() {
 async function assignSystemRole(userId: string, role: AssignableSystemRole) {
   if (!userId) throw new Error('Usuário inválido para definir a função.');
 
+  const { error: rpcError } = await supabase.rpc('set_user_system_role' as never, {
+    p_user_id: userId,
+    p_role: role,
+  } as never);
+  if (!rpcError) return;
+
+  const missingRpc = rpcError.code === 'PGRST202' || /set_user_system_role/i.test(rpcError.message || '');
+  if (!missingRpc) throw rpcError;
+
   const { data: updated, error: updateError } = await supabase
     .from('user_roles')
     .update({ role })
@@ -102,7 +111,11 @@ async function assignSystemRole(userId: string, role: AssignableSystemRole) {
     user_id: userId,
     role,
   });
-  if (insertError && insertError.code !== '23505') throw insertError;
+  if (insertError && insertError.code !== '23505') {
+    throw new Error(
+      'Não foi possível gravar a função. Rode o script supabase/PRODUCAO_48_FUNCAO_E_MODULOS.sql no SQL Editor do Supabase.',
+    );
+  }
 }
 
 interface SystemUser {
@@ -249,6 +262,12 @@ export function UserManagement({ users, onRefresh, isSuperAdmin }: UserManagemen
           })
           .eq('user_id', editingUser.id);
         if (profileError) throw profileError;
+
+        if (!formData.role || formData.role === 'Sem função') {
+          toast.error('Selecione a função antes de salvar.');
+          setIsLoading(false);
+          return;
+        }
 
         if (clinicId) {
           const { error: clearCustomError } = await supabase

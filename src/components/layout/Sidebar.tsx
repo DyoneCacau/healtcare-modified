@@ -131,18 +131,15 @@ export function Sidebar({ mobile = false, onNavigate }: SidebarProps = {}) {
   const canSeeItem = (item: MenuItem): { visible: boolean; locked: boolean } => {
     if (isSuperAdmin) return { visible: true, locked: false };
     const clinicHasFeature = !item.feature || hasFeature(item.feature);
-    // Matriz antiga não pode esconder um módulo que a clínica liberou do administrador
-    // (plano ou presente temporário). Os outros papéis continuam respeitando a matriz.
+    // Módulo do plano ou avulso aparece liberado. A matriz não esconde o que a clínica já tem.
+    if (clinicHasFeature) {
+      if (item.path === "/administracao" && !isAdmin) return { visible: true, locked: true };
+      return { visible: true, locked: false };
+    }
     const deniedByRole =
-      usePermissionMatrix &&
-      !!item.feature &&
-      !canPermission(item.feature, "can_view") &&
-      !(isAdmin && clinicHasFeature);
+      usePermissionMatrix && !!item.feature && !canPermission(item.feature, "can_view");
     if (deniedByRole) return { visible: false, locked: false };
-    const isAdminPage = item.path === "/administracao";
-    const isAdminLocked = isAdminPage && !isAdmin;
-    if (!clinicHasFeature || isAdminLocked) return { visible: true, locked: true };
-    return { visible: true, locked: false };
+    return { visible: true, locked: true };
   };
 
   const financeChildActive = useMemo(

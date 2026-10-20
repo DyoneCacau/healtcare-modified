@@ -180,16 +180,30 @@ export default function Administration() {
     }
     const { data: profilesData } = await profilesQuery;
 
-    let rolesQuery = supabase
-      .from('user_roles')
-      .select('*')
-      .in('role', ['admin', 'receptionist', 'seller', 'professional']);
-
-    if (allowedUserIds) {
-      rolesQuery = rolesQuery.in('user_id', allowedUserIds);
+    let rolesData: { user_id: string; role: string }[] | null = null;
+    if (clinicId) {
+      const { data: rpcRoles, error: rpcRolesError } = await supabase.rpc(
+        'list_clinic_user_roles' as never,
+        { p_clinic_id: clinicId } as never,
+      );
+      if (!rpcRolesError && Array.isArray(rpcRoles)) {
+        rolesData = rpcRoles as { user_id: string; role: string }[];
+      }
     }
 
-    const { data: rolesData } = await rolesQuery;
+    if (!rolesData) {
+      let rolesQuery = supabase
+        .from('user_roles')
+        .select('user_id, role')
+        .in('role', ['admin', 'receptionist', 'seller', 'professional']);
+
+      if (allowedUserIds) {
+        rolesQuery = rolesQuery.in('user_id', allowedUserIds);
+      }
+
+      const { data } = await rolesQuery;
+      rolesData = data;
+    }
 
     const roleLabels: Record<string, string> = {
       admin: 'Administrador',
@@ -200,7 +214,8 @@ export default function Administration() {
 
     if (profilesData && clinicId) {
       const rolesByUser = (rolesData || []).reduce((acc: Record<string, { role: string }>, r: any) => {
-        acc[r.user_id] = { role: r.role };
+        const current = acc[r.user_id]?.role;
+        if (!current || r.role === 'admin') acc[r.user_id] = { role: r.role };
         return acc;
       }, {});
       const userIds = allowedUserIds ?? (profilesData || []).map((p: any) => p.user_id);
