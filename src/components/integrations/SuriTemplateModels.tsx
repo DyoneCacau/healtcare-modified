@@ -99,9 +99,9 @@ export function SuriTemplateModels({
         <AlertDescription className="space-y-2 text-sm">
           <p>
             Modelos prontos com as variáveis já mapeadas para os dados do paciente, da agenda e
-            da clínica. Ao conectar, a plataforma cria todos na sua Suri (categoria Utilidade,
-            botões Confirmar e Cancelar) e, quando a Meta aprova, vincula sozinha às
-            confirmações. Você pode editar o texto no Portal Suri depois.
+            da clínica. Ao conectar, ou ao salvar de novo, a plataforma cria na Suri os modelos
+            que ainda não existem (categoria Utilidade, com emoji e botões Confirmar, Cancelar
+            e Reagendar). Quando a Meta aprova, o modelo de agenda é vinculado sozinho.
           </p>
           {provisioning && (
             <p className="text-xs text-muted-foreground">

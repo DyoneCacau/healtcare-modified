@@ -44,6 +44,14 @@ describe('suriTemplateModels', () => {
     },
   );
 
+  it('o modelo estilo agenda leva nome, profissional, data, horário e emoji', () => {
+    const agenda = SURI_TEMPLATE_MODELS.find((m) => m.id === 'consulta_unimed')!;
+    expect(modelFields(agenda)).toEqual(['patient_name', 'professional', 'date', 'time']);
+    expect(modelSuriBody(agenda)).toContain('📅 Data do agendamento: {{3}}');
+    expect(modelSuriBody(agenda)).toContain('⏰ Horário: {{4}}');
+    expect(agenda.buttons).toEqual(['Confirmar', 'Cancelar', 'Reagendar']);
+  });
+
   it('preenche a prévia com os valores', () => {
     const text = fillModelBody(consulta, {
       patient_first_name: 'Maria',

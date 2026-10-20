@@ -33,7 +33,7 @@ import {
   readProvisioning,
   type ClinicExampleData,
 } from '../_shared/suriProvision.ts'
-import { linkApprovedModelTemplates } from '../_shared/suriTemplateModels.ts'
+import { linkApprovedModelTemplates, SURI_TEMPLATE_MODELS } from '../_shared/suriTemplateModels.ts'
 import {
   buildBodyParameters,
   isValidTimezone,
@@ -231,13 +231,19 @@ async function handleSave(
   consultationTemplate = consultationTemplate ?? links.consultation ?? null
   examTemplate = examTemplate ?? links.exam ?? null
 
-  if (!provisioning) {
+  const createdIds = new Set(
+    (provisioning?.results || [])
+      .filter((item) => item.status === 'created' || item.status === 'exists')
+      .map((item) => item.model_id),
+  )
+  const missingModel = SURI_TEMPLATE_MODELS.some((model) => !createdIds.has(model.id))
+  if (!provisioning || missingModel) {
     provisioning = await provisionModelTemplates(
       endpoint,
       token,
       templates,
       await loadClinicExamples(supabase, clinicId),
-      null,
+      provisioning,
     )
   }
   provisioning = {

@@ -31,6 +31,16 @@ export interface SuriTemplateModel {
 
 export const SURI_TEMPLATE_MODELS: SuriTemplateModel[] = [
   {
+    id: 'consulta_unimed',
+    kind: 'consultation',
+    title: 'Consulta — estilo agenda',
+    description: 'Nome do paciente, profissional, data e horário, com emoji. Confirmar e Cancelar atualizam a agenda. Reagendar só aparece na mensagem.',
+    suggestedName: 'confirmacao_consulta_agenda',
+    body:
+      'Olá, {{patient_name}} 👋\n\nDaqui a pouco você tem consulta com {{professional}}.\n\n📅 Data do agendamento: {{date}}\n⏰ Horário: {{time}}\n\n🚨 Lembre-se de chegar com 15 minutos de antecedência.\n\nVocê confirma sua presença?',
+    buttons: ['Confirmar', 'Cancelar', 'Reagendar'],
+  },
+  {
     id: 'consulta_padrao',
     kind: 'consultation',
     title: 'Consulta — padrão',
@@ -60,12 +70,22 @@ export const SURI_TEMPLATE_MODELS: SuriTemplateModel[] = [
       'Olá, {{patient_first_name}}! Lembramos que seu exame de {{procedure}} está agendado para hoje, {{date}}, às {{time}}, na {{clinic_name}}.\n\nEndereço: {{clinic_address}}\n\nPor favor, chegue com 15 minutos de antecedência. Você confirma sua presença?',
     buttons: ['Confirmar', 'Cancelar'],
   },
+  {
+    id: 'exame_unimed',
+    kind: 'exam',
+    title: 'Exame — estilo agenda',
+    description: 'O mesmo visual da consulta, com o nome do exame. Confirmar e Cancelar atualizam a agenda.',
+    suggestedName: 'confirmacao_exame_agenda',
+    body:
+      'Olá, {{patient_name}} 👋\n\nDaqui a pouco você tem o exame de {{procedure}}.\n\n📅 Data do agendamento: {{date}}\n⏰ Horário: {{time}}\n\n🚨 Lembre-se de chegar com 15 minutos de antecedência.\n\nVocê confirma sua presença?',
+    buttons: ['Confirmar', 'Cancelar', 'Reagendar'],
+  },
 ]
 
 /** Ordem de preferência ao ligar automaticamente um template aprovado a cada tipo. */
 const LINK_PREFERENCE: Record<SuriModelKind, string[]> = {
-  consultation: ['consulta_padrao', 'consulta_completa'],
-  exam: ['exame_padrao'],
+  consultation: ['consulta_unimed', 'consulta_padrao', 'consulta_completa'],
+  exam: ['exame_unimed', 'exame_padrao'],
 }
 
 export type SuriModelValues = Record<SuriVariableField, string>
