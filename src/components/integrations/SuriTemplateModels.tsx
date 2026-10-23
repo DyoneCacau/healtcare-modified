@@ -101,7 +101,7 @@ export function SuriTemplateModels({
             Modelos prontos com as variáveis já mapeadas para os dados do paciente, da agenda e
             da clínica. Ao conectar, ou ao salvar de novo, a plataforma cria na Suri os modelos
             que ainda não existem (categoria Utilidade, com emoji e botões Confirmar, Cancelar
-            e Reagendar). Quando a Meta aprova, o modelo de atendimento é vinculado sozinho.
+            e Reagendar). Quando a Meta aprova, o modelo com emoji é vinculado sozinho.
           </p>
           {provisioning && (
             <p className="text-xs text-muted-foreground">

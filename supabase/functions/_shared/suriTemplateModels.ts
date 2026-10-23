@@ -29,30 +29,21 @@ export interface SuriTemplateModel {
   buttons: string[]
 }
 
-/** Consulta, exame ou procedimento: o nome vem do agendamento. */
-const ATENDIMENTO_BODY =
-  'Olá, {{patient_name}} 👋\n\nDaqui a pouco você tem um atendimento.\n\n📅 Data do agendamento: {{date}}\n⏰ Horário: {{time}}\nProcedimento: {{procedure}}\nProfissional: {{professional}}\n\n🚨 Lembre-se de chegar com 15 minutos de antecedência.\n\nVocê confirma sua presença?'
-
-/** Títulos antigos da plataforma. Quando o modelo novo for aprovado, eles são trocados. */
-const REPLACEABLE_TITLES = new Set([
-  'confirmacao_consulta_agenda',
-  'confirmacao_exame_agenda',
-])
-
 export const SURI_TEMPLATE_MODELS: SuriTemplateModel[] = [
   {
     id: 'consulta_unimed',
     kind: 'consultation',
-    title: 'Atendimento — geral',
-    description: 'Serve para consulta, exame e procedimento. Mostra paciente, data, horário, procedimento e profissional. Confirmar e Cancelar atualizam a agenda. Reagendar só aparece na mensagem.',
-    suggestedName: 'confirmacao_atendimento',
-    body: ATENDIMENTO_BODY,
+    title: 'Consulta — com emoji',
+    description: 'Nome do paciente, profissional, data e horário, com emoji. Confirmar e Cancelar atualizam a agenda. Reagendar só aparece na mensagem.',
+    suggestedName: 'confirmacao_consulta_agenda',
+    body:
+      'Olá, {{patient_name}} 👋\n\nDaqui a pouco você tem consulta com {{professional}}.\n\n📅 Data do agendamento: {{date}}\n⏰ Horário: {{time}}\n\n🚨 Lembre-se de chegar com 15 minutos de antecedência.\n\nVocê confirma sua presença?',
     buttons: ['Confirmar', 'Cancelar', 'Reagendar'],
   },
   {
     id: 'consulta_padrao',
     kind: 'consultation',
-    title: 'Consulta — padrão',
+    title: 'Consulta — sem emoji',
     description: 'Curto e direto: data, horário, profissional e clínica.',
     suggestedName: 'confirmacao_consulta',
     body:
@@ -60,19 +51,9 @@ export const SURI_TEMPLATE_MODELS: SuriTemplateModel[] = [
     buttons: ['Confirmar', 'Cancelar'],
   },
   {
-    id: 'consulta_completa',
-    kind: 'consultation',
-    title: 'Consulta — com procedimento e endereço',
-    description: 'Inclui o procedimento, o endereço e o telefone da clínica.',
-    suggestedName: 'confirmacao_consulta_completa',
-    body:
-      'Olá, {{patient_first_name}}! Sua consulta de {{procedure}} está marcada para hoje, {{date}}, às {{time}}, com {{professional}}.\n\nLocal: {{clinic_name}} - {{clinic_address}}\n\nPrecisa falar com a gente? Ligue {{clinic_phone}}.\n\nVocê confirma sua presença?',
-    buttons: ['Confirmar', 'Cancelar'],
-  },
-  {
     id: 'exame_padrao',
     kind: 'exam',
-    title: 'Exame — padrão',
+    title: 'Exame — sem emoji',
     description: 'Lembra o exame do dia e pede para chegar com antecedência.',
     suggestedName: 'confirmacao_exame',
     body:
@@ -82,17 +63,18 @@ export const SURI_TEMPLATE_MODELS: SuriTemplateModel[] = [
   {
     id: 'exame_unimed',
     kind: 'exam',
-    title: 'Atendimento — exame',
-    description: 'O mesmo texto do atendimento geral, usado quando o procedimento é um exame.',
-    suggestedName: 'confirmacao_atendimento_exame',
-    body: ATENDIMENTO_BODY,
+    title: 'Exame — com emoji',
+    description: 'O mesmo visual da consulta, com o nome do exame. Confirmar e Cancelar atualizam a agenda.',
+    suggestedName: 'confirmacao_exame_agenda',
+    body:
+      'Olá, {{patient_name}} 👋\n\nDaqui a pouco você tem o exame de {{procedure}}.\n\n📅 Data do agendamento: {{date}}\n⏰ Horário: {{time}}\n\n🚨 Lembre-se de chegar com 15 minutos de antecedência.\n\nVocê confirma sua presença?',
     buttons: ['Confirmar', 'Cancelar', 'Reagendar'],
   },
 ]
 
 /** Ordem de preferência ao ligar automaticamente um template aprovado a cada tipo. */
 const LINK_PREFERENCE: Record<SuriModelKind, string[]> = {
-  consultation: ['consulta_unimed', 'consulta_padrao', 'consulta_completa'],
+  consultation: ['consulta_unimed', 'consulta_padrao'],
   exam: ['exame_unimed', 'exame_padrao'],
 }
 
@@ -106,7 +88,7 @@ export function defaultModelExamples(kind: SuriModelKind): SuriModelValues {
     date: '15/10/2026',
     time: '14:30',
     professional: 'Dra. Ana Souza',
-    procedure: kind === 'exam' ? 'Exame' : 'Consulta',
+    procedure: kind === 'exam' ? 'Radiografia panorâmica' : 'Limpeza',
     clinic_name: 'Clínica Sorriso',
     clinic_address: 'Rua das Flores, nº 100 - Centro',
     clinic_phone: '(11) 3333-4444',
@@ -216,14 +198,9 @@ interface LinkableTemplate extends TemplateLike {
   channel_id: string
 }
 
-function isReplaceableTemplate(template: SuriTemplateConfig | null): boolean {
-  return Boolean(template && REPLACEABLE_TITLES.has(normalizeTemplateName(template.title)))
-}
-
 /**
  * Para cada tipo ainda sem template (e nunca ligado automaticamente), escolhe
  * o template aprovado que veio de um modelo. Não sobrescreve escolha da clínica.
- * Troca os modelos antigos de agenda quando o atendimento geral já foi aprovado.
  */
 export function linkApprovedModelTemplates(
   config: Pick<SuriConfig, 'consultation_template' | 'exam_template'>,
@@ -237,9 +214,7 @@ export function linkApprovedModelTemplates(
   const result: Partial<Record<SuriModelKind, SuriTemplateConfig>> = {}
 
   for (const kind of ['consultation', 'exam'] as SuriModelKind[]) {
-    const replaceable = isReplaceableTemplate(current[kind])
-    if (current[kind] && !replaceable) continue
-    if (!current[kind] && alreadyLinked[kind]) continue
+    if (current[kind] || alreadyLinked[kind]) continue
     for (const modelId of LINK_PREFERENCE[kind]) {
       const model = SURI_TEMPLATE_MODELS.find((m) => m.id === modelId)
       if (!model) continue
