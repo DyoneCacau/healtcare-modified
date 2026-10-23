@@ -234,8 +234,8 @@ async function handleSave(
     templates,
     provisioning?.linked ?? {},
   )
-  consultationTemplate = consultationTemplate ?? links.consultation ?? null
-  examTemplate = examTemplate ?? links.exam ?? null
+  consultationTemplate = links.consultation ?? consultationTemplate ?? null
+  examTemplate = links.exam ?? examTemplate ?? null
 
   const createdIds = new Set(
     (provisioning?.results || [])

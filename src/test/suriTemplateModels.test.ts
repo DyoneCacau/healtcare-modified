@@ -44,11 +44,14 @@ describe('suriTemplateModels', () => {
     },
   );
 
-  it('o modelo estilo agenda leva nome, profissional, data, horário e emoji', () => {
+  it('o atendimento geral vale para consulta e exame, com procedimento e profissional', () => {
     const agenda = SURI_TEMPLATE_MODELS.find((m) => m.id === 'consulta_unimed')!;
-    expect(modelFields(agenda)).toEqual(['patient_name', 'professional', 'date', 'time']);
-    expect(modelSuriBody(agenda)).toContain('📅 Data do agendamento: {{3}}');
-    expect(modelSuriBody(agenda)).toContain('⏰ Horário: {{4}}');
+    const exame = SURI_TEMPLATE_MODELS.find((m) => m.id === 'exame_unimed')!;
+    expect(modelFields(agenda)).toEqual(['patient_name', 'date', 'time', 'procedure', 'professional']);
+    expect(modelSuriBody(agenda)).toBe(modelSuriBody(exame));
+    expect(modelSuriBody(agenda)).toContain('Daqui a pouco você tem um atendimento.');
+    expect(modelSuriBody(agenda)).toContain('Procedimento: {{4}}');
+    expect(modelSuriBody(agenda)).toContain('Profissional: {{5}}');
     expect(agenda.buttons).toEqual(['Confirmar', 'Cancelar', 'Reagendar']);
   });
 
@@ -124,6 +127,23 @@ describe('suriTemplateModels', () => {
       expect(links.consultation?.template_id).toBe('c1');
       expect(links.consultation?.parameters).toEqual(modelFields(consulta));
       expect(links.exam).toBeUndefined();
+    });
+
+    it('troca o modelo antigo de agenda quando o atendimento geral já foi aprovado', () => {
+      const atendimento = SURI_TEMPLATE_MODELS.find((m) => m.id === 'consulta_unimed')!;
+      const antigo = {
+        template_id: 'velho',
+        title: 'confirmacao_consulta_agenda',
+        body: 'texto antigo',
+        channel_id: 'wp1',
+        parameters: ['patient_name', 'professional', 'date', 'time'] as const,
+      };
+      const links = linkApprovedModelTemplates(
+        { consultation_template: { ...antigo, parameters: [...antigo.parameters] }, exam_template: null },
+        [tpl('novo', atendimento, 0)],
+        { consultation: true },
+      );
+      expect(links.consultation?.template_id).toBe('novo');
     });
 
     it('não sobrescreve escolha da clínica nem religa tipo já ligado antes', () => {
