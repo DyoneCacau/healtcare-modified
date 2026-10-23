@@ -20,6 +20,7 @@ import {
   SURI_VARIABLE_FIELDS as APP_VARIABLE_FIELDS,
   SURI_VARIABLE_LABELS,
   readSuriConfig as readAppSuriConfig,
+  suriChannelLabel,
 } from '@/lib/suriConfig';
 
 describe('espelho frontend ↔ Edge Function', () => {
@@ -49,6 +50,8 @@ describe('espelho frontend ↔ Edge Function', () => {
     expect(app.send_hour).toBe(server.send_hour);
     expect(app.reminders_enabled).toBe(server.reminders_enabled);
     expect(app.consultation_template?.template_id).toBe(server.consultation_template?.template_id);
+    expect(app.confirmation_channel_id).toBe(server.confirmation_channel_id);
+    expect(app.confirmation_channel_label).toBe(server.confirmation_channel_label);
   });
 });
 
@@ -66,6 +69,13 @@ describe('readSuriConfig', () => {
     const config = readSuriConfig({ suri: { send_hour: 30, timezone: 'Lua/Base' } });
     expect(config.send_hour).toBe(7);
     expect(config.timezone).toBe('America/Sao_Paulo');
+    expect(config.confirmation_channel_id).toBeNull();
+  });
+
+  it('mostra o canal pelo nome e pelo telefone', () => {
+    expect(suriChannelLabel({ name: 'Healthcare teste', phone: '17113875498' })).toBe(
+      'Healthcare teste — +17113875498',
+    );
   });
 });
 

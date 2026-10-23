@@ -10,7 +10,9 @@ import type { SupabaseClient } from 'https://esm.sh/@supabase/supabase-js@2.49.1
 import {
   createSuriTemplate,
   listSuriTemplates,
+  formatSuriChannelLabel,
   listSuriWhatsAppChannels,
+  type SuriChannel,
   readSuriToken,
   type SuriTemplateSummary,
 } from './suri.ts'
@@ -79,6 +81,7 @@ export async function provisionModelTemplates(
   existing: SuriTemplateSummary[],
   clinic: ClinicExampleData,
   previous: SuriProvisioning | null,
+  preferredChannelId?: string | null,
 ): Promise<SuriProvisioning> {
   const base: SuriProvisioning = {
     ran_at: new Date().toISOString(),
@@ -88,10 +91,10 @@ export async function provisionModelTemplates(
     linked: previous?.linked ?? {},
   }
 
-  let channel: { id: string; name: string } | null = null
+  let channel: SuriChannel | null = null
   try {
     const channels = await listSuriWhatsAppChannels(endpoint, token)
-    channel = channels[0] ?? null
+    channel = channels.find((item) => item.id === preferredChannelId) ?? channels[0] ?? null
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Falha ao listar canais da Suri'
     return {
@@ -147,7 +150,7 @@ export async function provisionModelTemplates(
     }
   }
 
-  return { ...base, channel_id: channel.id, channel_name: channel.name, results }
+  return { ...base, channel_id: channel.id, channel_name: formatSuriChannelLabel(channel), results }
 }
 
 /**

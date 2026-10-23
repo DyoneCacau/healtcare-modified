@@ -53,12 +53,12 @@ export function useSuriTemplates(enabled: boolean) {
   return useQuery({
     queryKey: [TEMPLATES_KEY, clinicId],
     queryFn: async () => {
-      const { templates, linked } = await suriConnectionService.listTemplates(clinicId!);
+      const { templates, linked, channels } = await suriConnectionService.listTemplates(clinicId!);
       if (linked.length > 0) {
         queryClient.invalidateQueries({ queryKey: ['integrations', clinicId] });
         toast.success('Template aprovado pela Meta e vinculado automaticamente às confirmações');
       }
-      return templates;
+      return { templates, channels };
     },
     enabled: enabled && !!clinicId,
     retry: false,

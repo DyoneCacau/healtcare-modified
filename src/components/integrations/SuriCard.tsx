@@ -55,6 +55,11 @@ export function SuriCard({ connection, canCreate, canEdit, onOpen }: SuriCardPro
             <p className="text-muted-foreground">
               Exame: {config.exam_template?.title || 'usa o template de consulta'}
             </p>
+            {config.confirmation_channel_label && (
+              <p className="text-muted-foreground">
+                Confirmações saem por {config.confirmation_channel_label}
+              </p>
+            )}
             {connection.last_error && (
               <p className="text-xs text-destructive">{connection.last_error}</p>
             )}

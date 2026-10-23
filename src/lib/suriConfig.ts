@@ -74,7 +74,24 @@ export interface SuriPublicConfig {
   confirm_keywords: string[];
   cancel_keywords: string[];
   response_flow_id: string | null;
+  confirmation_channel_id: string | null;
+  confirmation_channel_label: string | null;
   provisioning: SuriProvisioning | null;
+}
+
+export interface SuriChannelOption {
+  id: string;
+  name: string;
+  phone: string;
+}
+
+/** Nome e telefone, no mesmo formato gravado pela Edge Function. */
+export function suriChannelLabel(channel: { name?: string; phone?: string }): string {
+  const name = (channel.name || '').trim();
+  const digits = (channel.phone || '').replace(/\D/g, '');
+  const phone = digits.length >= 8 && digits.length <= 15 ? `+${digits}` : '';
+  if (name && phone) return `${name} — ${phone}`;
+  return name || phone || 'WhatsApp';
 }
 
 /** Template como a Suri devolve em `list_templates`. */
@@ -143,6 +160,14 @@ export function readSuriConfig(config: unknown): SuriPublicConfig {
     cancel_keywords: stringList(raw.cancel_keywords, SURI_DEFAULT_CANCEL_KEYWORDS),
     response_flow_id:
       typeof raw.response_flow_id === 'string' && raw.response_flow_id ? raw.response_flow_id : null,
+    confirmation_channel_id:
+      typeof raw.confirmation_channel_id === 'string' && raw.confirmation_channel_id
+        ? raw.confirmation_channel_id
+        : null,
+    confirmation_channel_label:
+      typeof raw.confirmation_channel_label === 'string' && raw.confirmation_channel_label
+        ? raw.confirmation_channel_label
+        : null,
     provisioning: readProvisioning(raw.provisioning),
   };
 }

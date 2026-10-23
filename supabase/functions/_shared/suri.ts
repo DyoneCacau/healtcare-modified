@@ -106,6 +106,26 @@ export async function listSuriTemplates(
 export interface SuriChannel {
   id: string
   name: string
+  /** Só dígitos, quando a Suri informa o telefone do canal. */
+  phone: string
+}
+
+function channelPhone(item: Record<string, unknown>): string {
+  const candidates = [item.phone, item.Phone, item.phoneNumber, item.number]
+  for (const value of candidates) {
+    if (typeof value !== 'string') continue
+    const digits = value.replace(/\D/g, '')
+    if (digits.length >= 8 && digits.length <= 15) return digits
+  }
+  return ''
+}
+
+/** Nome e telefone para a clínica reconhecer o canal, sem o id interno. */
+export function formatSuriChannelLabel(channel: { name: string; phone: string }): string {
+  const name = channel.name.trim()
+  const phone = channel.phone ? `+${channel.phone}` : ''
+  if (name && phone) return `${name} — ${phone}`
+  return name || phone || 'WhatsApp'
 }
 
 /** Canais WhatsApp do chatbot (`ChannelType` 1 = WhatsApp). */
@@ -118,7 +138,11 @@ export async function listSuriWhatsAppChannels(
   return data
     .map((item) => (item && typeof item === 'object' ? item as Record<string, unknown> : {}))
     .filter((item) => typeof item.id === 'string' && item.id && item.type === 1)
-    .map((item) => ({ id: String(item.id), name: String(item.name || item.id) }))
+    .map((item) => ({
+      id: String(item.id),
+      name: String(item.name || item.Name || 'WhatsApp'),
+      phone: channelPhone(item),
+    }))
 }
 
 export interface CreateSuriTemplateInput {

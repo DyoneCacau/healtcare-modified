@@ -56,6 +56,9 @@ export interface SuriConfig {
   cancel_keywords: string[]
   /** Fluxo da Suri que assume a conversa quando o paciente responde (opcional). */
   response_flow_id: string | null
+  /** Canal WhatsApp que cria e envia as confirmações. Os demais ficam para atendimento. */
+  confirmation_channel_id: string | null
+  confirmation_channel_label: string | null
 }
 
 function asRecord(value: unknown): Record<string, unknown> {
@@ -129,6 +132,8 @@ export function readSuriConfig(config: unknown): SuriConfig {
     confirm_keywords: readKeywords(raw.confirm_keywords, SURI_DEFAULT_CONFIRM_KEYWORDS),
     cancel_keywords: readKeywords(raw.cancel_keywords, SURI_DEFAULT_CANCEL_KEYWORDS),
     response_flow_id: cleanString(raw.response_flow_id, 120) || null,
+    confirmation_channel_id: cleanString(raw.confirmation_channel_id, 120) || null,
+    confirmation_channel_label: cleanString(raw.confirmation_channel_label, 160) || null,
   }
 }
 

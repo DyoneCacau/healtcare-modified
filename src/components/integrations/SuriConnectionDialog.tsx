@@ -43,7 +43,7 @@ import {
   useSuriTemplates,
   type AppointmentReminderStatus,
 } from '@/hooks/useSuriConnection';
-import { parseKeywordList, readSuriConfig, SURI_TIMEZONES } from '@/lib/suriConfig';
+import { parseKeywordList, readSuriConfig, suriChannelLabel, SURI_TIMEZONES } from '@/lib/suriConfig';
 import type { SuriModelKind } from '@/lib/suriTemplateModels';
 import type { Integration } from '@/types/integration';
 
@@ -91,6 +91,7 @@ export function SuriConnectionDialog({
   const [confirmText, setConfirmText] = useState('');
   const [cancelText, setCancelText] = useState('');
   const [responseFlowId, setResponseFlowId] = useState('');
+  const [confirmationChannelId, setConfirmationChannelId] = useState('');
   const [webhookUrl, setWebhookUrl] = useState<string | null>(null);
   const [testPhone, setTestPhone] = useState('');
   const [tab, setTab] = useState('conexao');
@@ -120,6 +121,9 @@ export function SuriConnectionDialog({
     setConfirmText(config.confirm_keywords.join(', '));
     setCancelText(config.cancel_keywords.join(', '));
     setResponseFlowId(config.response_flow_id || '');
+    setConfirmationChannelId(
+      config.confirmation_channel_id || config.consultation_template?.channel_id || '',
+    );
     // eslint-disable-next-line react-hooks/exhaustive-deps -- uma vez por abertura/integração; refetch após salvar não pode apagar o formulário
   }, [open, integration?.id]);
 
@@ -162,8 +166,17 @@ export function SuriConnectionDialog({
     [procedures, examCategories],
   );
 
-  const templates = templatesQuery.data ?? [];
+  const templates = templatesQuery.data?.templates ?? [];
+  const channels = templatesQuery.data?.channels ?? [];
   const busy = save.isPending;
+  const listedChannels = templatesQuery.data?.channels;
+
+  useEffect(() => {
+    if (!listedChannels?.length) return;
+    setConfirmationChannelId((current) =>
+      listedChannels.some((channel) => channel.id === current) ? current : listedChannels[0].id,
+    );
+  }, [listedChannels]);
 
   const handleSave = async () => {
     try {
@@ -180,6 +193,7 @@ export function SuriConnectionDialog({
           confirm_keywords: parseKeywordList(confirmText),
           cancel_keywords: parseKeywordList(cancelText),
           response_flow_id: responseFlowId.trim() || null,
+          confirmation_channel_id: confirmationChannelId || null,
         },
       });
       setToken('');
@@ -269,8 +283,8 @@ export function SuriConnectionDialog({
               <Alert>
                 <AlertDescription className="text-sm">
                   Ao conectar, a plataforma cria na sua Suri os modelos prontos de confirmação
-                  (consulta e exame, categoria Utilidade, botões Confirmar e Cancelar) no primeiro
-                  número de WhatsApp da conta. Quando a Meta aprovar, eles são vinculados sozinhos
+                  (consulta e exame, categoria Utilidade) no número de WhatsApp escolhido
+                  em Confirmações. Quando a Meta aprovar, eles são vinculados sozinhos
                   e o envio automático diário começa às{' '}
                   {`${String(sendHour).padStart(2, '0')}:00`}. Você pode editar os templates no
                   Portal Suri e ajustar tudo na aba Confirmações.
@@ -350,6 +364,45 @@ export function SuriConnectionDialog({
                 </AlertDescription>
               </Alert>
             )}
+
+            <div className="space-y-2 rounded-md border p-3">
+              <Label>Número que envia as confirmações</Label>
+              <p className="text-xs text-muted-foreground">
+                Consulta e exame saem por este WhatsApp. Os outros números da Suri continuam só para o atendimento.
+              </p>
+              {channels.length > 1 ? (
+                <Select
+                  value={confirmationChannelId || undefined}
+                  onValueChange={setConfirmationChannelId}
+                  disabled={!canEdit}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Escolha o número" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {channels.map((channel) => (
+                      <SelectItem key={channel.id} value={channel.id}>
+                        {suriChannelLabel(channel)}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              ) : (
+                <p className="text-sm font-medium">
+                  {channels[0]
+                    ? suriChannelLabel(channels[0])
+                    : config.confirmation_channel_label || 'Carregando números da Suri…'}
+                </p>
+              )}
+              {config.consultation_template?.channel_id &&
+                confirmationChannelId &&
+                config.consultation_template.channel_id !== confirmationChannelId && (
+                  <p className="text-xs text-muted-foreground">
+                    Os modelos já aprovados continuam saindo pelo número em que foram criados.
+                    O número escolhido vale para os próximos modelos.
+                  </p>
+                )}
+            </div>
 
             <div className="flex items-center justify-between rounded-md border p-3">
               <div>

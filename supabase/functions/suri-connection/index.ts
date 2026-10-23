@@ -24,7 +24,7 @@ import {
   hashSha256Hex,
   randomNonce,
 } from '../_shared/metaConnectionCrypto.ts'
-import { listSuriTemplates, readSuriToken, sendSuriTemplate, type SuriTemplateSummary } from '../_shared/suri.ts'
+import { listSuriTemplates, listSuriWhatsAppChannels, readSuriToken, sendSuriTemplate, formatSuriChannelLabel, type SuriTemplateSummary } from '../_shared/suri.ts'
 import { clinicAddress, dispatchClinicReminders } from '../_shared/suriDispatch.ts'
 import {
   autoLinkApprovedTemplates,
@@ -243,6 +243,16 @@ async function handleSave(
       .map((item) => item.model_id),
   )
   const missingModel = SURI_TEMPLATE_MODELS.some((model) => !createdIds.has(model.id))
+  let channels: Awaited<ReturnType<typeof listSuriWhatsAppChannels>> = []
+  try {
+    channels = await listSuriWhatsAppChannels(endpoint, token)
+  } catch {
+    channels = []
+  }
+  const requestedChannel = typeof settings.confirmation_channel_id === 'string'
+    ? settings.confirmation_channel_id.trim()
+    : ''
+  const confirmationChannel = channels.find((item) => item.id === requestedChannel) ?? channels[0] ?? null
   if (!provisioning || missingModel) {
     provisioning = await provisionModelTemplates(
       endpoint,
@@ -250,6 +260,7 @@ async function handleSave(
       templates,
       await loadClinicExamples(supabase, clinicId),
       provisioning,
+      confirmationChannel?.id ?? null,
     )
   }
   provisioning = {
@@ -276,6 +287,8 @@ async function handleSave(
     confirm_keywords: cleanList(settings.confirm_keywords, 20),
     cancel_keywords: cleanList(settings.cancel_keywords, 20),
     response_flow_id: responseFlowId || null,
+    confirmation_channel_id: confirmationChannel?.id ?? null,
+    confirmation_channel_label: confirmationChannel ? formatSuriChannelLabel(confirmationChannel) : null,
     provisioning,
   }
 
@@ -360,6 +373,7 @@ async function handleProvision(req: Request, supabase: Supabase, clinicId: strin
     templates,
     await loadClinicExamples(supabase, clinicId),
     readProvisioning(integration.config),
+    readSuriConfig(integration.config).confirmation_channel_id,
   )
 
   const config = asRecord(integration.config)
@@ -407,7 +421,13 @@ Deno.serve(async (req) => {
         }
         const templates = await listSuriTemplates(config.endpoint_url, token)
         const linked = await autoLinkApprovedTemplates(supabase, integration, templates)
-        return json(req, { templates, linked })
+        let channels: Awaited<ReturnType<typeof listSuriWhatsAppChannels>> = []
+        try {
+          channels = await listSuriWhatsAppChannels(config.endpoint_url, token)
+        } catch {
+          channels = []
+        }
+        return json(req, { templates, linked, channels })
       }
 
       case 'provision_templates':

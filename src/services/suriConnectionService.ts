@@ -1,5 +1,5 @@
 import { supabase } from '@/integrations/supabase/client';
-import type { SuriProvisioning, SuriTemplateOption, SuriVariableField } from '@/lib/suriConfig';
+import type { SuriChannelOption, SuriProvisioning, SuriTemplateOption, SuriVariableField } from '@/lib/suriConfig';
 
 interface FunctionError {
   error?: string;
@@ -45,6 +45,7 @@ export interface SuriSaveInput {
     confirm_keywords: string[];
     cancel_keywords: string[];
     response_flow_id: string | null;
+    confirmation_channel_id: string | null;
   };
 }
 
@@ -74,15 +75,24 @@ export const suriConnectionService = {
 
   async listTemplates(
     clinicId: string,
-  ): Promise<{ templates: SuriTemplateOption[]; linked: ('consultation' | 'exam')[] }> {
+  ): Promise<{
+    templates: SuriTemplateOption[];
+    linked: ('consultation' | 'exam')[];
+    channels: SuriChannelOption[];
+  }> {
     const result = await invokeSuri<{
       templates: SuriTemplateOption[];
       linked?: ('consultation' | 'exam')[];
+      channels?: SuriChannelOption[];
     }>({
       action: 'list_templates',
       clinic_id: clinicId,
     });
-    return { templates: result.templates || [], linked: result.linked || [] };
+    return {
+      templates: result.templates || [],
+      linked: result.linked || [],
+      channels: result.channels || [],
+    };
   },
 
   async provisionTemplates(clinicId: string): Promise<SuriProvisioning> {
