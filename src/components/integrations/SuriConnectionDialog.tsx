@@ -148,6 +148,12 @@ export function SuriConnectionDialog({
     // eslint-disable-next-line react-hooks/exhaustive-deps -- só quando o template salvo muda; não desfaz edição
   }, [open, linkedExam?.template_id]);
 
+  useEffect(() => {
+    if (!open || connected) return;
+    setConsultation(null);
+    setExam(null);
+  }, [open, connected]);
+
   const categories = useMemo(
     () =>
       Array.from(
@@ -160,25 +166,36 @@ export function SuriConnectionDialog({
   const busy = save.isPending;
 
   const handleSave = async () => {
-    const result = await save.mutateAsync({
-      endpoint_url: endpoint.trim() || undefined,
-      token: token.trim() || undefined,
-      settings: {
-        reminders_enabled: enabled,
-        send_hour: sendHour,
-        timezone,
-        consultation_template: consultation,
-        exam_template: exam,
-        exam_categories: examCategories,
-        confirm_keywords: parseKeywordList(confirmText),
-        cancel_keywords: parseKeywordList(cancelText),
-        response_flow_id: responseFlowId.trim() || null,
-      },
-    });
-    setToken('');
-    if (result.webhook_url) setWebhookUrl(result.webhook_url);
-    if (result.provisioning && !config.provisioning) {
-      toast.message(provisioningSummary(result.provisioning));
+    try {
+      const result = await save.mutateAsync({
+        endpoint_url: endpoint.trim() || undefined,
+        token: token.trim() || undefined,
+        settings: {
+          reminders_enabled: enabled,
+          send_hour: sendHour,
+          timezone,
+          consultation_template: consultation,
+          exam_template: exam,
+          exam_categories: examCategories,
+          confirm_keywords: parseKeywordList(confirmText),
+          cancel_keywords: parseKeywordList(cancelText),
+          response_flow_id: responseFlowId.trim() || null,
+        },
+      });
+      setToken('');
+      if (result.dropped?.includes('consulta')) setConsultation(null);
+      if (result.dropped?.includes('exame')) setExam(null);
+      if (result.webhook_url) setWebhookUrl(result.webhook_url);
+      if (result.provisioning && !config.provisioning) {
+        toast.message(provisioningSummary(result.provisioning));
+      }
+      if (result.dropped?.length) {
+        toast.message(
+          'O modelo antigo não existe mais nesta Suri. A conexão foi salva sem ele. Quando a Meta aprovar o modelo novo, ele entra sozinho.',
+        );
+      }
+    } catch {
+      // O toast de erro já sai da mutação.
     }
   };
 

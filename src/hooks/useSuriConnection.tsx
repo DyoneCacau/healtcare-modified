@@ -158,8 +158,20 @@ export function useSuriConnectionMutations() {
 
   const disconnect = useMutation({
     mutationFn: () => suriConnectionService.disconnect(requireClinic()),
-    onSuccess: () => {
-      invalidate();
+    onSuccess: async () => {
+      await queryClient.cancelQueries({ queryKey: [TEMPLATES_KEY, clinicId] });
+      queryClient.setQueryData(['integrations', clinicId], (current: unknown) => {
+        if (!Array.isArray(current)) return current;
+        return current.map((item) => {
+          if (!item || typeof item !== 'object' || (item as { provider?: string }).provider !== 'suri') {
+            return item;
+          }
+          return { ...item, status: 'disconnected', is_active: false };
+        });
+      });
+      queryClient.removeQueries({ queryKey: [TEMPLATES_KEY, clinicId] });
+      queryClient.invalidateQueries({ queryKey: ['integrations', clinicId] });
+      queryClient.invalidateQueries({ queryKey: [REMINDERS_KEY, clinicId] });
       toast.success('Suri desconectada');
     },
     onError: (error: Error) => toast.error(error.message),

@@ -131,7 +131,8 @@ function resolveTemplate(
   if (!templateId) return null
 
   const found = templates.find((t) => t.message_id === templateId)
-  if (!found) throw new HttpError(400, `Template de ${label} não encontrado na Suri`)
+  // Modelo de uma conexão anterior: não trava o salvamento do token novo.
+  if (!found) return null
   if (found.status !== null && found.status !== 0) {
     throw new HttpError(400, `Template de ${label} ainda não está aprovado no WhatsApp`)
   }
@@ -217,8 +218,13 @@ async function handleSave(
     : currentConfig.timezone
   if (!isValidTimezone(timezone)) throw new HttpError(400, 'Fuso horário inválido')
 
+  const askedConsultation = Boolean(asRecord(settings.consultation_template).template_id)
+  const askedExam = Boolean(asRecord(settings.exam_template).template_id)
   let consultationTemplate = resolveTemplate(settings.consultation_template, templates, 'consulta')
   let examTemplate = resolveTemplate(settings.exam_template, templates, 'exame')
+  const dropped: string[] = []
+  if (askedConsultation && !consultationTemplate) dropped.push('consulta')
+  if (askedExam && !examTemplate) dropped.push('exame')
   // Sem template ainda é aceito: o envio começa quando o modelo criado for aprovado.
   const remindersEnabled = settings.reminders_enabled === true
 
@@ -341,6 +347,7 @@ async function handleSave(
     webhook_url: revealedWebhookUrl,
     templates_count: templates.length,
     provisioning,
+    dropped,
   })
 }
 
@@ -390,8 +397,15 @@ Deno.serve(async (req) => {
         return await handleSave(req, supabase, clinicId, user.id, body)
 
       case 'list_templates': {
-        const { integration, endpoint, token } = await requireConnection(supabase, clinicId)
-        const templates = await listSuriTemplates(endpoint, token)
+        const integration = await loadSuriIntegration(supabase, clinicId)
+        const config = readSuriConfig(integration?.config)
+        const token = integration
+          ? await readSuriToken(supabase, clinicId, integration.id)
+          : null
+        if (!integration || integration.status !== 'connected' || !config.endpoint_url || !token) {
+          return json(req, { templates: [], linked: [] })
+        }
+        const templates = await listSuriTemplates(config.endpoint_url, token)
         const linked = await autoLinkApprovedTemplates(supabase, integration, templates)
         return json(req, { templates, linked })
       }
@@ -463,13 +477,23 @@ Deno.serve(async (req) => {
           .eq('clinic_id', clinicId)
           .eq('integration_id', integration.id)
         const config = asRecord(integration.config)
+        const suri = asRecord(config.suri)
         const { error } = await supabase
           .from('integrations')
           .update({
             status: 'disconnected',
             is_active: false,
             credentials_ref: null,
-            config: { ...config, suri: { ...asRecord(config.suri), reminders_enabled: false } },
+            config: {
+              ...config,
+              suri: {
+                ...suri,
+                reminders_enabled: false,
+                consultation_template: null,
+                exam_template: null,
+                provisioning: null,
+              },
+            },
           })
           .eq('id', integration.id)
           .eq('clinic_id', clinicId)

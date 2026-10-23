@@ -55,6 +55,8 @@ export interface SuriSaveResult {
   webhook_url: string | null;
   templates_count: number;
   provisioning: SuriProvisioning | null;
+  /** Modelos da conexão anterior que a Suri atual não tem mais. */
+  dropped?: string[];
 }
 
 export interface SuriDispatchSummary {

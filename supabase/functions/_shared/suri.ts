@@ -64,7 +64,13 @@ async function suriRequest<T>(
     const reason = typeof payload?.error === 'string' && payload.error
       ? payload.error.slice(0, 300)
       : `HTTP ${response.status}`
-    throw new HttpError(502, `Suri recusou a requisição: ${reason}`)
+    const channelGone = /channel not found/i.test(reason)
+    throw new HttpError(
+      502,
+      channelGone
+        ? 'O canal de WhatsApp desse modelo não existe mais na Suri. Desconecte, conecte de novo e salve: o modelo antigo é deixado de lado.'
+        : `Suri recusou a requisição: ${reason}`,
+    )
   }
   return payload.data as T
 }
